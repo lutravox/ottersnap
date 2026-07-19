@@ -1,0 +1,6 @@
+#notificationBar {
+    background-color: palette(Highlight);
+    color: palette(HighlightedText);
+    font-size: 12px;
+    padding: 4px 16px;
+}

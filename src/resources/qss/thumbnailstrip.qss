@@ -1,0 +1,30 @@
+QScrollArea {
+    background: palette(Window);
+    border: none;
+}
+
+QScrollBar:horizontal {
+    height: 5px;
+    background: palette(Window);
+    padding: 0 0 0 6px;
+}
+
+QScrollBar::handle:horizontal {
+    background: palette(Midlight);
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal {
+    width: 0;
+}
+
+QScrollBar::sub-line:horizontal {
+    width: 4px;
+    background: palette(Window);
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+}

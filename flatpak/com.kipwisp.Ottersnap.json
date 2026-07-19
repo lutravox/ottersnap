@@ -1,0 +1,29 @@
+{
+    "app-id": "com.kipwisp.Ottersnap",
+    "runtime": "org.kde.Platform",
+    "runtime-version": "6.9",
+    "sdk": "org.kde.Sdk",
+    "finish-args": [
+        "--device=dri",
+        "--socket=wayland",
+        "--socket=fallback-x11",
+        "--socket=session-bus",
+        "--share=ipc",
+        "--talk-name=org.freedesktop.portal.FileChooser",
+        "--filesystem=xdg-data/ottersnap:create",
+        "--filesystem=home:ro"
+    ],
+    "command": "ottersnap",
+    "modules": [
+        {
+            "name": "ottersnap",
+            "buildsystem": "cmake",
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": ".."
+                }
+            ]
+        }
+    ]
+}

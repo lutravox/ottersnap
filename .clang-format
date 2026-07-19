@@ -1,0 +1,44 @@
+---
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+# Indentation
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+IndentCaseLabels: true
+
+# Brace style (K&R — opening brace on the same line)
+BreakBeforeBraces: Attach
+
+# Line width
+ColumnLimit:     100
+
+# Includes
+SortIncludes:    true
+IncludeCategories:
+  - Regex:           '^<.*>'
+    Priority:        -1
+  - Regex:           '^(Q[A-Z]\w+)'
+    Priority:        0
+  - Regex:           '.*'
+    Priority:        1
+
+# Pointers & references
+PointerAlignment: Right
+ReferenceAlignment: Left
+
+# Formatting
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: None
+BinPackParameters: false
+BinPackArguments: false
+BreakConstructorInitializers: BeforeColon
+AlignConsecutiveDeclarations: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+
+# Namespace
+CompactNamespaces: false
+
+...

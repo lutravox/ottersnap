@@ -1,0 +1,283 @@
+#include <QtTest>
+#include "core/viewstate.h"
+
+class TestViewState : public QObject {
+    Q_OBJECT
+
+  private slots:
+    // Initialization
+    void testDefaults();
+    void testSetImageSize();
+
+    // FitScale
+    void testFitScaleLandscape();
+    void testFitScalePortrait();
+    void testFitScaleSquare();
+
+    // Zoom percentage
+    void testPercentage();
+    void testSetPercentage();
+    void testSetPercentageClampLow();
+    void testSetPercentageClampHigh();
+
+    // Wheel zoom
+    void testWheelZoomIn();
+    void testWheelZoomOut();
+    void testWheelZoomCtrl();
+    void testWheelZoomClampLow();
+    void testWheelZoomClampHigh();
+
+    // Pan
+    void testPanDelta();
+    void testPanZoomIndependent();
+
+    // Fit / Reset
+    void testFitToWindow();
+    void testFitResetsPan();
+    void testResizePreservesZoomRatio();
+
+    // No-image guard
+    void testNoImageSetPercentage();
+    void testNoImageWheelZoom();
+    void testNoImagePan();
+    void testNoImageFit();
+};
+
+// Initialization
+
+void TestViewState::testDefaults() {
+    ViewState zs;
+    QVERIFY(!zs.hasImage());
+    QCOMPARE(zs.imageWidth(), 0);
+    QCOMPARE(zs.imageHeight(), 0);
+    QCOMPARE(zs.zoom(), 1.0f);
+    QCOMPARE(zs.fitScale(), 0.0f);
+    QCOMPARE(zs.zoomRatio(), 1.0f);
+    QCOMPARE(zs.percentage(), 100.0);
+}
+
+void TestViewState::testSetImageSize() {
+    ViewState zs;
+    zs.setImageSize(1920, 1080);
+    QVERIFY(zs.hasImage());
+    QCOMPARE(zs.imageWidth(), 1920);
+    QCOMPARE(zs.imageHeight(), 1080);
+    // Should reset state
+    QCOMPARE(zs.zoom(), 1.0f);
+    QCOMPARE(zs.pan(), QPointF(0, 0));
+}
+
+// FitScale
+
+void TestViewState::testFitScaleLandscape() {
+    // Image 1920x1080 (16:9), viewport 800x600 (4:3)
+    // width ratio: 800/1920 = 0.4167, height ratio: 600/1080 = 0.5556
+    // fitScale = min = 0.4167 (width-limited)
+    ViewState zs;
+    zs.setImageSize(1920, 1080);
+    zs.setViewportSize(800, 600);
+    QVERIFY(qFuzzyCompare(zs.fitScale(), 800.0f / 1920.0f));
+}
+
+void TestViewState::testFitScalePortrait() {
+    // Image 1080x1920 (9:16), viewport 800x600 (4:3)
+    // width ratio: 800/1080 = 0.7407, height ratio: 600/1920 = 0.3125
+    // fitScale = min = 0.3125 (height-limited)
+    ViewState zs;
+    zs.setImageSize(1080, 1920);
+    zs.setViewportSize(800, 600);
+    QVERIFY(qFuzzyCompare(zs.fitScale(), 600.0f / 1920.0f));
+}
+
+void TestViewState::testFitScaleSquare() {
+    // Image 1000x1000, viewport 800x800 -> fitScale = 0.8
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setViewportSize(800, 800);
+    QVERIFY(qFuzzyCompare(zs.fitScale(), 0.8f));
+}
+
+// Zoom percentage
+
+void TestViewState::testPercentage() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setViewportSize(800, 600);
+    // fitScale = 0.6, zoom = 0.6, percentage = 60
+    QCOMPARE(zs.percentage(), zs.zoom() * 100.0);
+}
+
+void TestViewState::testSetPercentage() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setViewportSize(800, 600);
+    zs.setPercentage(200.0);
+    QCOMPARE(zs.zoom(), 2.0f);
+    QCOMPARE(zs.percentage(), 200.0);
+}
+
+void TestViewState::testSetPercentageClampLow() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setPercentage(1.0);
+    // Should clamp to 5% (0.05)
+    QCOMPARE(zs.zoom(), 0.05f);
+}
+
+void TestViewState::testSetPercentageClampHigh() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setPercentage(10000.0);
+    // Should clamp to 6400% (64.0)
+    QCOMPARE(zs.zoom(), 64.0f);
+}
+
+// Wheel zoom
+
+void TestViewState::testWheelZoomIn() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    float initial = zs.zoom();
+    zs.applyWheelZoom(true);
+    QVERIFY(zs.zoom() > initial);
+    QVERIFY(qFuzzyCompare(zs.zoom(), initial * 1.1f));
+}
+
+void TestViewState::testWheelZoomOut() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    float initial = zs.zoom();
+    zs.applyWheelZoom(false);
+    QVERIFY(zs.zoom() < initial);
+    QVERIFY(qFuzzyCompare(zs.zoom(), initial * 0.9f));
+}
+
+void TestViewState::testWheelZoomCtrl() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    float initial = zs.zoom();
+    zs.applyWheelZoom(true, true);
+    // Ctrl squares the factor: 1.1^2 = 1.21
+    QVERIFY(qFuzzyCompare(zs.zoom(), initial * 1.21f));
+}
+
+void TestViewState::testWheelZoomClampLow() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    // Zoom out 100 times — should clamp at 0.05
+    for (int i = 0; i < 100; ++i)
+        zs.applyWheelZoom(false);
+    QCOMPARE(zs.zoom(), 0.05f);
+}
+
+void TestViewState::testWheelZoomClampHigh() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    // Zoom in 100 times — should clamp at 64.0
+    for (int i = 0; i < 100; ++i)
+        zs.applyWheelZoom(true);
+    QCOMPARE(zs.zoom(), 64.0f);
+}
+
+// Pan
+
+void TestViewState::testPanDelta() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setViewportSize(500, 500);
+    // fitScale = 0.5, zoom = 0.5
+    zs.applyPanDelta(10, 20);
+    // pan.rx() -= 10 * (1/1000) / 0.5 = -0.02
+    // pan.ry() -= 20 * (1/1000) / 0.5 = -0.04
+    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().rx()), -0.02f));
+    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().ry()), -0.04f));
+}
+
+void TestViewState::testPanZoomIndependent() {
+    // Same drag at 1x zoom and 2x zoom should produce
+    // different image-space pan (larger at higher zoom),
+    // but the visual screen-pixel movement is the same.
+    ViewState zs1;
+    zs1.setImageSize(1000, 1000);
+    zs1.setViewportSize(1000, 1000); // fitScale=1, zoom=1
+    zs1.setPercentage(100.0);        // zoom = 1.0
+    zs1.applyPanDelta(10, 0);
+
+    ViewState zs2;
+    zs2.setImageSize(1000, 1000);
+    zs2.setViewportSize(1000, 1000);
+    zs2.setPercentage(200.0); // zoom = 2.0
+    zs2.applyPanDelta(10, 0);
+
+    // At 2x zoom, same 10px drag moves half the image-space distance
+    QVERIFY(qFuzzyCompare(static_cast<float>(zs2.pan().rx()),
+                          static_cast<float>(zs1.pan().rx()) * 0.5f));
+}
+
+// Fit / Reset
+
+void TestViewState::testFitToWindow() {
+    ViewState zs;
+    zs.setImageSize(2000, 1500);
+    zs.setViewportSize(800, 600);
+    // fitScale = min(800/2000, 600/1500) = 0.4
+    zs.setPercentage(200.0); // zoom away from fit
+    zs.fitToWindow();
+    QCOMPARE(zs.zoomRatio(), 1.0f);
+    QVERIFY(qFuzzyCompare(zs.zoom(), zs.fitScale()));
+}
+
+void TestViewState::testFitResetsPan() {
+    ViewState zs;
+    zs.setImageSize(1000, 1000);
+    zs.setViewportSize(800, 600);
+    zs.applyPanDelta(50, 30);
+    QVERIFY(zs.pan() != QPointF(0, 0));
+    zs.fitToWindow();
+    QCOMPARE(zs.pan(), QPointF(0, 0));
+}
+
+void TestViewState::testResizePreservesZoomRatio() {
+    ViewState zs;
+    zs.setImageSize(2000, 1000);   // 2:1
+    zs.setViewportSize(1000, 500); // fitScale = 0.5
+    zs.setPercentage(200.0);       // zoom = 2.0, zoomRatio = 4.0
+    float ratioBefore = zs.zoomRatio();
+
+    // Resize viewport — ratio should be preserved
+    zs.setViewportSize(500, 250); // fitScale = 0.25
+    QCOMPARE(zs.zoomRatio(), ratioBefore);
+    // zoom should have changed to match new fitScale
+    QVERIFY(qFuzzyCompare(zs.zoom(), 0.25f * ratioBefore));
+}
+
+// No-image guard
+
+void TestViewState::testNoImageSetPercentage() {
+    ViewState zs;
+    float     before = zs.zoom();
+    zs.setPercentage(500.0);
+    QCOMPARE(zs.zoom(), before); // no-op
+}
+
+void TestViewState::testNoImageWheelZoom() {
+    ViewState zs;
+    float     before = zs.zoom();
+    zs.applyWheelZoom(true);
+    QCOMPARE(zs.zoom(), before); // no-op
+}
+
+void TestViewState::testNoImagePan() {
+    ViewState zs;
+    QPointF   before = zs.pan();
+    zs.applyPanDelta(100, 100);
+    QCOMPARE(zs.pan(), before); // no-op
+}
+
+void TestViewState::testNoImageFit() {
+    ViewState zs;
+    zs.fitToWindow(); // should not crash, no-op
+}
+
+QTEST_MAIN(TestViewState)
+#include "test_viewstate.moc"

@@ -1,0 +1,13 @@
+ThumbnailButton {
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+}
+
+ThumbnailButton[state="unselected"]:hover {
+    background-color: palette(Midlight);
+}
+
+ThumbnailButton[state="selected"] {
+    background-color: palette(Light);
+}

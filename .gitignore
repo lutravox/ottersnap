@@ -1,0 +1,27 @@
+# ── CMake build artifacts ───────────────────────────────────────
+build/
+compile_commands.json
+
+# ── Flatpak build artifacts ─────────────────────────────────────
+build-flatpak/
+.flatpak-builder/
+
+# ── Qt / autogen artifacts ──────────────────────────────────────
+*.autogen/
+*_autogen/
+.qt/
+.cache/
+
+# ── IDE / editor artifacts ──────────────────────────────────────
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+*.sublime-*
+*.vs/
+
+# ── OS artifacts ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

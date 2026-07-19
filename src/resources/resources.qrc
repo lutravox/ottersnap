@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="qss/thumbnailstrip.qss">qss/thumbnailstrip.qss</file>
+        <file alias="qss/thumbnailbutton.qss">qss/thumbnailbutton.qss</file>
+        <file alias="qss/notificationbar.qss">qss/notificationbar.qss</file>
+        <file alias="qss/vkimageviewer.qss">qss/vkimageviewer.qss</file>
+    </qresource>
+</RCC>

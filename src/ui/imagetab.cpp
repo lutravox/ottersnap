@@ -1,4 +1,5 @@
 #include "ui/imagetab.h"
+#include "config/appsettings.h"
 #include "core/imageloader.h"
 #include "core/versionstore.h"
 
@@ -8,15 +9,16 @@
 #include <QPixmap>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QtConcurrent>
 
 ImageTab::ImageTab(QWidget *parent)
     : QWidget(parent), m_currentIndex(0), m_grayscale(false), m_mirror(false),
       m_watcher(new QFileSystemWatcher(this)), m_debounceTimer(new QTimer(this)) {
     m_debounceTimer->setSingleShot(true);
-    connect(m_debounceTimer, &QTimer::timeout, this, &ImageTab::onFileChanged);
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, [this]() {
-        m_debounceTimer->start(1000); // 1s debounce — give external editors time to finish writing
-    });
+    connect(&m_saveWatcher,
+            &QFutureWatcher<std::optional<VersionStore::SaveResult>>::finished,
+            this,
+            &ImageTab::onSaveFinished);
 
     setupUi();
 }
@@ -68,6 +70,8 @@ void ImageTab::rebuildImageList() {
 
     // The current file on disk is always the most recent version
     m_labels.append(tr("Current"));
+
+    emit versionsChanged();
 }
 
 const QImage& ImageTab::currentImage() const {
@@ -140,14 +144,14 @@ void ImageTab::selectVersion(int index) {
 void ImageTab::onFileChanged() {
     // Re-add watcher — Linux drops the path after the event fires.
     m_watcher->addPath(m_filePath);
-    reloadCurrentFile();
+    reloadImage();
 }
 
-void ImageTab::reloadCurrentFile() {
+void ImageTab::reloadImage() {
     QFile f(m_filePath);
     if (!f.exists()) {
-        emit statusMessage(
-            tr("File unavailable: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
+        emit statusMessage(tr("Failed to reload, file unavailable: %1")
+                               .arg(m_filePath.section(QLatin1Char('/'), -1)));
         return;
     }
 
@@ -155,37 +159,50 @@ void ImageTab::reloadCurrentFile() {
     qint64 size1 = f.size();
     if (size1 <= 0) {
         emit statusMessage(
-            tr("File empty, reload skipped: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
+            tr("Failed to reload, file empty: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
         return;
     }
     m_stableSize = size1;
-    QTimer::singleShot(200, this, &ImageTab::checkFileStable);
+    QTimer::singleShot(200, this, &ImageTab::tryReload);
 }
 
-void ImageTab::checkFileStable() {
+void ImageTab::tryReload() {
     QFile f(m_filePath);
     if (f.size() != m_stableSize)
-        return;
-
-    QImage newImage = loadImage(m_filePath);
-    if (newImage.isNull()) {
         emit statusMessage(tr("Failed to reload, file may be in use: %1")
                                .arg(m_filePath.section(QLatin1Char('/'), -1)));
-        return;
-    }
+    return;
+
+    QImage newImage = loadImage(m_filePath);
+
     if (newImage == m_diskImage)
         return;
 
-    if (!m_diskImage.isNull()) {
-        VersionStore::saveVersion(m_filePath, m_diskImage);
-        emit statusMessage(
-            tr("Auto-saved version for: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
+    if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
+        autosaveSnapshot(newImage);
     }
 
     m_diskImage = newImage;
     rebuildImageList();
     m_currentIndex = static_cast<int>(m_versions.size());
     emit versionChanged(m_currentIndex);
+}
+
+bool ImageTab::autosaveSnapshot(const QImage& newImage) {
+    if (newImage.isNull()) {
+        emit statusMessage(tr("Failed to autosave, file may be in use: %1")
+                               .arg(m_filePath.section(QLatin1Char('/'), -1)));
+        return false;
+    }
+
+    if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
+        auto result = VersionStore::saveVersion(m_filePath, m_diskImage);
+        if (result && result->status == VersionStore::SaveStatus::Created) {
+            emit statusMessage(
+                tr("Snapshot autosaved for: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
+        }
+    }
+    return true;
 }
 
 std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::versionThumbnails(int size) const {
@@ -240,4 +257,41 @@ QPixmap ImageTab::thumbnail(int size) const {
         return {};
     return QPixmap::fromImage(m_diskImage)
         .scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
+void ImageTab::saveSnapshot() {
+    if (m_diskImage.isNull()) {
+        emit statusMessage(tr("No image loaded to snapshot."));
+        return;
+    }
+
+    if (m_saveWatcher.isRunning()) {
+        emit statusMessage(tr("Snapshot already in progress..."));
+        return;
+    }
+
+    emit statusMessage(tr("Saving snapshot..."));
+
+    auto filePath = m_filePath;
+    auto image = m_diskImage;
+
+    auto future = QtConcurrent::run(
+        [filePath, image]() { return VersionStore::saveVersion(filePath, image); });
+
+    m_saveWatcher.setFuture(future);
+}
+
+void ImageTab::onSaveFinished() {
+    auto result = m_saveWatcher.result();
+    if (result) {
+        if (result->status == VersionStore::SaveStatus::Created) {
+            rebuildImageList();
+            emit statusMessage(tr("Snapshot saved."));
+        } else {
+            emit statusMessage(tr("This version is already snapshotted (%1)").arg(result->version),
+                               5000);
+        }
+    } else {
+        emit statusMessage(tr("Failed to save snapshot."));
+    }
 }

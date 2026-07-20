@@ -37,6 +37,14 @@ void AppSettings::setMaxVersionCacheSizeMB(int value) {
     settings().setValue("General/maxVersionCacheSizeMB", value);
 }
 
+bool AppSettings::autosaveSnapshots() {
+    return settings().value("General/autosaveSnapshots", true).toBool();
+}
+
+void AppSettings::setAutosaveSnapshots(bool value) {
+    settings().setValue("General/autosaveSnapshots", value);
+}
+
 const char *AppSettings::applicationName() {
     return c_applicationName;
 }

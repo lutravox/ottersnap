@@ -8,6 +8,9 @@
 #include <QWidget>
 #include <utility>
 
+#include <QFuture>
+#include <QFutureWatcher>
+
 #include "core/versionstore.h"
 #include "core/viewstate.h"
 
@@ -78,7 +81,9 @@ class ImageTab : public QWidget {
         m_viewState = state;
     }
 
-    /// @brief Generate and return version thumbnails.
+    /// @brief Create a manual snapshot of the current image on disk.
+    void saveSnapshot();
+
     /// @param size Desired thumbnail size in pixels (square).
     /// @return Pair of thumbnail pixmaps and their labels.
     std::pair<QVector<QPixmap>, QVector<QString>> versionThumbnails(int size) const;
@@ -86,7 +91,8 @@ class ImageTab : public QWidget {
   signals:
     /// @brief Emitted with a status message to show to the user.
     /// @param message Status text.
-    void statusMessage(const QString& message);
+    /// @param timeoutMs Optional timeout in ms. If -1, use default.
+    void statusMessage(const QString& message, int timeoutMs = -1);
 
     /// @brief Emitted when the tab's image modifier state changes.
     /// @param grayscale Current grayscale state.
@@ -97,14 +103,19 @@ class ImageTab : public QWidget {
     /// @param index New version index.
     void versionChanged(int index);
 
+    /// @brief Emitted when the list of available versions changes.
+    void versionsChanged();
+
   private slots:
     void onFileChanged();
+    void onSaveFinished();
 
   private:
     void setupUi();
     void rebuildImageList();
-    void reloadCurrentFile();
-    void checkFileStable();
+    void reloadImage();
+    void tryReload();
+    bool autosaveSnapshot(const QImage& newImage);
 
     QString               m_filePath;
     QImage                m_diskImage;
@@ -119,6 +130,7 @@ class ImageTab : public QWidget {
 
     ViewState m_viewState;
 
-    QFileSystemWatcher *m_watcher;
-    QTimer             *m_debounceTimer;
+    QFileSystemWatcher                                     *m_watcher;
+    QTimer                                                 *m_debounceTimer;
+    QFutureWatcher<std::optional<VersionStore::SaveResult>> m_saveWatcher;
 };

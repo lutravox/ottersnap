@@ -22,7 +22,7 @@ void ViewState::updateImageSize(int width, int height) {
 
 void ViewState::setViewportSize(int viewWidth, int viewHeight) {
     if (!hasImage()) {
-        qDebug() << "[setViewportSize] no image dimensions set";
+        qDebug() << "[setViewportSize] No image dimensions set";
         return;
     }
 
@@ -36,7 +36,7 @@ void ViewState::setViewportSize(int viewWidth, int viewHeight) {
 
 void ViewState::setPercentage(double pct) {
     if (!hasImage()) {
-        qDebug() << "[setPercentage] no image dimensions set";
+        qDebug() << "[setPercentage] No image dimensions set";
         return;
     }
 
@@ -46,7 +46,7 @@ void ViewState::setPercentage(double pct) {
 
 void ViewState::applyWheelZoom(bool zoomIn, bool ctrlHeld) {
     if (!hasImage()) {
-        qDebug() << "[applyWheelZoom] no image dimensions set";
+        qDebug() << "[applyWheelZoom] No image dimensions set";
         return;
     }
 
@@ -61,7 +61,7 @@ void ViewState::applyWheelZoom(bool zoomIn, bool ctrlHeld) {
 
 void ViewState::applyPanDelta(int dx, int dy) {
     if (!hasImage()) {
-        qDebug() << "[applyPanDelta] no image dimensions set";
+        qDebug() << "[applyPanDelta] No image dimensions set";
         return;
     }
 
@@ -73,7 +73,7 @@ void ViewState::applyPanDelta(int dx, int dy) {
 
 void ViewState::updateZoomRatio() {
     if (!hasImage()) {
-        qDebug() << "[updateZoomRatio] no image dimensions set";
+        qDebug() << "[updateZoomRatio] No image dimensions set";
         return;
     }
 
@@ -83,7 +83,7 @@ void ViewState::updateZoomRatio() {
 
 void ViewState::fitToWindow() {
     if (!hasImage()) {
-        qDebug() << "[fitToWindow] no image dimensions set";
+        qDebug() << "[fitToWindow] No image dimensions set";
         return;
     }
 

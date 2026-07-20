@@ -37,6 +37,7 @@ class MainWindow : public QMainWindow {
 
   private slots:
     void onFileOpen();
+    void onSaveSnapshot();
     void onCloseTab(int index);
     void onSettings();
     void onTabChanged(int index);
@@ -47,10 +48,10 @@ class MainWindow : public QMainWindow {
     void      setupMenu();
     void      openImageFile(const QString& path);
     ImageTab *currentTab();
-    void      applyModifiers();
+    void      applyEffects();
     void      updateTabThumbnail(int index);
     void      setTabThumbnail(int index);
-    void      notify(const QString& msg);
+    void      notify(const QString& msg, int timeoutMs = -1);
     void      updateThumbnailStrip();
 
     /// @brief Update the viewer when the active tab changes.
@@ -71,6 +72,7 @@ class MainWindow : public QMainWindow {
     EffectsController *m_effectsController;
 
     QAction *m_actionOpen;
+    QAction *m_actionSaveSnapshot;
     QAction *m_actionCloseTab;
     QAction *m_actionExit;
     QAction *m_actionFitWindow;

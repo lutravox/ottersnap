@@ -92,6 +92,10 @@ void MainWindow::setupMenu() {
     m_actionOpen->setShortcut(QKeySequence::Open);
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
+    m_actionSaveSnapshot = fileMenu->addAction("&Save Snapshot");
+    m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
+    connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
+
     m_actionCloseTab = fileMenu->addAction("Close &Tab");
     m_actionCloseTab->setShortcut(QKeySequence::Close);
     connect(m_actionCloseTab, &QAction::triggered, this, [this]() {
@@ -157,6 +161,13 @@ void MainWindow::onFileOpen() {
     openImageFile(path);
 }
 
+void MainWindow::onSaveSnapshot() {
+    auto *tab = currentTab();
+    if (tab) {
+        tab->saveSnapshot();
+    }
+}
+
 void MainWindow::openImageFile(const QString& path) {
     // Check if already open
     if (auto *existing = m_tabPaths.value(path)) {
@@ -165,10 +176,17 @@ void MainWindow::openImageFile(const QString& path) {
     }
 
     auto *tab = new ImageTab(this);
-    connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg) { notify(msg); });
+    connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg, int timeout) {
+        notify(msg, timeout);
+    });
     connect(tab, &ImageTab::versionChanged, this, [this, tab](int /*index*/) {
         if (m_tabBar->currentWidget() == tab) {
             updateViewer();
+        }
+    });
+    connect(tab, &ImageTab::versionsChanged, this, [this, tab]() {
+        if (m_tabBar->currentWidget() == tab) {
+            updateThumbnailStrip();
         }
     });
 
@@ -203,7 +221,7 @@ void MainWindow::onCloseTab(int index) {
     updateState();
 }
 
-void MainWindow::applyModifiers() {
+void MainWindow::applyEffects() {
     auto *tab = currentTab();
     if (!tab)
         return;
@@ -242,8 +260,12 @@ ImageTab *MainWindow::currentTab() {
     return qobject_cast<ImageTab *>(m_tabBar->currentWidget());
 }
 
-void MainWindow::notify(const QString& msg) {
-    m_notification->notify(msg);
+void MainWindow::notify(const QString& msg, int timeoutMs) {
+    if (timeoutMs == -1) {
+        m_notification->notify(msg);
+    } else {
+        m_notification->notify(msg, timeoutMs);
+    }
 }
 
 void MainWindow::showEvent(QShowEvent *event) {

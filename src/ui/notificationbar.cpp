@@ -31,6 +31,12 @@ void NotificationBar::notify(const QString& message, int timeoutMs) {
 
     m_fadeAnim->setStartValue(0.0);
     m_fadeAnim->setEndValue(1.0);
+
+    // Disconnect any existing handlers for the finished signal (e.g., from a previous fade-out)
+    // to prevent them from hiding the new notification.
+    disconnect(
+        m_fadeAnim, &QPropertyAnimation::finished, this, &NotificationBar::onFadeOutFinished);
+
     m_fadeAnim->start();
 
     m_hideTimer->start(timeoutMs);

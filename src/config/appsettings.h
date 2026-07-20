@@ -30,6 +30,11 @@ class AppSettings {
     /// @brief Return the QFileDialog filter string for supported image types.
     static QString fileFilter();
 
+    /// @brief Return whether snapshots should be automatically saved when the file changes.
+    static bool autosaveSnapshots();
+    /// @brief Set the autosave snapshots preference.
+    static void setAutosaveSnapshots(bool value);
+
     /// @brief Return the maximum memory allowed for the version cache in MB.
     /// @return The cache size in MB.
     static int maxVersionCacheSizeMB();

@@ -25,14 +25,14 @@ static const int     c_baseInterval = 100;
 static bool atomicWrite(const QString& targetPath, std::function<bool(const QString&)> writeOp) {
     QString tmp = targetPath + c_tmp;
     if (!writeOp(tmp)) {
-        qWarning() << "[VersionStore] failed to write temp file: " << targetPath;
+        qWarning() << "[VersionStore] Failed to write temp file:" << targetPath;
         return false;
     }
     if (QFile::exists(targetPath)) {
         QFile::remove(targetPath);
     }
     if (!QFile::rename(tmp, targetPath)) {
-        qWarning() << "[VersionStore] failed to rename temp file: " << tmp << "->" << targetPath;
+        qWarning() << "[VersionStore] Failed to rename temp file:" << tmp << "->" << targetPath;
         QFile::remove(tmp);
         return false;
     }
@@ -70,7 +70,7 @@ static ImageVersion fromJsonObject(const QJsonObject& obj) {
 static bool saveImageFile(const QString& targetPath, const QImage& image) {
     return atomicWrite(targetPath, [&image](const QString& tmp) {
         if (!image.save(tmp, "PNG")) {
-            qWarning() << "[VersionStore] failed to save image:" << tmp;
+            qWarning() << "[VersionStore] Failed to save image:" << tmp;
             return false;
         }
         return true;
@@ -81,7 +81,7 @@ static bool saveFile(const QString& targetPath, const QByteArray& data) {
     return atomicWrite(targetPath, [&data](const QString& tmp) {
         QFile f(tmp);
         if (!f.open(QFile::WriteOnly | QFile::Truncate)) {
-            qWarning() << "[VersionStore] failed to open temp file for writing:" << tmp;
+            qWarning() << "[VersionStore] Failed to open temp file for writing:" << tmp;
             return false;
         }
         f.write(data);
@@ -95,7 +95,7 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
     QImage prev = previous.convertToFormat(QImage::Format_ARGB32);
 
     if (cur.size() != prev.size()) {
-        qDebug() << "[VersionStore] current and previous images size mismatch";
+        qDebug() << "[VersionStore] Current and previous images size mismatch";
         return {};
     }
 
@@ -147,7 +147,7 @@ QString VersionStore::imageKey(const QString& filePath) {
 void VersionStore::ensureDir() {
     QString bd = baseDir();
     if (!QDir().mkpath(bd)) {
-        qWarning() << "[VersionStore] failed to create base directory:" << bd;
+        qWarning() << "[VersionStore] Failed to create base directory:" << bd;
     }
 }
 
@@ -155,7 +155,7 @@ QString VersionStore::computeChecksum(const QImage& image) {
     QByteArray ba;
     QBuffer    buffer(&ba);
     if (!image.save(&buffer, "PNG")) {
-        qWarning() << "[VersionStore] failed to save image to buffer for checksum";
+        qWarning() << "[VersionStore] Failed to save image to buffer for checksum";
         return {};
     }
     return QString::fromUtf8(QCryptographicHash::hash(ba, QCryptographicHash::Sha256).toHex());
@@ -176,14 +176,14 @@ QVector<ImageVersion> VersionStore::loadVersions(const QString& filePath) {
 
     QFile f(idxPath);
     if (!f.open(QFile::ReadOnly)) {
-        qWarning() << "[VersionStore] failed to open index file:" << idxPath;
+        qWarning() << "[VersionStore] Failed to open index file:" << idxPath;
         return {};
     }
 
     QJsonParseError err;
     QJsonDocument   doc = QJsonDocument::fromJson(f.readAll(), &err);
     if (err.error != QJsonParseError::NoError || !doc.isArray()) {
-        qWarning() << "[VersionStore] failed to parse index file:" << idxPath;
+        qWarning() << "[VersionStore] Failed to parse index file:" << idxPath;
         return {};
     }
 
@@ -196,10 +196,11 @@ QVector<ImageVersion> VersionStore::loadVersions(const QString& filePath) {
     return versions;
 }
 
-std::optional<int> VersionStore::saveVersion(const QString& filePath, const QImage& image) {
+std::optional<VersionStore::SaveResult> VersionStore::saveVersion(const QString& filePath,
+                                                                  const QImage&  image) {
     QString checksum = computeChecksum(image);
     if (checksum.isEmpty()) {
-        qWarning() << "[VersionStore] refused to save: image has null pixel data or save failed";
+        qWarning() << "[VersionStore] Refused to save: image has null pixel data or save failed";
         return std::nullopt;
     }
 
@@ -209,9 +210,9 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
     // Skip if identical version already exists
     for (const ImageVersion& v : versions) {
         if (v.checksum == checksum) {
-            qDebug() << "[VersionStore] duplicate image skipped for" << filePath
+            qDebug() << "[VersionStore] Duplicate image skipped for" << filePath
                      << "(existing version" << v.version << ")";
-            return v.version;
+            return SaveResult{SaveStatus::Existing, v.version};
         }
     }
 
@@ -220,7 +221,7 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
     int     nextVer = versions.isEmpty() ? 1 : versions.last().version + 1;
     QString vd = versionDirPath(key);
     if (!QDir().mkpath(vd)) {
-        qWarning() << "[VersionStore] failed to create version directory: " << vd;
+        qWarning() << "[VersionStore] Failed to create version directory:" << vd;
         return std::nullopt;
     }
 
@@ -245,7 +246,7 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
         v.fileName = QString::asprintf("v%04d.png", v.version);
         QString imgPath = vd + '/' + v.fileName;
         if (!saveImageFile(imgPath, image)) {
-            qWarning() << "[VersionStore] failed to create version file: " << imgPath;
+            qWarning() << "[VersionStore] Failed to create version file:" << imgPath;
             return std::nullopt;
         }
     } else {
@@ -254,19 +255,19 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
         // Get previous image to compute delta
         std::optional<QImage> prevImg = loadVersionImage(filePath, versions.last().version);
         if (!prevImg) {
-            qWarning() << "[VersionStore] failed to load previous version for delta";
+            qWarning() << "[VersionStore] Failed to load previous version for delta";
             return std::nullopt;
         }
 
         QByteArray delta = computeDelta(image, *prevImg);
         if (delta.isEmpty()) {
-            qWarning() << "[VersionStore] failed to compute delta for" << v.fileName;
+            qWarning() << "[VersionStore] Failed to compute delta for" << v.fileName;
             return std::nullopt;
         }
 
         QString deltaPath = vd + '/' + v.fileName;
         if (!saveFile(deltaPath, delta)) {
-            qWarning() << "[VersionStore] failed to save delta file: " << deltaPath;
+            qWarning() << "[VersionStore] Failed to save delta file:" << deltaPath;
             return std::nullopt;
         }
     }
@@ -280,16 +281,16 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
 
     QString idxPath = indexPath(vd);
     if (!saveFile(idxPath, QJsonDocument(arr).toJson(QJsonDocument::Compact))) {
-        qWarning() << "[VersionStore] failed to create index file: " << idxPath;
+        qWarning() << "[VersionStore] Failed to create index file:" << idxPath;
         QFile::remove(vd + '/' + v.fileName);
         return std::nullopt;
     }
 
-    qDebug() << "[VersionStore] saved version" << v.version << (v.isBase ? " (base)" : " (delta)")
+    qDebug() << "[VersionStore] saved version" << v.version << (v.isBase ? "(base)" : " (delta)")
              << "for" << filePath;
     s_versionsCache[key] = versions;
 
-    return v.version;
+    return SaveResult{SaveStatus::Created, v.version};
 }
 
 std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, int versionIndex) {
@@ -313,7 +314,7 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
     }
 
     if (targetIdx == -1) {
-        qWarning() << "[VersionStore] version" << versionIndex << "not found for" << filePath;
+        qWarning() << "[VersionStore] Version" << versionIndex << "not found for" << filePath;
         return std::nullopt;
     }
 
@@ -327,7 +328,7 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
     }
 
     if (baseIdx == -1) {
-        qWarning() << "[VersionStore] no base image found for version chain ending at"
+        qWarning() << "[VersionStore] No base image found for version chain ending at"
                    << versionIndex;
         return std::nullopt;
     }
@@ -337,7 +338,7 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
     QString basePath = vd + '/' + versions[baseIdx].fileName;
     QImage  img;
     if (!img.load(basePath)) {
-        qWarning() << "[VersionStore] failed to load base image:" << basePath;
+        qWarning() << "[VersionStore] Failed to load base image:" << basePath;
         return std::nullopt;
     }
 
@@ -346,7 +347,7 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
         QString deltaPath = vd + '/' + versions[i].fileName;
         QFile   f(deltaPath);
         if (!f.open(QFile::ReadOnly)) {
-            qWarning() << "[VersionStore] failed to open delta file:" << deltaPath;
+            qWarning() << "[VersionStore] Failed to open delta file:" << deltaPath;
             return std::nullopt;
         }
 
@@ -379,9 +380,9 @@ void VersionStore::deleteAllVersions(const QString& filePath) {
     QDir    dir(vd);
     if (dir.exists()) {
         if (!dir.removeRecursively()) {
-            qWarning() << "[VersionStore] failed to delete version directory:" << vd;
+            qWarning() << "[VersionStore] Failed to delete version directory:" << vd;
         } else {
-            qDebug() << "[VersionStore] deleted all versions for" << filePath;
+            qDebug() << "[VersionStore] Deleted all versions for" << filePath;
         }
     }
     s_versionsCache.remove(key);

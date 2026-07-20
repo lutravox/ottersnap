@@ -20,6 +20,13 @@ struct ImageVersion {
 /// @brief Persists image versions on disk, keyed by a hash of the source file path.
 class VersionStore {
   public:
+    enum class SaveStatus { Created, Existing };
+
+    struct SaveResult {
+        SaveStatus status;
+        int        version;
+    };
+
     /// @brief Return the base directory for all versioned images.
     static QString baseDir();
 
@@ -44,8 +51,8 @@ class VersionStore {
     /// @brief Save a new version of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
     /// @param image The image data to save.
-    /// @return The version number of the saved (or existing) version, or std::nullopt on failure.
-    static std::optional<int> saveVersion(const QString& filePath, const QImage& image);
+    /// @return The result containing status and version number, or std::nullopt on failure.
+    static std::optional<SaveResult> saveVersion(const QString& filePath, const QImage& image);
 
     /// @brief Load the pixel data for a specific version.
     /// @param filePath Absolute path of the source image.

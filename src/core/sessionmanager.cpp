@@ -10,7 +10,7 @@ SessionManager::SessionManager() = default;
 
 void SessionManager::save(QTabWidget *tabBar, QSettings settings) {
     QStringList paths = collectPaths(tabBar);
-    qDebug() << "SessionManager::save" << paths;
+    qDebug() << "[SessionManager] Paths to save:" << paths;
     settings.beginGroup("Session");
     settings.setValue("openFiles", paths);
     settings.endGroup();
@@ -20,7 +20,7 @@ void SessionManager::load(QSettings settings) {
     settings.beginGroup("Session");
     m_restorePaths = settings.value("openFiles").toStringList();
     settings.endGroup();
-    qDebug() << "SessionManager::load" << m_restorePaths;
+    qDebug() << "[SessionManager] Loading paths:" << m_restorePaths;
 }
 
 QStringList SessionManager::restorePaths() {

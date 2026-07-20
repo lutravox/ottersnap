@@ -23,6 +23,10 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbRestoreSession->setChecked(AppSettings::restoreSession());
     layout->addWidget(m_cbRestoreSession);
 
+    m_cbAutosave = new QCheckBox(tr("Autosave snapshots"), this);
+    m_cbAutosave->setChecked(AppSettings::autosaveSnapshots());
+    layout->addWidget(m_cbAutosave);
+
     // Version cache size
     auto *cacheLayout = new QHBoxLayout();
     auto *cacheLabel = new QLabel(tr("Version cache size (MB):"), this);
@@ -42,6 +46,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
         AppSettings::setResizeToFit(m_cbResizeToFit->isChecked());
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
+        AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
         AppSettings::setMaxVersionCacheSizeMB(m_sbCacheSize->value());
         accept();
     });

@@ -101,7 +101,7 @@ void TestVersionStore::testSaveFirstVersion() {
 
     auto ver = VersionStore::saveVersion(path, img);
     QVERIFY(ver.has_value());
-    QCOMPARE(*ver, 1);
+    QCOMPARE(ver->version, 1);
 }
 
 void TestVersionStore::testLoadVersions() {
@@ -125,7 +125,7 @@ void TestVersionStore::testLoadVersionImage() {
     auto   ver = VersionStore::saveVersion(path, img);
     QVERIFY(ver.has_value());
 
-    auto optLoaded = VersionStore::loadVersionImage(path, *ver);
+    auto optLoaded = VersionStore::loadVersionImage(path, ver->version);
     QVERIFY(optLoaded.has_value());
     QCOMPARE(optLoaded->width(), 30);
     QCOMPARE(optLoaded->height(), 30);
@@ -155,12 +155,12 @@ void TestVersionStore::testSaveDuplicateSkipped() {
 
     auto ver1 = VersionStore::saveVersion(path, img);
     QVERIFY(ver1.has_value());
-    QCOMPARE(*ver1, 1);
+    QCOMPARE(ver1->version, 1);
 
     // Saving the same image again should return the existing version number
     auto ver2 = VersionStore::saveVersion(path, img);
     QVERIFY(ver2.has_value());
-    QCOMPARE(*ver2, 1);
+    QCOMPARE(ver2->version, 1);
 
     // Only one version on disk
     QVector<ImageVersion> versions = VersionStore::loadVersions(path);

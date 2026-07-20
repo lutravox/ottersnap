@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 # ── Shader pipeline ──────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ add_dependencies(${PROJECT_NAME} shader_rcc)
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets Qt6::Gui)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets Qt6::Gui Qt6::Concurrent)
 
 # ── Installation ─────────────────────────────────────────────────────────
 # BUNDLE is for macOS (.app); RUNTIME is for Linux/Windows executables.

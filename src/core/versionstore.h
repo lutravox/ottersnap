@@ -21,6 +21,9 @@ class VersionStore {
     /// @brief Return the base directory for all versioned images.
     static QString baseDir();
 
+    /// @brief Return the cache directory for thumbnails.
+    static QString thumbnailDir();
+
     /// @brief Compute a SHA-256 based key from a file path.
     /// @param filePath Absolute path of the source image.
     static QString imageKey(const QString& filePath);

@@ -2,6 +2,7 @@
 #include "core/imageloader.h"
 #include "core/versionstore.h"
 
+#include <QDir>
 #include <QFile>
 #include <QPainter>
 #include <QPixmap>
@@ -30,8 +31,8 @@ void ImageTab::setupUi() {
 
 void ImageTab::openImage(const QString& filePath) {
     m_filePath = filePath;
-    m_image = loadImage(m_filePath);
-    if (m_image.isNull()) {
+    m_diskImage = loadImage(m_filePath);
+    if (m_diskImage.isNull()) {
         emit statusMessage(tr("Failed to load: %1").arg(m_filePath));
         return;
     }
@@ -39,44 +40,65 @@ void ImageTab::openImage(const QString& filePath) {
     rebuildImageList();
     m_watcher->addPath(m_filePath);
 
-    m_currentIndex = static_cast<int>(m_images.size()) - 1;
+    // The current image on disk is always the most recent version
+    m_currentIndex = static_cast<int>(m_versions.size());
     emit versionChanged(m_currentIndex);
 }
 
 void ImageTab::closeImage() {
     m_watcher->removePath(m_filePath);
     m_filePath.clear();
-    m_image = QImage();
-    m_images.clear();
+    m_diskImage = QImage();
+    m_cachedImage = QImage();
+    m_versions.clear();
     m_labels.clear();
     m_currentIndex = 0;
+    m_loadedVersionIndex = -1;
 }
 
 void ImageTab::rebuildImageList() {
-    m_images.clear();
+    m_versions.clear();
     m_labels.clear();
 
     auto versions = VersionStore::loadVersions(m_filePath);
     for (const auto& v : versions) {
-        auto versionImg = VersionStore::loadVersionImage(m_filePath, v.version);
-        if (versionImg.has_value()) {
-            m_images.append(std::move(versionImg).value());
-            m_labels.append(tr("v%1 — %2").arg(v.version).arg(v.timestamp.toString(Qt::ISODate)));
-        }
+        m_versions.append(v);
+        m_labels.append(tr("v%1 — %2").arg(v.version).arg(v.timestamp.toString(Qt::ISODate)));
     }
 
-    if (!m_image.isNull()) {
-        m_images.append(m_image);
-        m_labels.append(tr("Current"));
-    }
+    // The current file on disk is always the most recent version
+    m_labels.append(tr("Current"));
 }
 
 const QImage& ImageTab::currentImage() const {
-    if (m_currentIndex < 0 || m_currentIndex >= static_cast<int>(m_images.size())) {
+    if (m_currentIndex < 0 || m_currentIndex > static_cast<int>(m_versions.size())) {
         static QImage s_null;
         return s_null;
     }
-    return m_images[m_currentIndex];
+
+    auto *mutableThis = const_cast<ImageTab *>(this);
+
+    // Current image (the one on disk) is always at index m_versions.size()
+    if (m_currentIndex == static_cast<int>(m_versions.size())) {
+        return mutableThis->m_diskImage;
+    }
+
+    // Return cached image if it matches current index
+    if (mutableThis->m_loadedVersionIndex == m_currentIndex) {
+        return mutableThis->m_cachedImage;
+    }
+
+    // Load from store and cache
+    const ImageVersion& v = m_versions[m_currentIndex];
+    auto                optImg = VersionStore::loadVersionImage(m_filePath, v.version);
+    if (optImg.has_value()) {
+        mutableThis->m_cachedImage = std::move(optImg).value();
+        mutableThis->m_loadedVersionIndex = m_currentIndex;
+        return mutableThis->m_cachedImage;
+    }
+
+    static QImage s_null;
+    return s_null;
 }
 
 void ImageTab::setGrayscale(bool enabled) {
@@ -107,8 +129,10 @@ static QPixmap createCenteredThumbnail(const QImage& image, int size) {
 }
 
 void ImageTab::selectVersion(int index) {
-    if (index < 0 || index >= static_cast<int>(m_images.size()))
+    if (index < 0 || index > static_cast<int>(m_versions.size())) {
+        qDebug() << "[ImageTab] index of version selection out of bounds";
         return;
+    }
     m_currentIndex = index;
     emit versionChanged(m_currentIndex);
 }
@@ -145,37 +169,75 @@ void ImageTab::checkFileStable() {
 
     QImage newImage = loadImage(m_filePath);
     if (newImage.isNull()) {
-        emit statusMessage(tr("Failed to reload, file may still be in use: %1")
+        emit statusMessage(tr("Failed to reload, file may be in use: %1")
                                .arg(m_filePath.section(QLatin1Char('/'), -1)));
         return;
     }
-    if (newImage == m_image)
+    if (newImage == m_diskImage)
         return;
 
-    if (!m_image.isNull()) {
-        VersionStore::saveVersion(m_filePath, m_image);
+    if (!m_diskImage.isNull()) {
+        VersionStore::saveVersion(m_filePath, m_diskImage);
         emit statusMessage(
             tr("Auto-saved version for: %1").arg(m_filePath.section(QLatin1Char('/'), -1)));
     }
 
-    m_image = newImage;
+    m_diskImage = newImage;
     rebuildImageList();
-    m_currentIndex = static_cast<int>(m_images.size()) - 1;
+    m_currentIndex = static_cast<int>(m_versions.size());
     emit versionChanged(m_currentIndex);
 }
 
 std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::versionThumbnails(int size) const {
     QVector<QPixmap> thumbs;
-    thumbs.reserve(m_images.size());
-    for (const QImage& img : m_images) {
-        thumbs.append(createCenteredThumbnail(img, size));
+    thumbs.reserve(m_versions.size() + 1);
+
+    QString cacheDir = VersionStore::thumbnailDir() + '/' + VersionStore::imageKey(m_filePath);
+    QDir().mkpath(cacheDir);
+
+    for (const auto& v : m_versions) {
+        QString thumbPath = cacheDir + '/' + QString::asprintf("v%04d.jpg", v.version);
+        QImage  thumbImg;
+
+        if (QFile::exists(thumbPath)) {
+            // Found a cached thumbnail
+            thumbImg = QImage(thumbPath);
+        } else {
+            // Load full image to create thumbnail
+            auto optFull = VersionStore::loadVersionImage(m_filePath, v.version);
+            if (optFull.has_value()) {
+                QImage full = optFull.value();
+                // Generate thumbnail
+                QPixmap scaled = QPixmap::fromImage(full).scaled(
+                    size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                thumbImg = scaled.toImage();
+                thumbImg.save(thumbPath, "JPG");
+            }
+        }
+
+        if (!thumbImg.isNull()) {
+            thumbs.append(QPixmap::fromImage(thumbImg));
+        } else {
+            // Fallback: empty thumbnail
+            thumbs.append(QPixmap(size, size));
+            thumbs.last().fill(Qt::transparent);
+        }
     }
+
+    // Add the thumbnail for the "Current" image
+    if (!m_diskImage.isNull()) {
+        thumbs.append(thumbnail(size));
+    } else {
+        thumbs.append(QPixmap(size, size));
+        thumbs.last().fill(Qt::transparent);
+    }
+
     return {thumbs, m_labels};
 }
 
 QPixmap ImageTab::thumbnail(int size) const {
-    if (m_image.isNull())
+    if (m_diskImage.isNull())
         return {};
-    return QPixmap::fromImage(m_image).scaled(
-        size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return QPixmap::fromImage(m_diskImage)
+        .scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }

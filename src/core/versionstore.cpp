@@ -133,6 +133,10 @@ QString VersionStore::baseDir() {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + '/' + c_baseSubDir;
 }
 
+QString VersionStore::thumbnailDir() {
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+}
+
 QString VersionStore::imageKey(const QString& filePath) {
     QByteArray hash = QCryptographicHash::hash(filePath.toUtf8(), QCryptographicHash::Sha256);
     return QString::fromUtf8(hash.left(16).toHex());

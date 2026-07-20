@@ -8,6 +8,8 @@
 #include <QWidget>
 #include <utility>
 
+#include "core/versionstore.h"
+
 /// @brief A single image tab. Manages image loading, version history,
 /// image modifiers, and file-system watching.
 class ImageTab : public QWidget {
@@ -93,14 +95,16 @@ class ImageTab : public QWidget {
     void reloadCurrentFile();
     void checkFileStable();
 
-    QString          m_filePath;
-    QImage           m_image;
-    QVector<QImage>  m_images;
-    QVector<QString> m_labels;
-    int              m_currentIndex = 0;
-    bool             m_grayscale = false;
-    bool             m_mirror = false;
-    qint64           m_stableSize = -1;
+    QString               m_filePath;
+    QImage                m_diskImage;
+    QImage                m_cachedImage;
+    QVector<ImageVersion> m_versions;
+    QVector<QString>      m_labels;
+    int                   m_currentIndex = 0;
+    int                   m_loadedVersionIndex = -1;
+    bool                  m_grayscale = false;
+    bool                  m_mirror = false;
+    qint64                m_stableSize = -1;
 
     QFileSystemWatcher *m_watcher;
     QTimer             *m_debounceTimer;

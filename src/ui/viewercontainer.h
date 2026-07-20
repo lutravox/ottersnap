@@ -2,8 +2,8 @@
 
 #include <QWidget>
 
+#include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
-#include "ui/thumbnailstrip.h"
 #include "ui/vkimageviewer.h"
 
 /**
@@ -17,9 +17,9 @@ class ViewerContainer : public QWidget {
     /// @param parent Optional parent widget.
     explicit ViewerContainer(QWidget *parent = nullptr);
 
-    /// @brief Returns the thumbnail strip for version history.
-    ThumbnailStrip *thumbnailStrip() {
-        return m_thumbnailStrip;
+    /// @brief Returns the snapshot timeline for version history.
+    SnapshotTimeline *snapshotTimeline() {
+        return m_snapshotTimeline;
     }
 
     /// @brief Returns the image viewer widget.
@@ -33,7 +33,7 @@ class ViewerContainer : public QWidget {
     }
 
   private:
-    ThumbnailStrip *m_thumbnailStrip = nullptr;
-    ImageViewer    *m_viewer = nullptr;
-    StatusBar      *m_statusBar = nullptr;
+    SnapshotTimeline *m_snapshotTimeline = nullptr;
+    ImageViewer      *m_viewer = nullptr;
+    StatusBar        *m_statusBar = nullptr;
 };

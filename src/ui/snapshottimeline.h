@@ -4,23 +4,23 @@
 #include <QVector>
 #include <QWidget>
 
-#include "thumbnailbutton.h"
+#include "snapshottab.h"
 
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QTimer>
 #include <QWheelEvent>
 
-/// @brief Horizontal scrollable strip of image thumbnails.
-class ThumbnailStrip : public QWidget {
+/// @brief Horizontal scrollable strip of snapshot tabs.
+class SnapshotTimeline : public QWidget {
     Q_OBJECT
 
   public:
-    /// @brief Construct the thumbnail strip.
+    /// @brief Construct the snapshot timeline.
     /// @param parent Optional parent widget.
-    explicit ThumbnailStrip(QWidget *parent = nullptr);
+    explicit SnapshotTimeline(QWidget *parent = nullptr);
 
-    /// @brief Update the full list of thumbnails.
+    /// @brief Update the full list of snapshot thumbnails.
     /// @param thumbnails Pre-scaled thumbnail pixmaps.
     /// @param labels     Human-readable labels for each thumbnail. Must match
     ///                   thumbnails in size (or be empty).
@@ -37,9 +37,9 @@ class ThumbnailStrip : public QWidget {
     void wheelEvent(QWheelEvent *event) override;
 
   signals:
-    /// @brief Emitted when a thumbnail is selected (by click or wheel).
-    /// @param index Zero-based index of the selected thumbnail.
-    void thumbnailSelected(int index);
+    /// @brief Emitted when a snapshot is selected (by click or wheel).
+    /// @param index Zero-based index of the selected snapshot.
+    void snapshotSelected(int index);
 
   private:
     void buildStrip(const QVector<QPixmap>& thumbnails);
@@ -50,9 +50,9 @@ class ThumbnailStrip : public QWidget {
     int              m_currentIndex = -1;
     QVector<QString> m_labels;
 
-    QScrollArea               *m_scrollArea = nullptr;
-    QWidget                   *m_contentWidget = nullptr;
-    QHBoxLayout               *m_contentLayout = nullptr;
-    QVector<ThumbnailButton *> m_thumbnailWidgets;
-    QTimer                     m_scrollTimer;
+    QScrollArea           *m_scrollArea = nullptr;
+    QWidget               *m_contentWidget = nullptr;
+    QHBoxLayout           *m_contentLayout = nullptr;
+    QVector<SnapshotTab *> m_snapshottabs;
+    QTimer                 m_scrollTimer;
 };

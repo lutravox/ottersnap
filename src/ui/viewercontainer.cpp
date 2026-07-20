@@ -2,19 +2,19 @@
 
 #include <QVBoxLayout>
 
+#include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
-#include "ui/thumbnailstrip.h"
 #include "ui/vkimageviewer.h"
 
 ViewerContainer::ViewerContainer(QWidget *parent) : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    m_thumbnailStrip = new ThumbnailStrip(this);
+    m_snapshotTimeline = new SnapshotTimeline(this);
     m_viewer = new ImageViewer(this);
     m_statusBar = new StatusBar(this);
 
-    layout->addWidget(m_thumbnailStrip, 0);
+    layout->addWidget(m_snapshotTimeline, 0);
     layout->addWidget(m_viewer, 1);
     layout->addWidget(m_statusBar, 0);
 

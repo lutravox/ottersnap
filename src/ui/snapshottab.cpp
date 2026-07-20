@@ -1,4 +1,4 @@
-#include "thumbnailbutton.h"
+#include "snapshottab.h"
 
 #include <QFile>
 #include <QIODevice>
@@ -7,19 +7,19 @@
 #include <QStyleOption>
 #include <QStylePainter>
 
-ThumbnailButton::ThumbnailButton(QWidget *parent) : QLabel(parent), m_selected(false) {
+SnapshotTab::SnapshotTab(QWidget *parent) : QLabel(parent), m_selected(false) {
     setAttribute(Qt::WA_Hover);
     setProperty("state", "unselected");
-    QFile qss(":/qss/thumbnailbutton.qss");
+    QFile qss(":/qss/snapshottab.qss");
     if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
         setStyleSheet(QString::fromUtf8(qss.readAll()));
 }
 
-bool ThumbnailButton::isSelected() const {
+bool SnapshotTab::isSelected() const {
     return m_selected;
 }
 
-void ThumbnailButton::setSelected(bool selected) {
+void SnapshotTab::setSelected(bool selected) {
     if (m_selected != selected) {
         m_selected = selected;
         setProperty("state", selected ? "selected" : "unselected");
@@ -28,6 +28,6 @@ void ThumbnailButton::setSelected(bool selected) {
     }
 }
 
-void ThumbnailButton::mousePressEvent(QMouseEvent *event) {
+void SnapshotTab::mousePressEvent(QMouseEvent *event) {
     emit clicked();
 }

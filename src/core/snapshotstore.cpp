@@ -280,6 +280,7 @@ std::optional<QImage> SnapshotStore::loadSnapshotImage(const QString& filePath, 
 
     // Check the LRU cache
     if (QImage *cached = ImageCache::get(cacheKey)) {
+        qDebug() << "[SnapshotStore] Loaded snapshot" << snapshotIndex << "from cache";
         return *cached;
     }
 

@@ -98,8 +98,8 @@ add_executable(${PROJECT_NAME}
     src/ui/vkimageviewer.cpp
     src/ui/effectscontroller.cpp
     src/ui/notificationbar.cpp
-    src/ui/thumbnailstrip.cpp
-    src/ui/thumbnailbutton.cpp
+    src/ui/snapshottimeline.cpp
+    src/ui/snapshottab.cpp
     src/ui/tabbar.cpp
     src/ui/mainmenu.cpp
     src/ui/statusbar.cpp

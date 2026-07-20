@@ -41,7 +41,7 @@ class MainWindow : public QMainWindow {
     void onCloseTab(int index);
     void onSettings();
     void onTabChanged(int index);
-    void onThumbnailSelected(int index);
+    void onSnapshotSelected(int index);
 
   private:
     void      setupUi();
@@ -52,7 +52,7 @@ class MainWindow : public QMainWindow {
     void      updateTabThumbnail(int index);
     void      setTabThumbnail(int index);
     void      notify(const QString& msg, int timeoutMs = -1);
-    void      updateThumbnailStrip();
+    void      updateSnapshotTimeline();
 
     /// @brief Update the viewer when the active tab changes.
     void updateViewer();

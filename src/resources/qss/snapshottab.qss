@@ -1,13 +1,13 @@
-ThumbnailButton {
+SnapshotTab {
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
 }
 
-ThumbnailButton[state="unselected"]:hover {
+SnapshotTab[state="unselected"]:hover {
     background-color: palette(Midlight);
 }
 
-ThumbnailButton[state="selected"] {
+SnapshotTab[state="selected"] {
     background-color: palette(Light);
 }

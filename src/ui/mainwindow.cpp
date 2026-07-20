@@ -18,8 +18,8 @@
 #include "ui/imagetab.h"
 #include "ui/mainmenu.h"
 #include "ui/notificationbar.h"
+#include "ui/snapshottimeline.h"
 #include "ui/tabbar.h"
-#include "ui/thumbnailstrip.h"
 #include "ui/viewercontainer.h"
 #include "ui/vkimageviewer.h"
 
@@ -61,10 +61,10 @@ void MainWindow::setupUi() {
 
     // Viewer container: thumbnail strip + viewer + nav bar
     m_viewerContainer = new ViewerContainer(m_contentStack);
-    connect(m_viewerContainer->thumbnailStrip(),
-            &ThumbnailStrip::thumbnailSelected,
+    connect(m_viewerContainer->snapshotTimeline(),
+            &SnapshotTimeline::snapshotSelected,
             this,
-            &MainWindow::onThumbnailSelected);
+            &MainWindow::onSnapshotSelected);
 
     m_effectsController->setup(m_viewerContainer->viewer(), m_actionGrayscale, m_actionMirror);
 
@@ -186,7 +186,7 @@ void MainWindow::openImageFile(const QString& path) {
     });
     connect(tab, &ImageTab::snapshotsChanged, this, [this, tab]() {
         if (m_tabBar->currentWidget() == tab) {
-            updateThumbnailStrip();
+            updateSnapshotTimeline();
         }
     });
 
@@ -197,7 +197,7 @@ void MainWindow::openImageFile(const QString& path) {
     m_tabPaths.insert(path, tab);
 
     m_tabBar->setCurrentWidget(tab);
-    updateThumbnailStrip();
+    updateSnapshotTimeline();
     updateViewer();
 }
 
@@ -216,7 +216,7 @@ void MainWindow::onCloseTab(int index) {
 
     m_tabBar->removeTab(index);
 
-    updateThumbnailStrip();
+    updateSnapshotTimeline();
     updateViewer();
     updateState();
 }
@@ -235,7 +235,7 @@ void MainWindow::onTabChanged(int index) {
         return;
     }
 
-    updateThumbnailStrip();
+    updateSnapshotTimeline();
     updateViewer();
     updateState();
     setTabThumbnail(index);
@@ -326,24 +326,24 @@ void MainWindow::updateState() {
     switchContentState(ContentState::Viewer);
 }
 
-void MainWindow::onThumbnailSelected(int index) {
+void MainWindow::onSnapshotSelected(int index) {
     auto *tab = currentTab();
     if (!tab)
         return;
     tab->selectSnapshot(index);
-    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerContainer->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
     updateViewer();
 }
 
-void MainWindow::updateThumbnailStrip() {
+void MainWindow::updateSnapshotTimeline() {
     auto *tab = currentTab();
     if (!tab) {
         return;
     }
 
     auto [thumbs, labels] = tab->snapshotThumbnails(48);
-    m_viewerContainer->thumbnailStrip()->setThumbnails(thumbs, labels);
-    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerContainer->snapshotTimeline()->setThumbnails(thumbs, labels);
+    m_viewerContainer->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
 }
 
 void MainWindow::switchContentState(ContentState state) {

@@ -3,11 +3,11 @@
 #include <QLabel>
 #include <QMouseEvent>
 
-class ThumbnailButton : public QLabel {
+class SnapshotTab : public QLabel {
     Q_OBJECT
 
   public:
-    explicit ThumbnailButton(QWidget *parent = nullptr);
+    explicit SnapshotTab(QWidget *parent = nullptr);
 
     bool isSelected() const;
     void setSelected(bool selected);

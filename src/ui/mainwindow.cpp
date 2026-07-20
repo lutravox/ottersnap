@@ -14,6 +14,7 @@
 
 #include "config/appsettings.h"
 #include "ui/dialogs/settingsdialog.h"
+#include "ui/effectscontroller.h"
 #include "ui/imagetab.h"
 #include "ui/mainmenu.h"
 #include "ui/notificationbar.h"
@@ -28,6 +29,7 @@ static const int c_defaultHeight = 700;
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerContainer(nullptr),
       m_mainMenu(nullptr) {
+    m_effectsController = new EffectsController(this);
     setupMenu();
     setupUi();
     m_session.load();
@@ -63,6 +65,8 @@ void MainWindow::setupUi() {
             &ThumbnailStrip::thumbnailSelected,
             this,
             &MainWindow::onThumbnailSelected);
+
+    m_effectsController->setup(m_viewerContainer->viewer(), m_actionGrayscale, m_actionMirror);
 
     // Main menu
     m_mainMenu = new MainMenu(m_contentStack);
@@ -128,17 +132,21 @@ void MainWindow::setupMenu() {
     });
 
     // Modifiers menu
-    auto *modMenu = menuBar()->addMenu("&Modifiers");
+    auto *modMenu = menuBar()->addMenu("&Effects");
 
     m_actionGrayscale = modMenu->addAction("&Grayscale");
     m_actionGrayscale->setCheckable(true);
     m_actionGrayscale->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
-    connect(m_actionGrayscale, &QAction::triggered, this, &MainWindow::onToggleGrayscale);
+    connect(m_actionGrayscale, &QAction::triggered, this, [this]() {
+        m_effectsController->toggleGrayscale();
+    });
 
     m_actionMirror = modMenu->addAction("&Mirror");
     m_actionMirror->setCheckable(true);
     m_actionMirror->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
-    connect(m_actionMirror, &QAction::triggered, this, &MainWindow::onToggleMirror);
+    connect(m_actionMirror, &QAction::triggered, this, [this]() {
+        m_effectsController->toggleMirror();
+    });
 }
 
 void MainWindow::onFileOpen() {
@@ -158,14 +166,6 @@ void MainWindow::openImageFile(const QString& path) {
 
     auto *tab = new ImageTab(this);
     connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg) { notify(msg); });
-    connect(tab, &ImageTab::modifiersChanged, this, [this, tab](bool g, bool m) {
-        if (m_tabBar->currentWidget() == tab) {
-            m_actionGrayscale->setChecked(g);
-            m_actionMirror->setChecked(m);
-            m_viewerContainer->viewer()->setGrayscale(g);
-            m_viewerContainer->viewer()->setMirror(m);
-        }
-    });
     connect(tab, &ImageTab::versionChanged, this, [this, tab](int /*index*/) {
         if (m_tabBar->currentWidget() == tab) {
             updateViewer();
@@ -203,21 +203,12 @@ void MainWindow::onCloseTab(int index) {
     updateState();
 }
 
-void MainWindow::onToggleGrayscale() {
-    applyModifiers();
-}
-
-void MainWindow::onToggleMirror() {
-    applyModifiers();
-}
-
 void MainWindow::applyModifiers() {
     auto *tab = currentTab();
     if (!tab)
         return;
 
-    tab->setGrayscale(m_actionGrayscale->isChecked());
-    tab->setMirror(m_actionMirror->isChecked());
+    m_effectsController->setTargetTab(tab);
 }
 
 void MainWindow::onTabChanged(int index) {
@@ -296,8 +287,7 @@ void MainWindow::updateViewer() {
         // Restore state for the new tab
         m_viewerContainer->viewer()->setViewState(tab->viewState());
         m_viewerContainer->viewer()->setImage(image, true);
-        m_viewerContainer->viewer()->setGrayscale(tab->grayscaleEnabled());
-        m_viewerContainer->viewer()->setMirror(tab->mirrorEnabled());
+        m_effectsController->setTargetTab(tab);
     }
 
     m_viewerContainer->statusBar()->setZoom(m_viewerContainer->viewer()->ZoomPercentage());
@@ -306,20 +296,12 @@ void MainWindow::updateViewer() {
 
 void MainWindow::updateState() {
     if (m_tabBar->count() == 0) {
-        m_actionGrayscale->setChecked(false);
-        m_actionMirror->setChecked(false);
+        m_effectsController->setTargetTab(nullptr);
         switchContentState(ContentState::Empty);
         return;
     }
 
     switchContentState(ContentState::Viewer);
-
-    auto *tab = currentTab();
-    if (!tab)
-        return;
-
-    m_actionGrayscale->setChecked(tab->grayscaleEnabled());
-    m_actionMirror->setChecked(tab->mirrorEnabled());
 }
 
 void MainWindow::onThumbnailSelected(int index) {

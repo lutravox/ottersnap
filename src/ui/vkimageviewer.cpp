@@ -2,7 +2,10 @@
 #include "config/appsettings.h"
 #include "core/viewstate.h"
 
+#include <QAction>
 #include <QDebug>
+#include <QGuiApplication>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QVBoxLayout>
@@ -59,6 +62,12 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     void setMirror(bool enabled) {
         m_mirror = enabled;
         m_uboDirty = true;
+    }
+    bool grayscaleEnabled() const {
+        return m_grayscale;
+    }
+    bool mirrorEnabled() const {
+        return m_mirror;
     }
     float zoom() const {
         return m_zoom;
@@ -1148,6 +1157,28 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
             m_lastMousePos = me->position().toPoint();
             setFocus();
             return true;
+        } else if (me->button() == Qt::RightButton) {
+            QMenu menu(this);
+
+            auto *grayscaleAction = menu.addAction("Grayscale");
+            grayscaleAction->setCheckable(true);
+            grayscaleAction->setChecked(m_renderer->grayscaleEnabled());
+
+            auto *mirrorAction = menu.addAction("Mirror");
+            mirrorAction->setCheckable(true);
+            mirrorAction->setChecked(m_renderer->mirrorEnabled());
+
+            QAction *selectedAction = menu.exec(me->globalPosition().toPoint());
+
+            if (selectedAction == grayscaleAction) {
+                bool enabled = grayscaleAction->isChecked();
+                emit grayscaleToggled(enabled);
+                return true;
+            } else if (selectedAction == mirrorAction) {
+                bool enabled = mirrorAction->isChecked();
+                emit mirrorToggled(enabled);
+                return true;
+            }
         }
     }
 

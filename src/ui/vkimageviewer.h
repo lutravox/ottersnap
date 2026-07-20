@@ -69,6 +69,12 @@ class VkImageViewer : public QWidget {
     /// @param percentage The new zoom percentage (100.0 = 1:1).
     void zoomChanged(double percentage);
 
+    /// @brief Emitted when grayscale mode is toggled.
+    void grayscaleToggled(bool enabled);
+
+    /// @brief Emitted when mirroring mode is toggled.
+    void mirrorToggled(bool enabled);
+
   protected:
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;

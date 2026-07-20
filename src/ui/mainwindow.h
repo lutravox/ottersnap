@@ -5,6 +5,7 @@
 #include <QStackedWidget>
 #include <QStringList>
 #include "core/sessionmanager.h"
+#include "ui/effectscontroller.h"
 #include "ui/mainmenu.h"
 #include "ui/tabbar.h"
 #include "ui/viewercontainer.h"
@@ -37,8 +38,6 @@ class MainWindow : public QMainWindow {
   private slots:
     void onFileOpen();
     void onCloseTab(int index);
-    void onToggleGrayscale();
-    void onToggleMirror();
     void onSettings();
     void onTabChanged(int index);
     void onThumbnailSelected(int index);
@@ -63,12 +62,13 @@ class MainWindow : public QMainWindow {
     enum class ContentState { Empty, Viewer };
     void switchContentState(ContentState state);
 
-    TabBar          *m_tabBar;
-    QStackedWidget  *m_contentStack;
-    NotificationBar *m_notification;
-    ViewerContainer *m_viewerContainer;
-    MainMenu        *m_mainMenu;
-    SessionManager   m_session;
+    TabBar            *m_tabBar;
+    QStackedWidget    *m_contentStack;
+    NotificationBar   *m_notification;
+    ViewerContainer   *m_viewerContainer;
+    MainMenu          *m_mainMenu;
+    SessionManager     m_session;
+    EffectsController *m_effectsController;
 
     QAction *m_actionOpen;
     QAction *m_actionCloseTab;

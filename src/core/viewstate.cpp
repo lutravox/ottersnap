@@ -6,13 +6,18 @@
 
 ViewState::ViewState() = default;
 
-void ViewState::setImageSize(int width, int height) {
+void ViewState::resetState(int width, int height) {
     m_imageWidth = width;
     m_imageHeight = height;
     m_zoom = 1.0f;
     m_fitScale = 0.0f;
     m_zoomRatio = 1.0f;
     m_pan = QPointF(0, 0);
+}
+
+void ViewState::updateImageSize(int width, int height) {
+    m_imageWidth = width;
+    m_imageHeight = height;
 }
 
 void ViewState::setViewportSize(int viewWidth, int viewHeight) {

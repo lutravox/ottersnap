@@ -286,9 +286,16 @@ void MainWindow::updateViewer() {
     if (!tab)
         return;
 
+    // Save state of the current tab
+    if (m_currentTabInView) {
+        m_currentTabInView->setViewState(m_viewerContainer->viewer()->getViewState());
+    }
+
     const auto& image = tab->currentImage();
     if (!image.isNull()) {
-        m_viewerContainer->viewer()->setImage(image, false);
+        // Restore state for the new tab
+        m_viewerContainer->viewer()->setViewState(tab->viewState());
+        m_viewerContainer->viewer()->setImage(image, true);
         m_viewerContainer->viewer()->setGrayscale(tab->grayscaleEnabled());
         m_viewerContainer->viewer()->setMirror(tab->mirrorEnabled());
     }

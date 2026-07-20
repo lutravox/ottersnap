@@ -16,7 +16,12 @@ class ViewState {
     /// @brief Set the image dimensions and reset zoom/pan to defaults.
     /// @param width Image width in pixels.
     /// @param height Image height in pixels.
-    void setImageSize(int width, int height);
+    void resetState(int width, int height);
+
+    /// @brief Update the image dimensions.
+    /// @param width Image width in pixels.
+    /// @param height Image height in pixels.
+    void updateImageSize(int width, int height);
 
     /// @brief Update the viewport size and recompute fit scale.
     /// Keeps zoomRatio constant across resizes.

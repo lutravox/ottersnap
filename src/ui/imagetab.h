@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "core/versionstore.h"
+#include "core/viewstate.h"
 
 /// @brief A single image tab. Manages image loading, version history,
 /// image modifiers, and file-system watching.
@@ -67,6 +68,16 @@ class ImageTab : public QWidget {
     /// @brief Select a version by index.
     void selectVersion(int index);
 
+    /// @brief Returns the current view state.
+    const ViewState& viewState() const {
+        return m_viewState;
+    }
+
+    /// @brief Sets the current view state.
+    void setViewState(const ViewState& state) {
+        m_viewState = state;
+    }
+
     /// @brief Generate and return version thumbnails.
     /// @param size Desired thumbnail size in pixels (square).
     /// @return Pair of thumbnail pixmaps and their labels.
@@ -105,6 +116,8 @@ class ImageTab : public QWidget {
     bool                  m_grayscale = false;
     bool                  m_mirror = false;
     qint64                m_stableSize = -1;
+
+    ViewState m_viewState;
 
     QFileSystemWatcher *m_watcher;
     QTimer             *m_debounceTimer;

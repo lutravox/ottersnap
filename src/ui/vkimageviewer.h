@@ -50,6 +50,17 @@ class VkImageViewer : public QWidget {
     /// @brief Clear the current image from the viewer.
     void clear();
 
+    /// @brief Get the current view state.
+    ViewState getViewState() const {
+        return m_viewState;
+    }
+
+    /// @brief Set the view state.
+    /// @param state The new view state.
+    void setViewState(const ViewState& state) {
+        m_viewState = state;
+    }
+
   signals:
     /// @brief Emitted when the user clicks the image.
     void imageClicked();

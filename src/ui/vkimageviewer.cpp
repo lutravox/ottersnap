@@ -1217,7 +1217,9 @@ void VkImageViewer::setImage(const QImage& image, bool preserveView) {
         return;
 
     if (!preserveView) {
-        m_viewState.setImageSize(image.width(), image.height());
+        m_viewState.resetState(image.width(), image.height());
+    } else {
+        m_viewState.updateImageSize(image.width(), image.height());
     }
 
     emit zoomChanged(m_viewState.percentage());

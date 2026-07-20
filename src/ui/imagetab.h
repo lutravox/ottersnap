@@ -13,6 +13,7 @@
 
 #include "core/imagesession.h"
 #include "core/viewstate.h"
+#include "ui/effectsstate.h"
 
 /// @brief A single image tab. Manages image loading, version history,
 /// image modifiers, and file-system watching.
@@ -57,12 +58,12 @@ class ImageTab : public QWidget {
 
     /// @brief Returns whether grayscale is enabled.
     bool grayscaleEnabled() const {
-        return m_grayscale;
+        return m_effects.grayscale;
     }
 
     /// @brief Returns whether mirroring is enabled.
     bool mirrorEnabled() const {
-        return m_mirror;
+        return m_effects.mirror;
     }
 
     /// @brief Returns the currently selected image.
@@ -113,9 +114,8 @@ class ImageTab : public QWidget {
   private:
     void setupUi();
 
-    bool      m_grayscale = false;
-    bool      m_mirror = false;
-    ViewState m_viewState;
+    EffectsState m_effects;
+    ViewState    m_viewState;
 
     ImageSession *m_session = nullptr;
 };

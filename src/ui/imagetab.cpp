@@ -12,8 +12,7 @@
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
-ImageTab::ImageTab(QWidget *parent)
-    : QWidget(parent), m_grayscale(false), m_mirror(false), m_session(new ImageSession(this)) {
+ImageTab::ImageTab(QWidget *parent) : QWidget(parent), m_session(new ImageSession(this)) {
     connect(m_session, &ImageSession::imageChanged, this, &ImageTab::onImageChanged);
     connect(m_session, &ImageSession::snapshotsChanged, this, &ImageTab::onSnapshotsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
@@ -44,17 +43,17 @@ const QImage& ImageTab::currentImage() const {
 }
 
 void ImageTab::setGrayscale(bool enabled) {
-    if (m_grayscale == enabled)
+    if (m_effects.grayscale == enabled)
         return;
-    m_grayscale = enabled;
-    emit effectsChanged(m_grayscale, m_mirror);
+    m_effects.grayscale = enabled;
+    emit effectsChanged(m_effects.grayscale, m_effects.mirror);
 }
 
 void ImageTab::setMirror(bool enabled) {
-    if (m_mirror == enabled)
+    if (m_effects.mirror == enabled)
         return;
-    m_mirror = enabled;
-    emit effectsChanged(m_grayscale, m_mirror);
+    m_effects.mirror = enabled;
+    emit effectsChanged(m_effects.grayscale, m_effects.mirror);
 }
 
 void ImageTab::selectSnapshot(int index) {

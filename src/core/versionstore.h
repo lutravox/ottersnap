@@ -12,6 +12,7 @@ struct ImageVersion {
     QString   fileName;
     QDateTime timestamp;
     QString   checksum;
+    bool      isBase = true;
 };
 
 /// @brief Persists image versions on disk, keyed by a hash of the source file path.
@@ -54,10 +55,4 @@ class VersionStore {
   private:
     /// @brief In-memory cache of all version records, keyed by image key (hash of filePath).
     static QHash<QString, QVector<ImageVersion>> s_versionsCache;
-    static QString                               versionDirPath(const QString& key);
-    static QString                               indexPath(const QString& versionDir);
-    static QJsonObject                           toJsonObject(const ImageVersion& v);
-    static ImageVersion                          fromJsonObject(const QJsonObject& obj);
-    static bool saveImageFile(const QString& targetPath, const QImage& image);
-    static bool saveFile(const QString& targetPath, const QByteArray& data);
 };

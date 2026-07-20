@@ -32,7 +32,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     auto *cacheLabel = new QLabel(tr("Version cache size (MB):"), this);
     m_sbCacheSize = new QSpinBox(this);
     m_sbCacheSize->setRange(64, 8192);
-    m_sbCacheSize->setValue(AppSettings::maxVersionCacheSizeMB());
+    m_sbCacheSize->setValue(AppSettings::maxSnapshotCacheSizeMB());
     cacheLayout->addWidget(cacheLabel);
     cacheLayout->addWidget(m_sbCacheSize);
     layout->addLayout(cacheLayout);
@@ -47,7 +47,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
         AppSettings::setResizeToFit(m_cbResizeToFit->isChecked());
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
         AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
-        AppSettings::setMaxVersionCacheSizeMB(m_sbCacheSize->value());
+        AppSettings::setMaxSnapshotCacheSizeMB(m_sbCacheSize->value());
         accept();
     });
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

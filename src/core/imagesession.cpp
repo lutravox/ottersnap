@@ -49,8 +49,8 @@ const QImage& ImageSession::currentImage() {
     if (m_loadedSnapshotIndex == m_currentIndex)
         return m_cachedImage;
 
-    const ImageVersion& v = m_snapshots[m_currentIndex];
-    auto                optImg = VersionStore::loadVersionImage(m_filePath, v.version);
+    const ImageSnapshot& v = m_snapshots[m_currentIndex];
+    auto                 optImg = SnapshotStore::loadSnapshotImage(m_filePath, v.snapshotIndex);
     if (optImg) {
         m_cachedImage = std::move(*optImg);
         m_loadedSnapshotIndex = m_currentIndex;
@@ -74,21 +74,20 @@ void ImageSession::saveSnapshot() {
     QString path = m_filePath;
     QImage  img = m_diskImage;
 
-    auto watcher = new QFutureWatcher<std::optional<VersionStore::SaveResult>>(this);
+    auto watcher = new QFutureWatcher<std::optional<SnapshotStore::SaveResult>>(this);
     connect(watcher,
-            &QFutureWatcher<std::optional<VersionStore::SaveResult>>::finished,
+            &QFutureWatcher<std::optional<SnapshotStore::SaveResult>>::finished,
             [this, watcher]() {
                 auto res = watcher->result();
-                if (res && res->status == VersionStore::SaveStatus::Created) {
-                    emit statusMessage("Snapshot saved.");
+                if (res && res->status == SnapshotStore::SaveStatus::Created) {
                     rebuildSnapshotList();
                 } else {
-                    emit statusMessage(res ? "Version already exists." : "Save failed.");
+                    emit statusMessage(res ? "Snapshot already exists." : "Save failed.");
                 }
                 watcher->deleteLater();
             });
     watcher->setFuture(
-        QtConcurrent::run([path, img]() { return VersionStore::saveVersion(path, img); }));
+        QtConcurrent::run([path, img]() { return SnapshotStore::saveSnapshot(path, img); }));
 }
 
 void ImageSession::onFileChanged() {
@@ -111,19 +110,18 @@ void ImageSession::reloadImage() {
 }
 
 bool ImageSession::autosaveSnapshot(const QImage& img) {
-    auto res = VersionStore::saveVersion(m_filePath, img);
-    if (res && res->status == VersionStore::SaveStatus::Created) {
-        emit statusMessage("Snapshot autosaved.");
+    auto res = SnapshotStore::saveSnapshot(m_filePath, img);
+    if (res && res->status == SnapshotStore::SaveStatus::Created) {
         return true;
     }
     return false;
 }
 
 void ImageSession::rebuildSnapshotList() {
-    m_snapshots = VersionStore::loadVersions(m_filePath);
+    m_snapshots = SnapshotStore::loadSnapshots(m_filePath);
     m_labels.clear();
     for (const auto& v : m_snapshots) {
-        m_labels.append(QString("v%1 — %2").arg(v.version).arg(v.timestamp.toString()));
+        m_labels.append(QString("s%1 — %2").arg(v.snapshotIndex).arg(v.timestamp.toString()));
     }
     m_labels.append("Current");
     emit snapshotsChanged();
@@ -135,8 +133,8 @@ std::pair<QVector<QImage>, QVector<QString>> ImageSession::snapshotThumbnails(in
 
     for (const auto& v : m_snapshots) {
         QImage thumbImg = ImageCache::loadThumbnail(
-            VersionStore::imageKey(m_filePath), v.version, QSize(size, size), [this, &v]() {
-                auto optFull = VersionStore::loadVersionImage(m_filePath, v.version);
+            SnapshotStore::imageKey(m_filePath), v.snapshotIndex, QSize(size, size), [this, &v]() {
+                auto optFull = SnapshotStore::loadSnapshotImage(m_filePath, v.snapshotIndex);
                 return optFull.value_or(QImage());
             });
 

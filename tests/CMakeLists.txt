@@ -12,12 +12,12 @@ endfunction()
 # ── ViewState ────────────────────────────────────────────────────────
 add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 
-# ── VersionStore ─────────────────────────────────────────────────────
-    add_unit_test(versionstore  core/versionstore.cpp  Qt6::Core Qt6::Gui)
-    target_sources(test_versionstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp)
+# ── SnapshotStore ─────────────────────────────────────────────────────
+add_unit_test(snapshotstore  core/snapshotstore.cpp  Qt6::Core Qt6::Gui)
+target_sources(test_snapshotstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp)
 
 # ── AppSettings ──────────────────────────────────────────────────────
 add_unit_test(appsettings   config/appsettings.cpp Qt6::Core)
 
 # ── DiskUtils ──────────────────────────────────────────────────────
-    add_unit_test(diskutils   core/diskutils.cpp Qt6::Core Qt6::Gui)
+add_unit_test(diskutils   core/diskutils.cpp Qt6::Core Qt6::Gui)

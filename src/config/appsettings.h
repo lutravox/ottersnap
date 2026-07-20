@@ -35,12 +35,12 @@ class AppSettings {
     /// @brief Set the autosave snapshots preference.
     static void setAutosaveSnapshots(bool value);
 
-    /// @brief Return the maximum memory allowed for the version cache in MB.
+    /// @brief Return the maximum memory allowed for the snapshot cache in MB.
     /// @return The cache size in MB.
-    static int maxVersionCacheSizeMB();
-    /// @brief Set the maximum memory allowed for the version cache.
+    static int maxSnapshotCacheSizeMB();
+    /// @brief Set the maximum memory allowed for the snapshot cache.
     /// @param value The size in MB.
-    static void setMaxVersionCacheSizeMB(int value);
+    static void setMaxSnapshotCacheSizeMB(int value);
 
   private:
     AppSettings() = delete;

@@ -8,26 +8,26 @@
 #include <QString>
 #include <QVector>
 
-/// @brief Metadata for a single saved image version.
-struct ImageVersion {
-    int       version = 0;
+/// @brief Metadata for a single saved image snapshot.
+struct ImageSnapshot {
+    int       snapshotIndex = 0;
     QString   fileName;
     QDateTime timestamp;
     QString   checksum;
     bool      isBase = true;
 };
 
-/// @brief Persists image versions on disk, keyed by a hash of the source file path.
-class VersionStore {
+/// @brief Persists image snapshots on disk, keyed by a hash of the source file path.
+class SnapshotStore {
   public:
     enum class SaveStatus { Created, Existing };
 
     struct SaveResult {
         SaveStatus status;
-        int        version;
+        int        snapshotIndex;
     };
 
-    /// @brief Return the base directory for all versioned images.
+    /// @brief Return the base directory for all snapshotted images.
     static QString baseDir();
 
     /// @brief Return the cache directory for thumbnails.
@@ -44,26 +44,26 @@ class VersionStore {
     /// @param image The image to hash.
     static QString computeChecksum(const QImage& image);
 
-    /// @brief Load all version records for an image file.
+    /// @brief Load all snapshot records for an image file.
     /// @param filePath Absolute path of the source image.
-    static QVector<ImageVersion> loadVersions(const QString& filePath);
+    static QVector<ImageSnapshot> loadSnapshots(const QString& filePath);
 
-    /// @brief Save a new version of an image, skipping duplicates.
+    /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
     /// @param image The image data to save.
-    /// @return The result containing status and version number, or std::nullopt on failure.
-    static std::optional<SaveResult> saveVersion(const QString& filePath, const QImage& image);
+    /// @return The result containing status and snapshot index, or std::nullopt on failure.
+    static std::optional<SaveResult> saveSnapshot(const QString& filePath, const QImage& image);
 
-    /// @brief Load the pixel data for a specific version.
+    /// @brief Load the pixel data for a specific snapshot.
     /// @param filePath Absolute path of the source image.
-    /// @param versionIndex The version number to load.
+    /// @param snapshotIndex The snapshot index to load.
     /// @return The loaded image, or std::nullopt if not found or load failed.
-    static std::optional<QImage> loadVersionImage(const QString& filePath, int versionIndex);
+    static std::optional<QImage> loadSnapshotImage(const QString& filePath, int snapshotIndex);
 
-    /// @brief Delete all stored versions for an image file.
-    static void deleteAllVersions(const QString& filePath);
+    /// @brief Delete all stored snapshots for an image file.
+    static void deleteAllSnapshots(const QString& filePath);
 
   private:
-    /// @brief In-memory cache of all version records, keyed by image key (hash of filePath).
-    static QHash<QString, QVector<ImageVersion>> s_versionsCache;
+    /// @brief In-memory cache of all snapshot records, keyed by image key (hash of filePath).
+    static QHash<QString, QVector<ImageSnapshot>> s_snapshotsCache;
 };

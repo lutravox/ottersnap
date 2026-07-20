@@ -109,7 +109,7 @@ add_executable(${PROJECT_NAME}
     # Core logic
     src/core/diskutils.cpp
     src/core/imagecache.cpp
-    src/core/versionstore.cpp
+    src/core/snapshotstore.cpp
     src/core/viewstate.cpp
     src/core/sessionmanager.cpp
     src/core/imagesession.cpp

@@ -1,6 +1,5 @@
 #include <QApplication>
 #include "config/appsettings.h"
-#include "core/versionstore.h"
 #include "ui/mainwindow.h"
 
 int main(int argc, char *argv[]) {

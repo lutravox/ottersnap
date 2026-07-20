@@ -7,7 +7,7 @@
 #include <QVector>
 
 #include "core/imagemonitor.h"
-#include "core/versionstore.h"
+#include "core/snapshotstore.h"
 
 /// @brief Manages the state and business logic for a single opened image.
 /// This class decouples the image data and versioning logic from the UI.
@@ -29,7 +29,7 @@ class ImageSession : public QObject {
     /// @brief Manually trigger a snapshot of the current image on disk.
     void saveSnapshot();
 
-    /// @brief Retrieve thumbnails for all available versions and the current image.
+    /// @brief Retrieve thumbnails for all available snapshots and the current image.
     std::pair<QVector<QImage>, QVector<QString>> snapshotThumbnails(int size);
 
     // Getters
@@ -39,7 +39,7 @@ class ImageSession : public QObject {
     int currentSnapshotIndex() const {
         return m_currentIndex;
     }
-    const QVector<ImageVersion>& snapshots() const {
+    const QVector<ImageSnapshot>& snapshots() const {
         return m_snapshots;
     }
     const QVector<QString>& labels() const {
@@ -62,13 +62,13 @@ class ImageSession : public QObject {
     void reloadImage();
     bool autosaveSnapshot(const QImage& newImage);
 
-    QString               m_filePath;
-    QImage                m_diskImage;
-    QImage                m_cachedImage;
-    QVector<ImageVersion> m_snapshots;
-    QVector<QString>      m_labels;
-    int                   m_currentIndex = 0;
-    int                   m_loadedSnapshotIndex = -1;
+    QString                m_filePath;
+    QImage                 m_diskImage;
+    QImage                 m_cachedImage;
+    QVector<ImageSnapshot> m_snapshots;
+    QVector<QString>       m_labels;
+    int                    m_currentIndex = 0;
+    int                    m_loadedSnapshotIndex = -1;
 
     ImageMonitor *m_monitor;
 };

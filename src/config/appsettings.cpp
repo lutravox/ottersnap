@@ -29,12 +29,12 @@ QString AppSettings::fileFilter() {
     return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tiff *.webp)");
 }
 
-int AppSettings::maxVersionCacheSizeMB() {
-    return settings().value("General/maxVersionCacheSizeMB", 256).toInt();
+int AppSettings::maxSnapshotCacheSizeMB() {
+    return settings().value("General/maxSnapshotCacheSizeMB", 256).toInt();
 }
 
-void AppSettings::setMaxVersionCacheSizeMB(int value) {
-    settings().setValue("General/maxVersionCacheSizeMB", value);
+void AppSettings::setMaxSnapshotCacheSizeMB(int value) {
+    settings().setValue("General/maxSnapshotCacheSizeMB", value);
 }
 
 bool AppSettings::autosaveSnapshots() {

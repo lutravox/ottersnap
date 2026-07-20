@@ -2,7 +2,7 @@
 #include "config/appsettings.h"
 #include "core/diskutils.h"
 #include "core/imagecache.h"
-#include "core/versionstore.h"
+#include "core/snapshotstore.h"
 
 #include <QDir>
 #include <QFile>

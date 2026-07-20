@@ -1146,6 +1146,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         if (me->button() == Qt::LeftButton) {
             m_isDragging = true;
             m_lastMousePos = me->position().toPoint();
+            setFocus();
             return true;
         }
     }

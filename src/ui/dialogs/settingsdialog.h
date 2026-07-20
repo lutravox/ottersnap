@@ -1,8 +1,11 @@
 #pragma once
 
+#include <QCheckBox>
 #include <QDialog>
+#include <QSpinBox>
 
 class QCheckBox;
+class QSpinBox;
 
 /// @brief Simple settings dialog for application preferences.
 class SettingsDialog : public QDialog {
@@ -14,6 +17,7 @@ class SettingsDialog : public QDialog {
     explicit SettingsDialog(QWidget *parent = nullptr);
 
   private:
-    QCheckBox *m_cbResizeToFit = nullptr;
-    QCheckBox *m_cbRestoreSession = nullptr;
+    QCheckBox *m_cbResizeToFit;
+    QCheckBox *m_cbRestoreSession;
+    QSpinBox  *m_sbCacheSize;
 };

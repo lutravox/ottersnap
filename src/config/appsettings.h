@@ -30,6 +30,13 @@ class AppSettings {
     /// @brief Return the QFileDialog filter string for supported image types.
     static QString fileFilter();
 
+    /// @brief Return the maximum memory allowed for the version cache in MB.
+    /// @return The cache size in MB.
+    static int maxVersionCacheSizeMB();
+    /// @brief Set the maximum memory allowed for the version cache.
+    /// @param value The size in MB.
+    static void setMaxVersionCacheSizeMB(int value);
+
   private:
     AppSettings() = delete;
     ~AppSettings() = delete;

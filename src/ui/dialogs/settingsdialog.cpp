@@ -3,6 +3,9 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
@@ -20,6 +23,16 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbRestoreSession->setChecked(AppSettings::restoreSession());
     layout->addWidget(m_cbRestoreSession);
 
+    // Version cache size
+    auto *cacheLayout = new QHBoxLayout();
+    auto *cacheLabel = new QLabel(tr("Version cache size (MB):"), this);
+    m_sbCacheSize = new QSpinBox(this);
+    m_sbCacheSize->setRange(64, 8192);
+    m_sbCacheSize->setValue(AppSettings::maxVersionCacheSizeMB());
+    cacheLayout->addWidget(cacheLabel);
+    cacheLayout->addWidget(m_sbCacheSize);
+    layout->addLayout(cacheLayout);
+
     layout->addStretch();
 
     // Button box (OK / Cancel)
@@ -29,6 +42,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
         AppSettings::setResizeToFit(m_cbResizeToFit->isChecked());
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
+        AppSettings::setMaxVersionCacheSizeMB(m_sbCacheSize->value());
         accept();
     });
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

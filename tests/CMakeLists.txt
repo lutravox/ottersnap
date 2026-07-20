@@ -13,7 +13,8 @@ endfunction()
 add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 
 # ── VersionStore ─────────────────────────────────────────────────────
-add_unit_test(versionstore  core/versionstore.cpp  Qt6::Core Qt6::Gui)
+    add_unit_test(versionstore  core/versionstore.cpp  Qt6::Core Qt6::Gui)
+    target_sources(test_versionstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp)
 
 # ── AppSettings ──────────────────────────────────────────────────────
 add_unit_test(appsettings   config/appsettings.cpp Qt6::Core)

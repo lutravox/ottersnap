@@ -29,6 +29,14 @@ QString AppSettings::fileFilter() {
     return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tiff *.webp)");
 }
 
+int AppSettings::maxVersionCacheSizeMB() {
+    return settings().value("General/maxVersionCacheSizeMB", 256).toInt();
+}
+
+void AppSettings::setMaxVersionCacheSizeMB(int value) {
+    settings().setValue("General/maxVersionCacheSizeMB", value);
+}
+
 const char *AppSettings::applicationName() {
     return c_applicationName;
 }

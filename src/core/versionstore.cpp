@@ -1,4 +1,5 @@
 #include "core/versionstore.h"
+#include "config/appsettings.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -14,6 +15,7 @@
 #include <functional>
 
 QHash<QString, QVector<ImageVersion>> VersionStore::s_versionsCache;
+QCache<QString, QImage>               VersionStore::s_imageCache;
 
 static const QString c_baseSubDir = QLatin1String("versions");
 static const QString c_indexFile = QLatin1String("index.json");
@@ -286,12 +288,20 @@ std::optional<int> VersionStore::saveVersion(const QString& filePath, const QIma
     qDebug() << "[VersionStore] saved version" << v.version << (v.isBase ? " (base)" : " (delta)")
              << "for" << filePath;
     s_versionsCache[key] = versions;
+
     return v.version;
 }
 
 std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, int versionIndex) {
+    QString key = imageKey(filePath);
+    QString cacheKey = key + ":" + QString::number(versionIndex);
+
+    // Check the LRU cache
+    if (s_imageCache.contains(cacheKey)) {
+        return *s_imageCache.object(cacheKey);
+    }
+
     QVector<ImageVersion> versions = loadVersions(filePath);
-    QString               key = imageKey(filePath);
 
     // Find the target version
     int targetIdx = -1;
@@ -344,9 +354,23 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
         f.close();
     }
 
+    // Cache the reconstructed image
+    // Update max cost based on current settings
+    int maxBytes = AppSettings::maxVersionCacheSizeMB() * 1024 * 1024;
+    if (s_imageCache.maxCost() != maxBytes) {
+        s_imageCache.setMaxCost(maxBytes);
+    }
+
+    // We use a copy because QCache takes ownership of the pointer
+    s_imageCache.insert(cacheKey, new QImage(img), img.sizeInBytes());
+
     qDebug() << "[VersionStore] Loaded version" << versionIndex << "reconstructed from base"
-             << versions[baseIdx].version;
+             << versions[baseIdx].version << "and cached";
     return img;
+}
+
+void VersionStore::clearImageCache() {
+    s_imageCache.clear();
 }
 
 void VersionStore::deleteAllVersions(const QString& filePath) {
@@ -361,4 +385,12 @@ void VersionStore::deleteAllVersions(const QString& filePath) {
         }
     }
     s_versionsCache.remove(key);
+
+    // Clear cached images for this file
+    QStringList keys = s_imageCache.keys();
+    for (const QString& cacheKey : keys) {
+        if (cacheKey.startsWith(key + ":")) {
+            s_imageCache.remove(cacheKey);
+        }
+    }
 }

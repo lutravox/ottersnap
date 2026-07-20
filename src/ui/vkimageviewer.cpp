@@ -1164,6 +1164,10 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
 
     if (event->type() == QEvent::MouseMove) {
         auto *me = static_cast<QMouseEvent *>(event);
+        if (!(me->buttons() & Qt::LeftButton)) {
+            m_isDragging = false;
+        }
+
         if (m_isDragging && m_viewState.hasImage()) {
             QPoint delta = me->position().toPoint() - m_lastMousePos;
             m_viewState.applyPanDelta(delta.x(), delta.y());

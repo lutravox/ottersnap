@@ -11,7 +11,7 @@
 #include <QFuture>
 #include <QFutureWatcher>
 
-#include "core/versionstore.h"
+#include "core/imagesession.h"
 #include "core/viewstate.h"
 
 /// @brief A single image tab. Manages image loading, version history,
@@ -35,7 +35,7 @@ class ImageTab : public QWidget {
     /// @brief Absolute path to the opened image file.
     /// @return File path, or empty string if no image is open.
     QString filePath() const {
-        return m_filePath;
+        return m_session ? m_session->filePath() : QString();
     }
 
     /// @brief Generate a thumbnail of the current image.
@@ -43,10 +43,10 @@ class ImageTab : public QWidget {
     /// @return Scaled thumbnail, or null pixmap if no image.
     QPixmap thumbnail(int size = 40) const;
 
-    /// @brief Index of the currently displayed version.
-    /// @return Zero-based version index.
-    int currentVersionIndex() const {
-        return m_currentIndex;
+    /// @brief Index of the currently displayed snapshot.
+    /// @return Zero-based snapshot index.
+    int currentSnapshotIndex() const {
+        return m_session ? m_session->currentSnapshotIndex() : 0;
     }
 
     /// @brief Enable or disable grayscale rendering.
@@ -68,8 +68,8 @@ class ImageTab : public QWidget {
     /// @brief Returns the currently selected image.
     const QImage& currentImage() const;
 
-    /// @brief Select a version by index.
-    void selectVersion(int index);
+    /// @brief Select a snapshot by index.
+    void selectSnapshot(int index);
 
     /// @brief Returns the current view state.
     const ViewState& viewState() const {
@@ -86,7 +86,7 @@ class ImageTab : public QWidget {
 
     /// @param size Desired thumbnail size in pixels (square).
     /// @return Pair of thumbnail pixmaps and their labels.
-    std::pair<QVector<QPixmap>, QVector<QString>> versionThumbnails(int size) const;
+    std::pair<QVector<QPixmap>, QVector<QString>> snapshotThumbnails(int size) const;
 
   signals:
     /// @brief Emitted with a status message to show to the user.
@@ -97,40 +97,25 @@ class ImageTab : public QWidget {
     /// @brief Emitted when the tab's image modifier state changes.
     /// @param grayscale Current grayscale state.
     /// @param mirror    Current mirror state.
-    void modifiersChanged(bool grayscale, bool mirror);
+    void effectsChanged(bool grayscale, bool mirror);
 
-    /// @brief Emitted when the active version changes.
-    /// @param index New version index.
-    void versionChanged(int index);
+    /// @brief Emitted when the active snapshot changes.
+    /// @param index New snapshot index.
+    void snapshotChanged(int index);
 
-    /// @brief Emitted when the list of available versions changes.
-    void versionsChanged();
+    /// @brief Emitted when the list of available snapshots changes.
+    void snapshotsChanged();
 
   private slots:
-    void onFileChanged();
-    void onSaveFinished();
+    void onImageChanged();
+    void onSnapshotsChanged();
 
   private:
     void setupUi();
-    void rebuildImageList();
-    void reloadImage();
-    void tryReload();
-    bool autosaveSnapshot(const QImage& newImage);
 
-    QString               m_filePath;
-    QImage                m_diskImage;
-    QImage                m_cachedImage;
-    QVector<ImageVersion> m_versions;
-    QVector<QString>      m_labels;
-    int                   m_currentIndex = 0;
-    int                   m_loadedVersionIndex = -1;
-    bool                  m_grayscale = false;
-    bool                  m_mirror = false;
-    qint64                m_stableSize = -1;
-
+    bool      m_grayscale = false;
+    bool      m_mirror = false;
     ViewState m_viewState;
 
-    QFileSystemWatcher                                     *m_watcher;
-    QTimer                                                 *m_debounceTimer;
-    QFutureWatcher<std::optional<VersionStore::SaveResult>> m_saveWatcher;
+    ImageSession *m_session = nullptr;
 };

@@ -179,12 +179,12 @@ void MainWindow::openImageFile(const QString& path) {
     connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg, int timeout) {
         notify(msg, timeout);
     });
-    connect(tab, &ImageTab::versionChanged, this, [this, tab](int /*index*/) {
+    connect(tab, &ImageTab::snapshotChanged, this, [this, tab](int /*index*/) {
         if (m_tabBar->currentWidget() == tab) {
             updateViewer();
         }
     });
-    connect(tab, &ImageTab::versionsChanged, this, [this, tab]() {
+    connect(tab, &ImageTab::snapshotsChanged, this, [this, tab]() {
         if (m_tabBar->currentWidget() == tab) {
             updateThumbnailStrip();
         }
@@ -210,8 +210,8 @@ void MainWindow::onCloseTab(int index) {
         m_tabPaths.remove(tab->filePath());
         tab->closeImage();
         disconnect(tab, &ImageTab::statusMessage, this, nullptr);
-        disconnect(tab, &ImageTab::modifiersChanged, this, nullptr);
-        disconnect(tab, &ImageTab::versionChanged, this, nullptr);
+        disconnect(tab, &ImageTab::effectsChanged, this, nullptr);
+        disconnect(tab, &ImageTab::snapshotChanged, this, nullptr);
     }
 
     m_tabBar->removeTab(index);
@@ -330,8 +330,8 @@ void MainWindow::onThumbnailSelected(int index) {
     auto *tab = currentTab();
     if (!tab)
         return;
-    tab->selectVersion(index);
-    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentVersionIndex());
+    tab->selectSnapshot(index);
+    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentSnapshotIndex());
     updateViewer();
 }
 
@@ -341,9 +341,9 @@ void MainWindow::updateThumbnailStrip() {
         return;
     }
 
-    auto [thumbs, labels] = tab->versionThumbnails(48);
+    auto [thumbs, labels] = tab->snapshotThumbnails(48);
     m_viewerContainer->thumbnailStrip()->setThumbnails(thumbs, labels);
-    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentVersionIndex());
+    m_viewerContainer->thumbnailStrip()->setSelectedIndex(tab->currentSnapshotIndex());
 }
 
 void MainWindow::switchContentState(ContentState state) {

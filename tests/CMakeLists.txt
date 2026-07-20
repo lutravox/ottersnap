@@ -14,10 +14,10 @@ add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 
 # ── VersionStore ─────────────────────────────────────────────────────
     add_unit_test(versionstore  core/versionstore.cpp  Qt6::Core Qt6::Gui)
-    target_sources(test_versionstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp)
+    target_sources(test_versionstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp)
 
 # ── AppSettings ──────────────────────────────────────────────────────
 add_unit_test(appsettings   config/appsettings.cpp Qt6::Core)
 
-# ── ImageLoader ──────────────────────────────────────────────────────
-add_unit_test(imageloader   core/imageloader.cpp Qt6::Core Qt6::Gui)
+# ── DiskUtils ──────────────────────────────────────────────────────
+    add_unit_test(diskutils   core/diskutils.cpp Qt6::Core Qt6::Gui)

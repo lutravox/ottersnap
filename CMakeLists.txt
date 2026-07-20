@@ -107,10 +107,13 @@ add_executable(${PROJECT_NAME}
     src/ui/dialogs/settingsdialog.cpp
 
     # Core logic
+    src/core/diskutils.cpp
+    src/core/imagecache.cpp
     src/core/versionstore.cpp
-    src/core/imageloader.cpp
     src/core/viewstate.cpp
     src/core/sessionmanager.cpp
+    src/core/imagesession.cpp
+    src/core/imagemonitor.cpp
 
     # Configuration
     src/config/appsettings.cpp

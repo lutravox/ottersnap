@@ -1,5 +1,7 @@
 #include "core/versionstore.h"
 #include "config/appsettings.h"
+#include "core/diskutils.h"
+#include "core/imagecache.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -15,29 +17,11 @@
 #include <functional>
 
 QHash<QString, QVector<ImageVersion>> VersionStore::s_versionsCache;
-QCache<QString, QImage>               VersionStore::s_imageCache;
 
 static const QString c_baseSubDir = QLatin1String("versions");
 static const QString c_indexFile = QLatin1String("index.json");
 static const QString c_tmp = QLatin1String(".tmp");
 static const int     c_baseInterval = 100;
-
-static bool atomicWrite(const QString& targetPath, std::function<bool(const QString&)> writeOp) {
-    QString tmp = targetPath + c_tmp;
-    if (!writeOp(tmp)) {
-        qWarning() << "[VersionStore] Failed to write temp file:" << targetPath;
-        return false;
-    }
-    if (QFile::exists(targetPath)) {
-        QFile::remove(targetPath);
-    }
-    if (!QFile::rename(tmp, targetPath)) {
-        qWarning() << "[VersionStore] Failed to rename temp file:" << tmp << "->" << targetPath;
-        QFile::remove(tmp);
-        return false;
-    }
-    return true;
-}
 
 static QString versionDirPath(const QString& key) {
     return VersionStore::baseDir() + '/' + key;
@@ -68,7 +52,7 @@ static ImageVersion fromJsonObject(const QJsonObject& obj) {
 }
 
 static bool saveImageFile(const QString& targetPath, const QImage& image) {
-    return atomicWrite(targetPath, [&image](const QString& tmp) {
+    return DiskUtils::atomicWrite(targetPath, [&image](const QString& tmp) {
         if (!image.save(tmp, "PNG")) {
             qWarning() << "[VersionStore] Failed to save image:" << tmp;
             return false;
@@ -78,7 +62,7 @@ static bool saveImageFile(const QString& targetPath, const QImage& image) {
 }
 
 static bool saveFile(const QString& targetPath, const QByteArray& data) {
-    return atomicWrite(targetPath, [&data](const QString& tmp) {
+    return DiskUtils::atomicWrite(targetPath, [&data](const QString& tmp) {
         QFile f(tmp);
         if (!f.open(QFile::WriteOnly | QFile::Truncate)) {
             qWarning() << "[VersionStore] Failed to open temp file for writing:" << tmp;
@@ -146,9 +130,7 @@ QString VersionStore::imageKey(const QString& filePath) {
 
 void VersionStore::ensureDir() {
     QString bd = baseDir();
-    if (!QDir().mkpath(bd)) {
-        qWarning() << "[VersionStore] Failed to create base directory:" << bd;
-    }
+    DiskUtils::ensureDir(bd);
 }
 
 QString VersionStore::computeChecksum(const QImage& image) {
@@ -220,8 +202,7 @@ std::optional<VersionStore::SaveResult> VersionStore::saveVersion(const QString&
 
     int     nextVer = versions.isEmpty() ? 1 : versions.last().version + 1;
     QString vd = versionDirPath(key);
-    if (!QDir().mkpath(vd)) {
-        qWarning() << "[VersionStore] Failed to create version directory:" << vd;
+    if (!DiskUtils::ensureDir(vd)) {
         return std::nullopt;
     }
 
@@ -298,8 +279,8 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
     QString cacheKey = key + ":" + QString::number(versionIndex);
 
     // Check the LRU cache
-    if (s_imageCache.contains(cacheKey)) {
-        return *s_imageCache.object(cacheKey);
+    if (QImage *cached = ImageCache::get(cacheKey)) {
+        return *cached;
     }
 
     QVector<ImageVersion> versions = loadVersions(filePath);
@@ -357,21 +338,12 @@ std::optional<QImage> VersionStore::loadVersionImage(const QString& filePath, in
 
     // Cache the reconstructed image
     // Update max cost based on current settings
-    int maxBytes = AppSettings::maxVersionCacheSizeMB() * 1024 * 1024;
-    if (s_imageCache.maxCost() != maxBytes) {
-        s_imageCache.setMaxCost(maxBytes);
-    }
-
-    // We use a copy because QCache takes ownership of the pointer
-    s_imageCache.insert(cacheKey, new QImage(img), img.sizeInBytes());
+    ImageCache::updateMaxCost(AppSettings::maxVersionCacheSizeMB());
+    ImageCache::insert(cacheKey, new QImage(img), img.sizeInBytes());
 
     qDebug() << "[VersionStore] Loaded version" << versionIndex << "reconstructed from base"
              << versions[baseIdx].version << "and cached";
     return img;
-}
-
-void VersionStore::clearImageCache() {
-    s_imageCache.clear();
 }
 
 void VersionStore::deleteAllVersions(const QString& filePath) {
@@ -386,12 +358,4 @@ void VersionStore::deleteAllVersions(const QString& filePath) {
         }
     }
     s_versionsCache.remove(key);
-
-    // Clear cached images for this file
-    QStringList keys = s_imageCache.keys();
-    for (const QString& cacheKey : keys) {
-        if (cacheKey.startsWith(key + ":")) {
-            s_imageCache.remove(cacheKey);
-        }
-    }
 }

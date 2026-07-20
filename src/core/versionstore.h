@@ -60,16 +60,10 @@ class VersionStore {
     /// @return The loaded image, or std::nullopt if not found or load failed.
     static std::optional<QImage> loadVersionImage(const QString& filePath, int versionIndex);
 
-    /// @brief Clear the image data cache.
-    static void clearImageCache();
-
     /// @brief Delete all stored versions for an image file.
     static void deleteAllVersions(const QString& filePath);
 
   private:
     /// @brief In-memory cache of all version records, keyed by image key (hash of filePath).
     static QHash<QString, QVector<ImageVersion>> s_versionsCache;
-
-    /// @brief LRU cache for reconstructed images, keyed by "imageKey:version".
-    static QCache<QString, QImage> s_imageCache;
 };

@@ -8,11 +8,11 @@ class TestAppSettings : public QObject {
   private slots:
     void initTestCase();
 
-    // Round-trip
-    void testSetFalseReadFalse();
-    void testSetTrueReadTrue();
-    void testToggle();
-    void testMultipleWrites();
+    void testResizeToFit();
+    void testRestoreSession();
+    void testAutosaveSnapshots();
+    void testMaxSnapshotCacheSize();
+    void testIdentity();
 };
 
 void TestAppSettings::initTestCase() {
@@ -22,33 +22,37 @@ void TestAppSettings::initTestCase() {
     QCoreApplication::setApplicationName("test_appsettings");
 }
 
-void TestAppSettings::testSetFalseReadFalse() {
-    AppSettings::setResizeToFit(false);
-    QCOMPARE(AppSettings::resizeToFit(), false);
-}
-
-void TestAppSettings::testSetTrueReadTrue() {
+void TestAppSettings::testResizeToFit() {
     AppSettings::setResizeToFit(true);
     QCOMPARE(AppSettings::resizeToFit(), true);
-}
-
-void TestAppSettings::testToggle() {
-    AppSettings::setResizeToFit(false);
-    QCOMPARE(AppSettings::resizeToFit(), false);
-
-    AppSettings::setResizeToFit(true);
-    QCOMPARE(AppSettings::resizeToFit(), true);
-
     AppSettings::setResizeToFit(false);
     QCOMPARE(AppSettings::resizeToFit(), false);
 }
 
-void TestAppSettings::testMultipleWrites() {
-    for (int i = 0; i < 10; ++i) {
-        bool expected = (i % 2 == 0);
-        AppSettings::setResizeToFit(expected);
-        QCOMPARE(AppSettings::resizeToFit(), expected);
-    }
+void TestAppSettings::testRestoreSession() {
+    AppSettings::setRestoreSession(true);
+    QCOMPARE(AppSettings::restoreSession(), true);
+    AppSettings::setRestoreSession(false);
+    QCOMPARE(AppSettings::restoreSession(), false);
+}
+
+void TestAppSettings::testAutosaveSnapshots() {
+    AppSettings::setAutosaveSnapshots(true);
+    QCOMPARE(AppSettings::autosaveSnapshots(), true);
+    AppSettings::setAutosaveSnapshots(false);
+    QCOMPARE(AppSettings::autosaveSnapshots(), false);
+}
+
+void TestAppSettings::testMaxSnapshotCacheSize() {
+    int testSize = 512;
+    AppSettings::setMaxSnapshotCacheSizeMB(testSize);
+    QCOMPARE(AppSettings::maxSnapshotCacheSizeMB(), testSize);
+}
+
+void TestAppSettings::testIdentity() {
+    QVERIFY(QString(AppSettings::applicationName()).contains("Ottersnap"));
+    QVERIFY(!QString(AppSettings::organizationDomain()).isEmpty());
+    QVERIFY(!AppSettings::fileFilter().isEmpty());
 }
 
 QTEST_MAIN(TestAppSettings)

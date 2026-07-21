@@ -1,14 +1,18 @@
-#include "ui/viewercontainer.h"
+#include "ui/viewerstate.h"
 
 #include <QVBoxLayout>
 
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
+#include "ui/viewerstate.h"
 #include "ui/vkimageviewer.h"
 
-ViewerContainer::ViewerContainer(QWidget *parent) : QWidget(parent) {
+#include <QVBoxLayout>
+
+ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
     m_snapshotTimeline = new SnapshotTimeline(this);
     m_viewer = new ImageViewer(this);

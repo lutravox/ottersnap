@@ -6,9 +6,9 @@
 #include <QStringList>
 #include "core/sessionmanager.h"
 #include "ui/effectscontroller.h"
-#include "ui/mainmenu.h"
+#include "ui/emptystate.h"
 #include "ui/tabbar.h"
-#include "ui/viewercontainer.h"
+#include "ui/viewerstate.h"
 
 class QAction;
 
@@ -28,7 +28,7 @@ class MainWindow : public QMainWindow {
 
     /// @brief ImageViewer instance.
     ImageViewer *viewer() {
-        return m_viewerContainer->viewer();
+        return m_viewerState->viewer();
     }
 
   protected:
@@ -70,8 +70,8 @@ class MainWindow : public QMainWindow {
     TabBar            *m_tabBar;
     QStackedWidget    *m_contentStack;
     NotificationBar   *m_notification;
-    ViewerContainer   *m_viewerContainer;
-    MainMenu          *m_mainMenu;
+    ViewerState       *m_viewerState;
+    EmptyState        *m_emptyState;
     SessionManager     m_session;
     EffectsController *m_effectsController;
     QMenu             *m_fileMenu;

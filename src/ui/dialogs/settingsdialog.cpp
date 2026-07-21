@@ -27,9 +27,9 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbAutosave->setChecked(AppSettings::autosaveSnapshots());
     layout->addWidget(m_cbAutosave);
 
-    // Version cache size
+    // Snapshot cache size
     auto *cacheLayout = new QHBoxLayout();
-    auto *cacheLabel = new QLabel(tr("Version cache size (MB):"), this);
+    auto *cacheLabel = new QLabel(tr("Snapshot cache size (MB):"), this);
     m_sbCacheSize = new QSpinBox(this);
     m_sbCacheSize->setRange(64, 8192);
     m_sbCacheSize->setValue(AppSettings::maxSnapshotCacheSizeMB());

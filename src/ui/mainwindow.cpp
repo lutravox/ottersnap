@@ -15,20 +15,20 @@
 #include "config/appsettings.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/effectscontroller.h"
+#include "ui/emptystate.h"
 #include "ui/imagetab.h"
-#include "ui/mainmenu.h"
 #include "ui/notificationbar.h"
 #include "ui/snapshottimeline.h"
 #include "ui/tabbar.h"
-#include "ui/viewercontainer.h"
+#include "ui/viewerstate.h"
 #include "ui/vkimageviewer.h"
 
 static const int c_defaultWidth = 1000;
 static const int c_defaultHeight = 700;
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerContainer(nullptr),
-      m_mainMenu(nullptr) {
+    : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerState(nullptr),
+      m_emptyState(nullptr) {
     m_effectsController = new EffectsController(this);
     setupMenu();
     setupUi();
@@ -60,27 +60,28 @@ void MainWindow::setupUi() {
     // Stacked widget
     m_contentStack = new QStackedWidget(central);
 
-    // Viewer container: thumbnail strip + viewer + nav bar
-    m_viewerContainer = new ViewerContainer(m_contentStack);
-    connect(m_viewerContainer->snapshotTimeline(),
+    // Viewer state: thumbnail strip + viewer + nav bar
+    m_viewerState = new ViewerState(m_contentStack);
+    connect(m_viewerState->snapshotTimeline(),
             &SnapshotTimeline::snapshotSelected,
             this,
             &MainWindow::onSnapshotSelected);
 
-    // Main menu
-    m_mainMenu = new MainMenu(m_contentStack);
+    // Empty state
+    m_emptyState = new EmptyState(m_contentStack);
 
-    m_contentStack->addWidget(m_mainMenu);
-    m_contentStack->addWidget(m_viewerContainer);
-    m_contentStack->setCurrentWidget(m_mainMenu);
+    // Stack states
+    m_contentStack->addWidget(m_emptyState);
+    m_contentStack->addWidget(m_viewerState);
+    m_contentStack->setCurrentWidget(m_emptyState);
     centralLayout->addWidget(m_contentStack, 1);
 
     // Controllers
-    m_effectsController->setup(m_viewerContainer->viewer(), m_actionGrayscale, m_actionMirror);
+    m_effectsController->setup(m_viewerState->viewer(), m_actionGrayscale, m_actionMirror);
 
-    // Connect main menu actions
-    connect(m_mainMenu, &MainMenu::openRequested, this, &MainWindow::onFileOpen);
-    connect(m_mainMenu, &MainMenu::settingsRequested, this, &MainWindow::onSettings);
+    // Connect empty state actions
+    connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
+    connect(m_emptyState, &EmptyState::settingsRequested, this, &MainWindow::onSettings);
 
     // Notification bar
     m_notification = new NotificationBar(central);
@@ -329,7 +330,7 @@ void MainWindow::onSettings() {
 void MainWindow::updateViewer() {
     if (m_currentState == ContentState::Empty) {
         // Clear the viewer so there's no stale content
-        m_viewerContainer->viewer()->clear();
+        m_viewerState->viewer()->clear();
         m_currentTabInView = nullptr;
         return;
     }
@@ -340,18 +341,18 @@ void MainWindow::updateViewer() {
 
     // Save state of the current tab
     if (m_currentTabInView) {
-        m_currentTabInView->setViewState(m_viewerContainer->viewer()->getViewState());
+        m_currentTabInView->setViewState(m_viewerState->viewer()->getViewState());
     }
 
     const auto& image = tab->currentImage();
     if (!image.isNull()) {
         // Restore state for the new tab
-        m_viewerContainer->viewer()->setViewState(tab->viewState());
-        m_viewerContainer->viewer()->setImage(image, true);
+        m_viewerState->viewer()->setViewState(tab->viewState());
+        m_viewerState->viewer()->setImage(image, true);
         m_effectsController->setTargetTab(tab);
     }
 
-    m_viewerContainer->statusBar()->setZoom(m_viewerContainer->viewer()->ZoomPercentage());
+    m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->ZoomPercentage());
     m_currentTabInView = tab;
 }
 
@@ -374,7 +375,7 @@ void MainWindow::onSnapshotSelected(int index) {
     if (!tab)
         return;
     tab->selectSnapshot(index);
-    m_viewerContainer->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
     updateViewer();
 }
 
@@ -385,17 +386,17 @@ void MainWindow::updateSnapshotTimeline() {
     }
 
     auto [thumbs, labels] = tab->snapshotThumbnails(48);
-    m_viewerContainer->snapshotTimeline()->setThumbnails(thumbs, labels);
-    m_viewerContainer->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
 }
 
 void MainWindow::switchContentState(ContentState state) {
     switch (state) {
         case ContentState::Empty:
-            m_contentStack->setCurrentWidget(m_mainMenu);
+            m_contentStack->setCurrentWidget(m_emptyState);
             break;
         case ContentState::Viewer:
-            m_contentStack->setCurrentWidget(m_viewerContainer);
+            m_contentStack->setCurrentWidget(m_viewerState);
             break;
     }
 }

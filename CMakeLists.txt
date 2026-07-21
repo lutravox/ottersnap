@@ -101,9 +101,9 @@ add_executable(${PROJECT_NAME}
     src/ui/snapshottimeline.cpp
     src/ui/snapshottab.cpp
     src/ui/tabbar.cpp
-    src/ui/mainmenu.cpp
+    src/ui/emptystate.cpp
     src/ui/statusbar.cpp
-    src/ui/viewercontainer.cpp
+    src/ui/viewerstate.cpp
     src/ui/dialogs/settingsdialog.cpp
 
     # Core logic

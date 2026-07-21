@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QAction>
+#include <QToolBar>
 #include <QWidget>
 
 #include "ui/snapshottimeline.h"
@@ -7,15 +9,15 @@
 #include "ui/vkimageviewer.h"
 
 /**
- * @brief Groups the thumbnail strip, image viewer, and status bar into a single
+ * @brief Image viewer stage.
  */
-class ViewerContainer : public QWidget {
+class ViewerState : public QWidget {
     Q_OBJECT
 
   public:
-    /// @brief Constructs the container
+    /// @brief Constructs the state
     /// @param parent Optional parent widget.
-    explicit ViewerContainer(QWidget *parent = nullptr);
+    explicit ViewerState(QWidget *parent = nullptr);
 
     /// @brief Returns the snapshot timeline for version history.
     SnapshotTimeline *snapshotTimeline() {

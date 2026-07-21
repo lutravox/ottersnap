@@ -39,6 +39,9 @@ class MainWindow : public QMainWindow {
     void onFileOpen();
     void onSaveSnapshot();
     void onCloseTab(int index);
+    void onCloseCurrentTab();
+    void onFitToWindow();
+    void onResetZoom();
     void onSettings();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
@@ -46,6 +49,7 @@ class MainWindow : public QMainWindow {
   private:
     void      setupUi();
     void      setupMenu();
+    void      updateMenuBar();
     void      openImageFile(const QString& path);
     ImageTab *currentTab();
     void      applyEffects();
@@ -70,6 +74,12 @@ class MainWindow : public QMainWindow {
     MainMenu          *m_mainMenu;
     SessionManager     m_session;
     EffectsController *m_effectsController;
+    QMenu             *m_fileMenu;
+    QMenu             *m_editMenu;
+    QMenu             *m_viewMenu;
+    QMenu             *m_effectsMenu;
+
+    ContentState m_currentState = ContentState::Empty;
 
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;

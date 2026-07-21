@@ -49,6 +49,7 @@ void MainWindow::setupUi() {
     QWidget *central = new QWidget(this);
     auto    *centralLayout = new QVBoxLayout(central);
     centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
 
     // Tab bar
     m_tabBar = new TabBar(central);
@@ -66,17 +67,22 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSnapshotSelected);
 
-    m_effectsController->setup(m_viewerContainer->viewer(), m_actionGrayscale, m_actionMirror);
-
     // Main menu
     m_mainMenu = new MainMenu(m_contentStack);
-    connect(m_mainMenu, &MainMenu::openRequested, this, &MainWindow::onFileOpen);
 
     m_contentStack->addWidget(m_mainMenu);
     m_contentStack->addWidget(m_viewerContainer);
     m_contentStack->setCurrentWidget(m_mainMenu);
     centralLayout->addWidget(m_contentStack, 1);
 
+    // Controllers
+    m_effectsController->setup(m_viewerContainer->viewer(), m_actionGrayscale, m_actionMirror);
+
+    // Connect main menu actions
+    connect(m_mainMenu, &MainMenu::openRequested, this, &MainWindow::onFileOpen);
+    connect(m_mainMenu, &MainMenu::settingsRequested, this, &MainWindow::onSettings);
+
+    // Notification bar
     m_notification = new NotificationBar(central);
     centralLayout->addWidget(m_notification, 0);
 
@@ -86,71 +92,104 @@ void MainWindow::setupUi() {
 }
 
 void MainWindow::setupMenu() {
-    auto *fileMenu = menuBar()->addMenu("&File");
-
-    m_actionOpen = fileMenu->addAction("&Open Image...");
+    m_fileMenu = menuBar()->addMenu("&File");
+    m_actionOpen = m_fileMenu->addAction("&Open Image...");
     m_actionOpen->setShortcut(QKeySequence::Open);
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
-    m_actionSaveSnapshot = fileMenu->addAction("&Save Snapshot");
+    m_actionSaveSnapshot = m_fileMenu->addAction("&Save Snapshot");
     m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
 
-    m_actionCloseTab = fileMenu->addAction("Close &Tab");
+    m_actionCloseTab = m_fileMenu->addAction("Close &Tab");
     m_actionCloseTab->setShortcut(QKeySequence::Close);
-    connect(m_actionCloseTab, &QAction::triggered, this, [this]() {
-        onCloseTab(m_tabBar->currentIndex());
-    });
+    connect(m_actionCloseTab, &QAction::triggered, this, &MainWindow::onCloseCurrentTab);
 
-    fileMenu->addSeparator();
+    m_fileMenu->addSeparator();
 
-    m_actionExit = fileMenu->addAction("E&xit");
+    m_actionExit = m_fileMenu->addAction("E&xit");
     m_actionExit->setShortcut(QKeySequence::Quit);
     connect(m_actionExit, &QAction::triggered, this, &QWidget::close);
 
-    // Edit menu
-    auto *editMenu = menuBar()->addMenu("&Edit");
-
-    m_actionSettings = editMenu->addAction("&Settings");
+    m_editMenu = menuBar()->addMenu("&Edit");
+    m_actionSettings = m_editMenu->addAction("&Settings");
     connect(m_actionSettings, &QAction::triggered, this, &MainWindow::onSettings);
 
-    // View menu
-    auto *viewMenu = menuBar()->addMenu("&View");
-
-    m_actionFitWindow = viewMenu->addAction("&Fit to Window");
+    m_viewMenu = menuBar()->addMenu("&View");
+    m_actionFitWindow = m_viewMenu->addAction("&Fit to Window");
     m_actionFitWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
-    connect(m_actionFitWindow, &QAction::triggered, this, [this]() {
-        auto *tab = currentTab();
-        if (tab) {
-            m_viewerContainer->viewer()->fitToWindow();
-        }
-    });
+    connect(m_actionFitWindow, &QAction::triggered, this, &MainWindow::onFitToWindow);
 
-    m_actionResetZoom = viewMenu->addAction("Reset &Zoom");
+    m_actionResetZoom = m_viewMenu->addAction("Reset &Zoom");
     m_actionResetZoom->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-    connect(m_actionResetZoom, &QAction::triggered, this, [this]() {
-        auto *tab = currentTab();
-        if (tab) {
-            m_viewerContainer->viewer()->resetZoom();
-        }
-    });
+    connect(m_actionResetZoom, &QAction::triggered, this, &MainWindow::onResetZoom);
 
-    // Modifiers menu
-    auto *modMenu = menuBar()->addMenu("&Effects");
-
-    m_actionGrayscale = modMenu->addAction("&Grayscale");
+    m_effectsMenu = menuBar()->addMenu("&Effects");
+    m_actionGrayscale = m_effectsMenu->addAction("&Grayscale");
     m_actionGrayscale->setCheckable(true);
     m_actionGrayscale->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
     connect(m_actionGrayscale, &QAction::triggered, this, [this]() {
         m_effectsController->toggleGrayscale();
     });
 
-    m_actionMirror = modMenu->addAction("&Mirror");
+    m_actionMirror = m_effectsMenu->addAction("&Mirror");
     m_actionMirror->setCheckable(true);
     m_actionMirror->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(m_actionMirror, &QAction::triggered, this, [this]() {
         m_effectsController->toggleMirror();
     });
+
+    updateMenuBar();
+}
+
+void MainWindow::updateMenuBar() {
+    // Common actions always enabled and visible
+    m_actionOpen->setEnabled(true);
+    m_actionSettings->setEnabled(true);
+    m_actionExit->setEnabled(true);
+    m_fileMenu->menuAction()->setVisible(true);
+    m_editMenu->menuAction()->setVisible(true);
+
+    switch (m_currentState) {
+        case ContentState::Empty:
+            m_actionSaveSnapshot->setVisible(false);
+            m_actionCloseTab->setVisible(false);
+            m_actionFitWindow->setVisible(false);
+            m_actionResetZoom->setVisible(false);
+            m_actionGrayscale->setVisible(false);
+            m_actionMirror->setVisible(false);
+
+            m_viewMenu->menuAction()->setVisible(false);
+            m_effectsMenu->menuAction()->setVisible(false);
+            break;
+
+        case ContentState::Viewer:
+            m_actionSaveSnapshot->setVisible(true);
+            m_actionCloseTab->setVisible(true);
+            m_actionFitWindow->setVisible(true);
+            m_actionResetZoom->setVisible(true);
+            m_actionGrayscale->setVisible(true);
+            m_actionMirror->setVisible(true);
+
+            m_viewMenu->menuAction()->setVisible(true);
+            m_effectsMenu->menuAction()->setVisible(true);
+            break;
+    }
+
+    // Clear the "Tools" menu as we now use dedicated menus
+    // (Removed m_contextMenu as it is no longer used)
+}
+
+void MainWindow::onCloseCurrentTab() {
+    onCloseTab(m_tabBar->currentIndex());
+}
+
+void MainWindow::onFitToWindow() {
+    viewer()->fitToWindow();
+}
+
+void MainWindow::onResetZoom() {
+    viewer()->resetZoom();
 }
 
 void MainWindow::onFileOpen() {
@@ -288,7 +327,7 @@ void MainWindow::onSettings() {
 }
 
 void MainWindow::updateViewer() {
-    if (m_tabBar->count() == 0) {
+    if (m_currentState == ContentState::Empty) {
         // Clear the viewer so there's no stale content
         m_viewerContainer->viewer()->clear();
         m_currentTabInView = nullptr;
@@ -317,13 +356,17 @@ void MainWindow::updateViewer() {
 }
 
 void MainWindow::updateState() {
-    if (m_tabBar->count() == 0) {
-        m_effectsController->setTargetTab(nullptr);
-        switchContentState(ContentState::Empty);
-        return;
-    }
+    ContentState newState = (m_tabBar->count() > 0) ? ContentState::Viewer : ContentState::Empty;
 
-    switchContentState(ContentState::Viewer);
+    if (newState != m_currentState) {
+        m_currentState = newState;
+        switchContentState(m_currentState);
+
+        if (m_currentState == ContentState::Empty) {
+            m_effectsController->setTargetTab(nullptr);
+        }
+        updateMenuBar();
+    }
 }
 
 void MainWindow::onSnapshotSelected(int index) {

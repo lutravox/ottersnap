@@ -6,6 +6,7 @@
 #include <QPainter>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -38,7 +39,7 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
 
     // Keep the strip to a compact, fixed height
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(c_thumbnailSize + 8);
+    setFixedHeight(c_thumbnailSize + 24);
 
     {
         QFile qss(":/qss/snapshottimeline.qss");
@@ -99,14 +100,30 @@ bool SnapshotTimeline::isEmpty() const {
 }
 
 void SnapshotTimeline::updateSelection(int oldIndex, int newIndex) {
-    if (oldIndex >= 0 && oldIndex < static_cast<int>(m_snapshottabs.size()))
-        m_snapshottabs[oldIndex]->setSelected(false);
+    updateTabState(oldIndex, false);
+    updateTabState(newIndex, true);
 
-    if (newIndex >= 0 && newIndex < static_cast<int>(m_snapshottabs.size())) {
-        SnapshotTab *current = m_snapshottabs[newIndex];
-        current->setSelected(true);
+    if (newIndex >= 0 && newIndex < static_cast<int>(m_containers.size())) {
+        QWidget *container = m_containers[newIndex];
         m_scrollArea->horizontalScrollBar()->setValue(
-            current->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2));
+            container->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2));
+    }
+}
+
+void SnapshotTimeline::updateTabState(int index, bool selected) {
+    if (index < 0 || index >= static_cast<int>(m_snapshottabs.size()))
+        return;
+
+    m_snapshottabs[index]->setSelected(selected);
+
+    if (index < static_cast<int>(m_snapshotLabels.size())) {
+        QLabel *label = m_snapshotLabels[index];
+        label->setText(index == static_cast<int>(m_snapshottabs.size()) - 1
+                           ? "C"
+                           : QString::number(index + 1));
+        label->setProperty("selected", selected ? "true" : "false");
+        label->style()->unpolish(label);
+        label->style()->polish(label);
     }
 }
 
@@ -123,16 +140,32 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         delete item; // Deletes layout/stretch spacers
     }
     m_snapshottabs.clear();
+    m_snapshotLabels.clear();
+    m_containers.clear();
 
     for (int i = 0; i < thumbnails.size(); ++i) {
-        SnapshotTab *lbl = new SnapshotTab(m_contentWidget);
+        QWidget *container = new QWidget(m_contentWidget);
+        container->setFixedWidth(c_thumbnailSize);
+        container->setFixedHeight(c_thumbnailSize + 20);
 
+        QLabel *snapshotLabel = new QLabel(container);
+        snapshotLabel->setObjectName("snapshotLabel");
+        snapshotLabel->setAlignment(Qt::AlignCenter);
+        snapshotLabel->setText(i == thumbnails.size() - 1 ? "C" : QString::number(i + 1));
+        snapshotLabel->setGeometry(0, 0, c_thumbnailSize, 16);
+
+        bool isSelected = (i == m_currentIndex);
+        snapshotLabel->setProperty("selected", isSelected ? "true" : "false");
+
+        SnapshotTab *lbl = new SnapshotTab(container);
         lbl->setFixedSize(c_thumbnailSize, c_thumbnailSize);
         lbl->setAlignment(Qt::AlignCenter);
         lbl->setPixmap(thumbnails[i]);
+        lbl->setGeometry(0, 16, c_thumbnailSize, c_thumbnailSize);
+        lbl->setContentsMargins(0, 0, 0, 0);
 
-        // Highlight the current thumbnail
-        lbl->setSelected(i == m_currentIndex);
+        // Select the current thumbnail
+        lbl->setSelected(isSelected);
 
         lbl->setToolTip(m_labels.isEmpty() ? QString("v%1").arg(i + 1) : m_labels[i]);
 
@@ -140,7 +173,9 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         connect(lbl, &SnapshotTab::clicked, this, [this, idx]() { emit snapshotSelected(idx); });
 
         m_snapshottabs.append(lbl);
-        m_contentLayout->addWidget(lbl);
+        m_snapshotLabels.append(snapshotLabel);
+        m_containers.append(container);
+        m_contentLayout->addWidget(container);
     }
 
     // adjust to fit container
@@ -156,9 +191,11 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
 void SnapshotTimeline::doScrollToCurrent() {
     if (m_currentIndex < 0 || m_currentIndex >= static_cast<int>(m_snapshottabs.size()))
         return;
-    SnapshotTab *current = m_snapshottabs[m_currentIndex];
-    if (!current)
+    if (m_currentIndex >= static_cast<int>(m_containers.size()))
         return;
-    int targetX = current->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2);
+    QWidget *container = m_containers[m_currentIndex];
+    if (!container)
+        return;
+    int targetX = container->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2);
     m_scrollArea->horizontalScrollBar()->setValue(targetX);
 }

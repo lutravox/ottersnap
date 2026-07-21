@@ -11,9 +11,9 @@
 #include <QFuture>
 #include <QFutureWatcher>
 
+#include "core/effectsstate.h"
 #include "core/imagesession.h"
 #include "core/viewstate.h"
-#include "ui/effectsstate.h"
 
 /// @brief A single image tab. Manages image loading, version history,
 /// image modifiers, and file-system watching.

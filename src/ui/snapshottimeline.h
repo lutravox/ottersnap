@@ -33,6 +33,9 @@ class SnapshotTimeline : public QWidget {
     /// @brief Returns true when no thumbnails are shown.
     bool isEmpty() const;
 
+    /// @brief Handle events from child widgets.
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
   protected:
     void wheelEvent(QWheelEvent *event) override;
 

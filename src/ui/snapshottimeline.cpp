@@ -21,6 +21,7 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_scrollArea->setFrameShape(QFrame::NoFrame);
     m_scrollArea->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    m_scrollArea->viewport()->installEventFilter(this);
 
     m_contentWidget = new QWidget(m_scrollArea);
 
@@ -47,6 +48,14 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
 
     m_scrollTimer.setSingleShot(true);
     connect(&m_scrollTimer, &QTimer::timeout, this, &SnapshotTimeline::doScrollToCurrent);
+}
+
+bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == m_scrollArea->viewport() && event->type() == QEvent::Wheel) {
+        wheelEvent(static_cast<QWheelEvent *>(event));
+        return true;
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void SnapshotTimeline::wheelEvent(QWheelEvent *event) {

@@ -58,6 +58,9 @@ class MainWindow : public QMainWindow {
     void      notify(const QString& msg, int timeoutMs = -1);
     void      updateSnapshotTimeline();
 
+    /// @brief Collect file paths from all open tabs.
+    QStringList collectOpenPaths() const;
+
     /// @brief Update the viewer when the active tab changes.
     void updateViewer();
 
@@ -72,6 +75,7 @@ class MainWindow : public QMainWindow {
     NotificationBar   *m_notification;
     ViewerState       *m_viewerState;
     EmptyState        *m_emptyState;
+    QSettings          m_settings;
     SessionManager     m_session;
     EffectsController *m_effectsController;
     QMenu             *m_fileMenu;

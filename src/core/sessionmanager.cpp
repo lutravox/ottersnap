@@ -2,40 +2,24 @@
 
 #include <QDebug>
 #include <QSettings>
-#include <QTabWidget>
 
-#include "ui/imagetab.h"
-
-SessionManager::SessionManager() = default;
-
-void SessionManager::save(QTabWidget *tabBar, QSettings settings) {
-    QStringList paths = collectPaths(tabBar);
-    qDebug() << "[SessionManager] Paths to save:" << paths;
-    settings.beginGroup("Session");
-    settings.setValue("openFiles", paths);
-    settings.endGroup();
+SessionManager::SessionManager(QSettings& settings) : m_settings(settings) {
 }
 
-void SessionManager::load(QSettings settings) {
-    settings.beginGroup("Session");
-    m_restorePaths = settings.value("openFiles").toStringList();
-    settings.endGroup();
+void SessionManager::save(const QStringList& paths) {
+    qDebug() << "[SessionManager] Paths to save:" << paths;
+    m_settings.beginGroup("Session");
+    m_settings.setValue("openFiles", paths);
+    m_settings.endGroup();
+}
+
+void SessionManager::load() {
+    m_settings.beginGroup("Session");
+    m_restorePaths = m_settings.value("openFiles").toStringList();
+    m_settings.endGroup();
     qDebug() << "[SessionManager] Loading paths:" << m_restorePaths;
 }
 
 QStringList SessionManager::restorePaths() {
     return std::move(m_restorePaths);
-}
-
-QStringList SessionManager::collectPaths(QTabWidget *tabBar) {
-    QStringList paths;
-    if (!tabBar)
-        return paths;
-
-    for (int i = 0; i < tabBar->count(); ++i) {
-        auto *tab = qobject_cast<ImageTab *>(tabBar->widget(i));
-        if (tab && !tab->filePath().isEmpty())
-            paths << tab->filePath();
-    }
-    return paths;
 }

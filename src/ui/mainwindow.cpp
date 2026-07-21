@@ -28,7 +28,7 @@ static const int c_defaultHeight = 700;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerState(nullptr),
-      m_emptyState(nullptr) {
+      m_emptyState(nullptr), m_session(m_settings) {
     m_effectsController = new EffectsController(this);
     setupMenu();
     setupUi();
@@ -38,8 +38,21 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    m_session.save(m_tabBar);
+    m_session.save(collectOpenPaths());
     QMainWindow::closeEvent(event);
+}
+
+QStringList MainWindow::collectOpenPaths() const {
+    QStringList paths;
+    if (!m_tabBar)
+        return paths;
+
+    for (int i = 0; i < m_tabBar->count(); ++i) {
+        auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(i));
+        if (tab && !tab->filePath().isEmpty())
+            paths << tab->filePath();
+    }
+    return paths;
 }
 
 void MainWindow::setupUi() {

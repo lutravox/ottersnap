@@ -6,23 +6,46 @@
 #include <QString>
 #include <QVector>
 
+#include "core/effects_interfaces.h"
+#include "core/effectsstate.h"
 #include "core/imagemonitor.h"
 #include "core/snapshotstore.h"
+#include "core/viewstate.h"
 
-/// @brief Manages the state and business logic for a single opened image.
-/// This class decouples the image data and versioning logic from the UI.
-class ImageSession : public QObject {
+/// @brief Manages the state logic for a single opened image.
+class ImageSession : public QObject, public IEffectsState {
     Q_OBJECT
   public:
     explicit ImageSession(QObject *parent = nullptr);
     ~ImageSession();
+
+    // IEffectsState implementation
+    void setGrayscale(bool enabled) override;
+    void setMirror(bool enabled) override;
+    bool grayscaleEnabled() const override {
+        return m_effects.grayscale;
+    }
+    bool mirrorEnabled() const override {
+        return m_effects.mirror;
+    }
+
+    // ViewState access
+    ViewState& viewState() {
+        return m_viewState;
+    }
+    const ViewState& viewState() const {
+        return m_viewState;
+    }
+
+    /// @brief Manually reload the image from disk.
+    void reloadImage();
 
     /// @brief Open an image file and initialize the session.
     bool openImage(const QString& filePath);
     /// @brief Close the current image and release resources.
     void close();
 
-    /// @brief Return the currently active image (either from disk or history).
+    /// @brief Return the currently active image.
     const QImage& currentImage();
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
@@ -51,6 +74,7 @@ class ImageSession : public QObject {
     void imageChanged();
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
+    void effectsChanged();
     /// @brief Emitted with a status message to show to the user.
     void statusMessage(const QString& message, int timeoutMs = -1);
 
@@ -59,7 +83,6 @@ class ImageSession : public QObject {
 
   private:
     void rebuildSnapshotList();
-    void reloadImage();
     bool autosaveSnapshot(const QImage& newImage);
 
     QString                m_filePath;
@@ -69,6 +92,9 @@ class ImageSession : public QObject {
     QVector<QString>       m_labels;
     int                    m_currentIndex = 0;
     int                    m_loadedSnapshotIndex = -1;
+
+    EffectsState m_effects;
+    ViewState    m_viewState;
 
     ImageMonitor *m_monitor;
 };

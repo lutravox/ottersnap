@@ -2,7 +2,7 @@
 
 #include <QAction>
 #include <QObject>
-#include "ui/effects_interfaces.h"
+#include "core/effects_interfaces.h"
 
 /// @brief Adapter that maps IEffectsUI calls to QAction checkboxes.
 class EffectsUIAdapter : public IEffectsUI {
@@ -60,6 +60,6 @@ class EffectsController : public QObject {
     void onEffectsChanged(bool grayscale, bool mirror);
 
     IEffectsRenderer *m_renderer = nullptr;
-    IEffectsState    *m_currentState = nullptr;
+    IEffectsState    *m_state = nullptr;
     IEffectsUI       *m_ui = nullptr;
 };

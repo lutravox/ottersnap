@@ -13,8 +13,8 @@
 #include <QVBoxLayout>
 
 #include "config/appsettings.h"
+#include "controllers/effectscontroller.h"
 #include "ui/dialogs/settingsdialog.h"
-#include "ui/effectscontroller.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
 #include "ui/notificationbar.h"
@@ -30,6 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerState(nullptr),
       m_emptyState(nullptr), m_session(m_settings) {
     m_effectsController = new EffectsController(this);
+    m_viewController = new ViewController(this);
     setupMenu();
     setupUi();
     m_session.load();
@@ -92,6 +93,7 @@ void MainWindow::setupUi() {
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
     m_effectsController->setup(m_viewerState->viewer(), uiAdapter);
+    m_viewController->setViewer(m_viewerState->viewer());
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
@@ -200,11 +202,11 @@ void MainWindow::onCloseCurrentTab() {
 }
 
 void MainWindow::onFitToWindow() {
-    viewer()->fitToWindow();
+    m_viewController->fitToWindow();
 }
 
 void MainWindow::onResetZoom() {
-    viewer()->resetZoom();
+    m_viewController->resetZoom();
 }
 
 void MainWindow::onFileOpen() {
@@ -280,7 +282,7 @@ void MainWindow::applyEffects() {
     if (!tab)
         return;
 
-    m_effectsController->setTargetState(tab);
+    m_effectsController->setTargetState(tab->session());
 }
 
 void MainWindow::onTabChanged(int index) {
@@ -355,18 +357,19 @@ void MainWindow::updateViewer() {
 
     // Save state of the current tab
     if (m_currentTabInView) {
-        m_currentTabInView->setViewState(m_viewerState->viewer()->getViewState());
+        m_viewController->syncViewerToSession();
     }
 
     const auto& image = tab->currentImage();
     if (!image.isNull()) {
         // Restore state for the new tab
-        m_viewerState->viewer()->setViewState(tab->viewState());
+        m_viewController->setActiveSession(tab->session());
+        m_viewController->syncSessionToViewer();
         m_viewerState->viewer()->setImage(image, true);
-        m_effectsController->setTargetState(tab);
+        m_effectsController->setTargetState(tab->session());
     }
 
-    m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->ZoomPercentage());
+    m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->zoomPercentage());
     m_currentTabInView = tab;
 }
 
@@ -389,7 +392,7 @@ void MainWindow::onSnapshotSelected(int index) {
     if (!tab)
         return;
     tab->selectSnapshot(index);
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
     updateViewer();
 }
 
@@ -401,7 +404,7 @@ void MainWindow::updateSnapshotTimeline() {
 
     auto [thumbs, labels] = tab->snapshotThumbnails(48);
     m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->currentSnapshotIndex());
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
 
 void MainWindow::switchContentState(ContentState state) {

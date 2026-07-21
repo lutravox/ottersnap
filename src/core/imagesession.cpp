@@ -117,6 +117,16 @@ bool ImageSession::autosaveSnapshot(const QImage& img) {
     return false;
 }
 
+void ImageSession::setGrayscale(bool enabled) {
+    m_effects.grayscale = enabled;
+    emit effectsChanged();
+}
+
+void ImageSession::setMirror(bool enabled) {
+    m_effects.mirror = enabled;
+    emit effectsChanged();
+}
+
 void ImageSession::rebuildSnapshotList() {
     m_snapshots = SnapshotStore::loadSnapshots(m_filePath);
     m_labels.clear();

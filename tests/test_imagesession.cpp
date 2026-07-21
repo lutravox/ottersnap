@@ -19,6 +19,10 @@ class TestImageSession : public QObject {
     void testSelectSnapshot();
     void testAutoSaveOnChange();
     void testSnapshotThumbnails();
+    void testEffectsState();
+    void testSaveSnapshot();
+    void testSnapshotNavigation();
+    void testViewStateAccess();
 
   private:
     QTemporaryFile *m_tempFile = nullptr;
@@ -111,6 +115,72 @@ void TestImageSession::testSnapshotThumbnails() {
     QVERIFY(!labels.isEmpty());
     QCOMPARE(thumbs.last().size(), QSize(32, 32));
     QCOMPARE(labels.last(), QString("Current"));
+}
+
+void TestImageSession::testEffectsState() {
+    ImageSession session;
+    QSignalSpy   spy(&session, &ImageSession::effectsChanged);
+
+    session.setGrayscale(true);
+    QCOMPARE(session.grayscaleEnabled(), true);
+    QCOMPARE(spy.count(), 1);
+
+    session.setMirror(true);
+    QCOMPARE(session.mirrorEnabled(), true);
+    QCOMPARE(spy.count(), 2);
+
+    session.setGrayscale(false);
+    QCOMPARE(session.grayscaleEnabled(), false);
+    QCOMPARE(spy.count(), 3);
+}
+
+void TestImageSession::testSaveSnapshot() {
+    ImageSession session;
+    session.openImage(m_testFilePath);
+
+    int        initialCount = session.snapshots().size();
+    QSignalSpy spy(&session, &ImageSession::snapshotsChanged);
+
+    session.saveSnapshot();
+
+    // saveSnapshot is asynchronous. Wait for the signal.
+    QVERIFY(spy.wait(2000));
+    QVERIFY(session.snapshots().size() > initialCount);
+}
+
+void TestImageSession::testSnapshotNavigation() {
+    ImageSession session;
+    session.openImage(m_testFilePath);
+
+    // Modify image to a unique color to ensure the snapshot is not a duplicate
+    createTestImage(m_testFilePath, Qt::green);
+
+    // Manually trigger reload instead of waiting for monitor
+    session.reloadImage();
+
+    // Create a snapshot of the updated image
+    session.saveSnapshot();
+    QSignalSpy saveSpy(&session, &ImageSession::snapshotsChanged);
+    QVERIFY(saveSpy.wait(2000));
+
+    // Select the snapshot (index 0)
+    session.selectSnapshot(0);
+    QCOMPARE(session.currentSnapshotIndex(), 0);
+
+    // Verify it's not null
+    QVERIFY(!session.currentImage().isNull());
+}
+
+void TestImageSession::testViewStateAccess() {
+    ImageSession session;
+    session.openImage(m_testFilePath);
+
+    ViewState& vs = session.viewState();
+    // Initialize dimensions so setPercentage works
+    vs.updateImageSize(100, 100);
+    vs.setPercentage(200.0);
+
+    QCOMPARE(session.viewState().percentage(), 200.0);
 }
 
 QTEST_MAIN(TestImageSession)

@@ -1,14 +1,10 @@
 #pragma once
 
 #include <QWidget>
-#include "core/effectsstate.h"
 #include "core/imagesession.h"
-#include "core/viewstate.h"
-#include "ui/effects_interfaces.h"
 
-/// @brief A single image tab. Manages image loading, version history,
-/// image modifiers, and file-system watching.
-class ImageTab : public QWidget, public IEffectsState {
+/// @brief A tab for an opened image.
+class ImageTab : public QWidget {
     Q_OBJECT
 
   public:
@@ -24,37 +20,15 @@ class ImageTab : public QWidget, public IEffectsState {
     /// @brief Close the current image and release resources.
     void closeImage();
 
+    /// @brief The session associated with this tab.
+    ImageSession *session() const {
+        return m_session;
+    }
+
     /// @brief Absolute path to the opened image file.
     /// @return File path, or empty string if no image is open.
     QString filePath() const {
         return m_session ? m_session->filePath() : QString();
-    }
-
-    /// @brief Generate a thumbnail of the current image.
-    /// @param size Desired thumbnail size in pixels (square).
-    /// @return Scaled thumbnail, or null pixmap if no image.
-    QPixmap thumbnail(int size = 40) const;
-
-    /// @brief Index of the currently displayed snapshot.
-    /// @return Zero-based snapshot index.
-    int currentSnapshotIndex() const {
-        return m_session ? m_session->currentSnapshotIndex() : 0;
-    }
-
-    /// @brief Enable or disable grayscale rendering.
-    void setGrayscale(bool enabled);
-
-    /// @brief Enable or disable horizontal mirroring.
-    void setMirror(bool enabled);
-
-    /// @brief Returns whether grayscale is enabled.
-    bool grayscaleEnabled() const {
-        return m_effects.grayscale;
-    }
-
-    /// @brief Returns whether mirroring is enabled.
-    bool mirrorEnabled() const {
-        return m_effects.mirror;
     }
 
     /// @brief Returns the currently selected image.
@@ -63,22 +37,16 @@ class ImageTab : public QWidget, public IEffectsState {
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
 
-    /// @brief Returns the current view state.
-    const ViewState& viewState() const {
-        return m_viewState;
-    }
-
-    /// @brief Sets the current view state.
-    void setViewState(const ViewState& state) {
-        m_viewState = state;
-    }
-
     /// @brief Create a manual snapshot of the current image on disk.
     void saveSnapshot();
 
+    /// @brief Fetches thumbnails of all snapshots and current image.
     /// @param size Desired thumbnail size in pixels (square).
-    /// @return Pair of thumbnail pixmaps and their labels.
+    /// @return thumbnails and associated labels
     std::pair<QVector<QPixmap>, QVector<QString>> snapshotThumbnails(int size) const;
+
+    /// @param size Desired thumbnail size in pixels (square).
+    QPixmap thumbnail(int size) const;
 
   signals:
     /// @brief Emitted with a status message to show to the user.
@@ -101,12 +69,11 @@ class ImageTab : public QWidget, public IEffectsState {
   private slots:
     void onImageChanged();
     void onSnapshotsChanged();
+    void onEffectsChanged();
 
   private:
     void setupUi();
 
-    EffectsState m_effects;
-    ViewState    m_viewState;
-
+    // Remove the state members
     ImageSession *m_session = nullptr;
 };

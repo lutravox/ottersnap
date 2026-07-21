@@ -96,7 +96,8 @@ add_executable(${PROJECT_NAME}
     src/ui/mainwindow.cpp
     src/ui/imagetab.cpp
     src/ui/vkimageviewer.cpp
-    src/ui/effectscontroller.cpp
+    src/controllers/effectscontroller.cpp
+    src/controllers/viewcontroller.cpp
     src/ui/notificationbar.cpp
     src/ui/snapshottimeline.cpp
     src/ui/snapshottab.cpp

@@ -15,6 +15,7 @@
 ImageTab::ImageTab(QWidget *parent) : QWidget(parent), m_session(new ImageSession(this)) {
     connect(m_session, &ImageSession::imageChanged, this, &ImageTab::onImageChanged);
     connect(m_session, &ImageSession::snapshotsChanged, this, &ImageTab::onSnapshotsChanged);
+    connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
 
     setupUi();
@@ -42,20 +43,6 @@ const QImage& ImageTab::currentImage() const {
     return m_session->currentImage();
 }
 
-void ImageTab::setGrayscale(bool enabled) {
-    if (m_effects.grayscale == enabled)
-        return;
-    m_effects.grayscale = enabled;
-    emit effectsChanged(m_effects.grayscale, m_effects.mirror);
-}
-
-void ImageTab::setMirror(bool enabled) {
-    if (m_effects.mirror == enabled)
-        return;
-    m_effects.mirror = enabled;
-    emit effectsChanged(m_effects.grayscale, m_effects.mirror);
-}
-
 void ImageTab::selectSnapshot(int index) {
     m_session->selectSnapshot(index);
 }
@@ -66,6 +53,12 @@ void ImageTab::onImageChanged() {
 
 void ImageTab::onSnapshotsChanged() {
     emit snapshotsChanged();
+}
+
+void ImageTab::onEffectsChanged() {
+    if (m_session) {
+        emit effectsChanged(m_session->grayscaleEnabled(), m_session->mirrorEnabled());
+    }
 }
 
 std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::snapshotThumbnails(int size) const {

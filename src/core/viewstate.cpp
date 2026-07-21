@@ -26,6 +26,9 @@ void ViewState::setViewportSize(int viewWidth, int viewHeight) {
         return;
     }
 
+    m_viewportWidth = viewWidth;
+    m_viewportHeight = viewHeight;
+
     float newFit = std::min(static_cast<float>(viewWidth) / m_imageWidth,
                             static_cast<float>(viewHeight) / m_imageHeight);
 

@@ -2,7 +2,7 @@
 
 #include <functional>
 
-/// @brief Interface for the source of truth regarding image effects.
+/// @brief Interface for effects state.
 class IEffectsState {
   public:
     virtual ~IEffectsState() = default;
@@ -26,7 +26,7 @@ class IEffectsRenderer {
     virtual void setNotificationCallback(EffectChangedCallback callback) = 0;
 };
 
-/// @brief Interface for updating the UI elements (e.g., menu actions).
+/// @brief Interface for the UI elements related to effects (e.g., menu actions).
 class IEffectsUI {
   public:
     virtual ~IEffectsUI() = default;

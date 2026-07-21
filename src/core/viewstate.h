@@ -41,6 +41,17 @@ class ViewState {
     int imageHeight() const {
         return m_imageHeight;
     }
+
+    /// @brief Return the current viewport width in pixels.
+    int viewportWidth() const {
+        return m_viewportWidth;
+    }
+
+    /// @brief Return the current viewport height in pixels.
+    int viewportHeight() const {
+        return m_viewportHeight;
+    }
+
     /// @brief Return the current absolute zoom scale factor.
     float zoom() const {
         return m_zoom;
@@ -89,4 +100,6 @@ class ViewState {
     QPointF m_pan;
     int     m_imageWidth = 0;
     int     m_imageHeight = 0;
+    int     m_viewportWidth = 0;
+    int     m_viewportHeight = 0;
 };

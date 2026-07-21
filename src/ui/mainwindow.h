@@ -4,8 +4,9 @@
 #include <QMap>
 #include <QStackedWidget>
 #include <QStringList>
+#include "controllers/effectscontroller.h"
+#include "controllers/viewcontroller.h"
 #include "core/sessionmanager.h"
-#include "ui/effectscontroller.h"
 #include "ui/emptystate.h"
 #include "ui/tabbar.h"
 #include "ui/viewerstate.h"
@@ -19,6 +20,8 @@ class NotificationBar;
 /// navigation, modifiers, and session persistence.
 class MainWindow : public QMainWindow {
     Q_OBJECT
+
+    friend class MainWindowTestWrapper;
 
   public:
     /// @brief Construct the main window.
@@ -78,6 +81,7 @@ class MainWindow : public QMainWindow {
     QSettings          m_settings;
     SessionManager     m_session;
     EffectsController *m_effectsController;
+    ViewController    *m_viewController;
     QMenu             *m_fileMenu;
     QMenu             *m_editMenu;
     QMenu             *m_viewMenu;

@@ -1311,10 +1311,6 @@ void VkImageViewer::resetZoom() {
     emit zoomChanged(m_viewState.percentage());
 }
 
-double VkImageViewer::ZoomPercentage() const {
-    return m_viewState.percentage();
-}
-
 void VkImageViewer::setZoomPercentage(double pct) {
     m_viewState.setPercentage(pct);
     m_renderer->setZoom(m_viewState.zoom());

@@ -6,13 +6,14 @@
 #include <QVulkanInstance>
 #include <QVulkanWindow>
 
+#include "core/effects_interfaces.h"
+#include "core/viewer_interfaces.h"
 #include "core/viewstate.h"
-#include "ui/effects_interfaces.h"
 
 class VkImageViewerRenderer;
 
 /// @brief Vulkan-accelerated image viewer with GPU mipmapping.
-class VkImageViewer : public QWidget, public IEffectsRenderer {
+class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     Q_OBJECT
 
   public:
@@ -26,7 +27,7 @@ class VkImageViewer : public QWidget, public IEffectsRenderer {
     /// @brief Display an image in the viewer.
     /// @param image The image to display.
     /// @param preserveView If true, keep the current zoom and pan. If false, reset to fit.
-    void setImage(const QImage& image, bool preserveView = false);
+    void setImage(const QImage& image, bool preserveView = false) override;
 
     /// @brief Fit the image to the window, adjusting zoom and pan.
     void fitToWindow();
@@ -35,17 +36,19 @@ class VkImageViewer : public QWidget, public IEffectsRenderer {
     void resetZoom();
 
     /// @brief Enable or disable grayscale rendering in the fragment shader.
-    void setGrayscale(bool enabled);
+    void setGrayscale(bool enabled) override;
 
     /// @brief Enable or disable horizontal mirroring in the fragment shader.
-    void setMirror(bool enabled);
+    void setMirror(bool enabled) override;
 
     /// @brief Set the callback to be notified when effects are changed.
     void setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) override;
 
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
-    double ZoomPercentage() const;
+    double zoomPercentage() const override {
+        return m_viewState.percentage();
+    }
 
     /// @brief Set the zoom level by percentage (100.0 = 1:1).
     /// @param pct The desired zoom percentage.
@@ -55,13 +58,13 @@ class VkImageViewer : public QWidget, public IEffectsRenderer {
     void clear();
 
     /// @brief Get the current view state.
-    ViewState getViewState() const {
+    ViewState getViewState() const override {
         return m_viewState;
     }
 
     /// @brief Set the view state.
     /// @param state The new view state.
-    void setViewState(const ViewState& state) {
+    void setViewState(const ViewState& state) override {
         m_viewState = state;
     }
 

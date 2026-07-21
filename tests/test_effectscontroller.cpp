@@ -1,7 +1,7 @@
 #include <QObject>
 #include <QtTest>
+#include "controllers/effectscontroller.h"
 #include "ui/effects_interfaces.h"
-#include "ui/effectscontroller.h"
 
 // Mocks
 

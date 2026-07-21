@@ -35,6 +35,11 @@ class AppSettings {
     /// @brief Set the autosave snapshots preference.
     static void setAutosaveSnapshots(bool value);
 
+    /// @brief Return the interval between base snapshots.
+    static int baseInterval();
+    /// @brief Set the interval between base snapshots.
+    static void setBaseInterval(int value);
+
     /// @brief Return the maximum memory allowed for the snapshot cache in MB.
     /// @return The cache size in MB.
     static int maxSnapshotCacheSizeMB();

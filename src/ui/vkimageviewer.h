@@ -7,11 +7,12 @@
 #include <QVulkanWindow>
 
 #include "core/viewstate.h"
+#include "ui/effects_interfaces.h"
 
 class VkImageViewerRenderer;
 
 /// @brief Vulkan-accelerated image viewer with GPU mipmapping.
-class VkImageViewer : public QWidget {
+class VkImageViewer : public QWidget, public IEffectsRenderer {
     Q_OBJECT
 
   public:
@@ -38,6 +39,9 @@ class VkImageViewer : public QWidget {
 
     /// @brief Enable or disable horizontal mirroring in the fragment shader.
     void setMirror(bool enabled);
+
+    /// @brief Set the callback to be notified when effects are changed.
+    void setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) override;
 
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
@@ -90,6 +94,8 @@ class VkImageViewer : public QWidget {
     ViewState m_viewState;
     bool      m_isDragging = false;
     QPoint    m_lastMousePos;
+
+    IEffectsRenderer::EffectChangedCallback m_notificationCallback = nullptr;
 };
 
 using ImageViewer = VkImageViewer;

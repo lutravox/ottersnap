@@ -21,7 +21,6 @@ QHash<QString, QVector<ImageSnapshot>> SnapshotStore::s_snapshotsCache;
 static const QString c_baseSubDir = QLatin1String("snapshots");
 static const QString c_indexFile = QLatin1String("index.json");
 static const QString c_tmp = QLatin1String(".tmp");
-static const int     c_baseInterval = 100;
 
 static QString snapshotDirPath(const QString& key) {
     return SnapshotStore::baseDir() + '/' + key;
@@ -211,7 +210,7 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
     s.timestamp = QDateTime::currentDateTimeUtc();
     s.checksum = checksum;
 
-    bool shouldBeBase = (nextIdx == 1) || ((nextIdx - 1) % c_baseInterval == 0);
+    bool shouldBeBase = (nextIdx == 1) || ((nextIdx - 1) % AppSettings::baseInterval() == 0);
 
     // If not the first snapshot, check if image properties changed
     if (!shouldBeBase && !snapshots.isEmpty()) {

@@ -1146,6 +1146,10 @@ VkImageViewer::~VkImageViewer() {
     delete m_vulkanInstance;
 }
 
+void VkImageViewer::setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) {
+    m_notificationCallback = callback;
+}
+
 bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
     if (obj != m_vulkanWindow)
         return QObject::eventFilter(obj, event);
@@ -1173,10 +1177,16 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
             if (selectedAction == grayscaleAction) {
                 bool enabled = grayscaleAction->isChecked();
                 emit grayscaleToggled(enabled);
+                if (m_notificationCallback) {
+                    m_notificationCallback(enabled, m_renderer->mirrorEnabled());
+                }
                 return true;
             } else if (selectedAction == mirrorAction) {
                 bool enabled = mirrorAction->isChecked();
                 emit mirrorToggled(enabled);
+                if (m_notificationCallback) {
+                    m_notificationCallback(m_renderer->grayscaleEnabled(), enabled);
+                }
                 return true;
             }
         }

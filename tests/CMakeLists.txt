@@ -9,6 +9,35 @@ function(add_unit_test NAME SRC)
     add_test(NAME test_${NAME} COMMAND test_${NAME})
 endfunction()
 
+# ── SessionManager ─────────────────────────────────────────────────
+add_unit_test(sessionmanager   core/sessionmanager.cpp Qt6::Core Qt6::Widgets Qt6::Concurrent)
+target_sources(test_sessionmanager PRIVATE 
+    ${CMAKE_SOURCE_DIR}/src/ui/imagetab.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/imagesession.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/viewstate.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/imagemonitor.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/snapshotstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp
+)
+
+# ── ImageSession ──────────────────────────────────────────────────
+add_unit_test(imagesession   core/imagesession.cpp Qt6::Core Qt6::Gui Qt6::Concurrent)
+target_sources(test_imagesession PRIVATE 
+    ${CMAKE_SOURCE_DIR}/src/core/imagemonitor.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/snapshotstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp
+)
+
+# ── ImageMonitor ──────────────────────────────────────────────────
+add_unit_test(imagemonitor   core/imagemonitor.cpp Qt6::Core)
+
+# ── ImageCache ──────────────────────────────────────────────────────
+add_unit_test(imagecache   core/imagecache.cpp Qt6::Core Qt6::Gui)
+
 # ── ViewState ────────────────────────────────────────────────────────
 add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 
@@ -16,8 +45,8 @@ add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 add_unit_test(snapshotstore  core/snapshotstore.cpp  Qt6::Core Qt6::Gui)
 target_sources(test_snapshotstore PRIVATE ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp)
 
-# ── AppSettings ──────────────────────────────────────────────────────
-add_unit_test(appsettings   config/appsettings.cpp Qt6::Core)
-
 # ── DiskUtils ──────────────────────────────────────────────────────
 add_unit_test(diskutils   core/diskutils.cpp Qt6::Core Qt6::Gui)
+
+# ── EffectsController ─────────────────────────────────────────────────────
+add_unit_test(effectscontroller ui/effectscontroller.cpp Qt6::Core Qt6::Widgets)

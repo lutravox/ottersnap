@@ -90,7 +90,8 @@ void MainWindow::setupUi() {
     centralLayout->addWidget(m_contentStack, 1);
 
     // Controllers
-    m_effectsController->setup(m_viewerState->viewer(), m_actionGrayscale, m_actionMirror);
+    auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
+    m_effectsController->setup(m_viewerState->viewer(), uiAdapter);
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
@@ -279,7 +280,7 @@ void MainWindow::applyEffects() {
     if (!tab)
         return;
 
-    m_effectsController->setTargetTab(tab);
+    m_effectsController->setTargetState(tab);
 }
 
 void MainWindow::onTabChanged(int index) {
@@ -362,7 +363,7 @@ void MainWindow::updateViewer() {
         // Restore state for the new tab
         m_viewerState->viewer()->setViewState(tab->viewState());
         m_viewerState->viewer()->setImage(image, true);
-        m_effectsController->setTargetTab(tab);
+        m_effectsController->setTargetState(tab);
     }
 
     m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->ZoomPercentage());
@@ -377,7 +378,7 @@ void MainWindow::updateState() {
         switchContentState(m_currentState);
 
         if (m_currentState == ContentState::Empty) {
-            m_effectsController->setTargetTab(nullptr);
+            m_effectsController->setTargetState(nullptr);
         }
         updateMenuBar();
     }

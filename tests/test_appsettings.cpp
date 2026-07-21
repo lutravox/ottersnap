@@ -12,6 +12,7 @@ class TestAppSettings : public QObject {
     void testRestoreSession();
     void testAutosaveSnapshots();
     void testMaxSnapshotCacheSize();
+    void testBaseInterval();
     void testIdentity();
 };
 
@@ -47,6 +48,12 @@ void TestAppSettings::testMaxSnapshotCacheSize() {
     int testSize = 512;
     AppSettings::setMaxSnapshotCacheSizeMB(testSize);
     QCOMPARE(AppSettings::maxSnapshotCacheSizeMB(), testSize);
+}
+
+void TestAppSettings::testBaseInterval() {
+    int testInterval = 50;
+    AppSettings::setBaseInterval(testInterval);
+    QCOMPARE(AppSettings::baseInterval(), testInterval);
 }
 
 void TestAppSettings::testIdentity() {

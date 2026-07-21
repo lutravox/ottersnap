@@ -45,12 +45,22 @@ void AppSettings::setAutosaveSnapshots(bool value) {
     settings().setValue("General/autosaveSnapshots", value);
 }
 
+int AppSettings::baseInterval() {
+    return settings().value("General/baseInterval", 100).toInt();
+}
+
+void AppSettings::setBaseInterval(int value) {
+    settings().setValue("General/baseInterval", value);
+}
+
 const char *AppSettings::applicationName() {
     return c_applicationName;
 }
+
 const char *AppSettings::organizationName() {
     return c_organizationName;
 }
+
 const char *AppSettings::organizationDomain() {
     return c_organizationDomain;
 }

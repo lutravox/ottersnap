@@ -2,23 +2,46 @@
 
 #include <QAction>
 #include <QObject>
+#include "ui/effects_interfaces.h"
 
-class ImageTab;
-class VkImageViewer;
+/// @brief Adapter that maps IEffectsUI calls to QAction checkboxes.
+class EffectsUIAdapter : public IEffectsUI {
+  public:
+    EffectsUIAdapter(QAction *grayscaleAction, QAction *mirrorAction)
+        : m_grayscaleAction(grayscaleAction), m_mirrorAction(mirrorAction) {
+    }
 
-/// @brief Coordinates the synchronization of image effects between the state (ImageTab),
-/// the UI (QActions), and the renderer (VkImageViewer).
+    void setGrayscaleChecked(bool checked) override {
+        if (m_grayscaleAction)
+            m_grayscaleAction->setChecked(checked);
+    }
+    void setMirrorChecked(bool checked) override {
+        if (m_mirrorAction)
+            m_mirrorAction->setChecked(checked);
+    }
+    bool grayscaleChecked() const override {
+        return m_grayscaleAction ? m_grayscaleAction->isChecked() : false;
+    }
+    bool mirrorChecked() const override {
+        return m_mirrorAction ? m_mirrorAction->isChecked() : false;
+    }
+
+  private:
+    QAction *m_grayscaleAction = nullptr;
+    QAction *m_mirrorAction = nullptr;
+};
+
 class EffectsController : public QObject {
     Q_OBJECT
 
   public:
     explicit EffectsController(QObject *parent = nullptr);
 
-    /// @brief Initialize the controller with the UI elements and viewer.
-    void setup(VkImageViewer *viewer, QAction *grayscaleAction, QAction *mirrorAction);
+    /// @brief Initialize the controller with the interface implementations.
+    void setup(IEffectsRenderer *renderer, IEffectsUI *ui);
 
-    /// @brief Set the current tab being managed. Syncs UI and viewer to tab state.
-    void setTargetTab(ImageTab *tab);
+    /// @brief Set the current state being managed. Syncs UI and renderer to state.
+    void setTargetState(IEffectsState *state);
 
     /// @brief Toggle grayscale mode.
     void toggleGrayscale();
@@ -33,10 +56,10 @@ class EffectsController : public QObject {
     void setMirror(bool enabled);
 
   private:
-    void syncFromTab();
+    void syncFromState();
+    void onEffectsChanged(bool grayscale, bool mirror);
 
-    VkImageViewer *m_viewer = nullptr;
-    ImageTab      *m_currentTab = nullptr;
-    QAction       *m_grayscaleAction = nullptr;
-    QAction       *m_mirrorAction = nullptr;
+    IEffectsRenderer *m_renderer = nullptr;
+    IEffectsState    *m_currentState = nullptr;
+    IEffectsUI       *m_ui = nullptr;
 };

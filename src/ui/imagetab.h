@@ -1,23 +1,14 @@
 #pragma once
 
-#include <QFileSystemWatcher>
-#include <QImage>
-#include <QPixmap>
-#include <QString>
-#include <QVector>
 #include <QWidget>
-#include <utility>
-
-#include <QFuture>
-#include <QFutureWatcher>
-
 #include "core/effectsstate.h"
 #include "core/imagesession.h"
 #include "core/viewstate.h"
+#include "ui/effects_interfaces.h"
 
 /// @brief A single image tab. Manages image loading, version history,
 /// image modifiers, and file-system watching.
-class ImageTab : public QWidget {
+class ImageTab : public QWidget, public IEffectsState {
     Q_OBJECT
 
   public:

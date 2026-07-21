@@ -122,6 +122,7 @@ void SnapshotTimeline::updateTabState(int index, bool selected) {
                            ? "C"
                            : QString::number(index + 1));
         label->setProperty("selected", selected ? "true" : "false");
+        label->setEnabled(selected);
         label->style()->unpolish(label);
         label->style()->polish(label);
     }
@@ -156,6 +157,7 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
 
         bool isSelected = (i == m_currentIndex);
         snapshotLabel->setProperty("selected", isSelected ? "true" : "false");
+        snapshotLabel->setEnabled(isSelected);
 
         SnapshotTab *lbl = new SnapshotTab(container);
         lbl->setFixedSize(c_thumbnailSize, c_thumbnailSize);

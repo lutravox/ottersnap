@@ -81,6 +81,11 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSnapshotSelected);
 
+    connect(m_viewerState->snapshotTimeline(),
+            &SnapshotTimeline::createSnapshotRequested,
+            this,
+            &MainWindow::onSaveSnapshot);
+
     // Empty state
     m_emptyState = new EmptyState(m_contentStack);
 

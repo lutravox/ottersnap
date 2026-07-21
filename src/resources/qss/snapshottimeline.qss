@@ -29,6 +29,7 @@ QScrollBar::sub-page:horizontal {
 }
 
 QLabel#snapshotLabel {
+    color: palette(DisabledText);
     font-weight: bold;
     font-size: 10px;
     background: transparent;
@@ -38,4 +39,9 @@ QLabel#snapshotLabel {
 
 QLabel#snapshotLabel[selected="true"] {
     color: palette(Highlight);
+}
+
+QPushButton#createSnapshotButton {
+    font-weight: bold;
+    font-size: 12px;
 }

@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStyle>
@@ -33,9 +34,22 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
 
     m_scrollArea->setWidget(m_contentWidget);
 
-    auto *root = new QVBoxLayout(this);
+    m_createButtonWrapper = new QWidget(this);
+    m_createButtonWrapper->setFixedWidth(22);
+    m_createButtonWrapper->setFixedHeight(c_thumbnailSize + 12);
+
+    m_createButton = new QPushButton("+", m_createButtonWrapper);
+    m_createButton->setObjectName("createSnapshotButton");
+    m_createButton->setFixedSize(27, c_thumbnailSize + 12);
+    m_createButton->setToolTip(tr("Create a new snapshot"));
+    connect(
+        m_createButton, &QPushButton::clicked, this, &SnapshotTimeline::createSnapshotRequested);
+
+    auto *root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
-    root->addWidget(m_scrollArea);
+    root->setSpacing(0);
+    root->addWidget(m_scrollArea, 1);
+    root->addWidget(m_createButtonWrapper);
 
     // Keep the strip to a compact, fixed height
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);

@@ -9,13 +9,13 @@ EmptyState::EmptyState(QWidget *parent) : QWidget(parent) {
     layout->setAlignment(Qt::AlignCenter);
     layout->setSpacing(20);
 
-    auto *openBtn = new QPushButton("Open an Image", this);
+    auto *openBtn = new QPushButton(tr("Open an Image"), this);
     openBtn->setFixedWidth(200);
     openBtn->setFixedHeight(60);
     openBtn->setFont({openBtn->font().family(), 12, QFont::Normal});
     connect(openBtn, &QPushButton::clicked, this, &EmptyState::openRequested);
 
-    auto *settingsBtn = new QPushButton("Settings", this);
+    auto *settingsBtn = new QPushButton(tr("Settings"), this);
     settingsBtn->setFixedWidth(200);
     settingsBtn->setFixedHeight(40);
     connect(settingsBtn, &QPushButton::clicked, this, &EmptyState::settingsRequested);

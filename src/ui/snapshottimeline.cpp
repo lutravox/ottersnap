@@ -41,7 +41,7 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_createButtonWrapper->setFixedWidth(22);
     m_createButtonWrapper->setFixedHeight(c_thumbnailSize + 12);
 
-    m_createButton = new QPushButton("+", m_createButtonWrapper);
+    m_createButton = new QPushButton(tr("+"), m_createButtonWrapper);
     m_createButton->setObjectName("createSnapshotButton");
     m_createButton->setFixedSize(27, c_thumbnailSize + 12);
     m_createButton->setToolTip(tr("Create a new snapshot"));
@@ -168,7 +168,7 @@ void SnapshotTimeline::updateTabState(int index, bool selected) {
     if (index < static_cast<int>(m_snapshotLabels.size())) {
         QLabel *label = m_snapshotLabels[index];
         label->setText(index == static_cast<int>(m_snapshottabs.size()) - 1
-                           ? "C"
+                           ? tr("C")
                            : QString::number(index + 1));
         label->setProperty("selected", selected ? "true" : "false");
         label->setEnabled(selected);
@@ -201,7 +201,7 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         QLabel *snapshotLabel = new QLabel(container);
         snapshotLabel->setObjectName("snapshotLabel");
         snapshotLabel->setAlignment(Qt::AlignCenter);
-        snapshotLabel->setText(i == thumbnails.size() - 1 ? "C" : QString::number(i + 1));
+        snapshotLabel->setText(i == thumbnails.size() - 1 ? tr("C") : QString::number(i + 1));
         snapshotLabel->setGeometry(0, 0, c_thumbnailSize, 16);
         snapshotLabel->setContextMenuPolicy(Qt::NoContextMenu);
 

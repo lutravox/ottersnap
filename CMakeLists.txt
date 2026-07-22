@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 # ── Shader pipeline ──────────────────────────────────────────────────────
@@ -135,6 +135,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE src)
 
 # ── Link libraries ───────────────────────────────────────────────────────
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets Qt6::Gui Qt6::Concurrent)
+
+qt_add_translations(${PROJECT_NAME}
+    RESOURCE_PREFIX "/translations"
+    TS_FILES 
+        src/resources/translations/ottersnap_en.ts
+)
 
 # ── Installation ─────────────────────────────────────────────────────────
 # BUNDLE is for macOS (.app); RUNTIME is for Linux/Windows executables.

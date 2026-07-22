@@ -15,7 +15,7 @@ static constexpr double c_zoomStep = 10.0;
 
 StatusBar::StatusBar(QWidget *parent)
     : QWidget(parent), m_timestampLabel(new QLabel(this)), m_dimensionsLabel(new QLabel(this)),
-      spinbox(new QDoubleSpinBox(this)), btnFit(new QPushButton("Fit", this)) {
+      spinbox(new QDoubleSpinBox(this)), btnFit(new QPushButton(tr("Fit"), this)) {
     spinbox->setRange(c_minZoom, c_maxZoom);
     spinbox->setSingleStep(c_zoomStep);
     spinbox->setValue(c_defaultZoom);

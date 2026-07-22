@@ -119,54 +119,54 @@ void MainWindow::setupUi() {
 }
 
 void MainWindow::setupMenu() {
-    m_fileMenu = menuBar()->addMenu("&File");
-    m_actionOpen = m_fileMenu->addAction("&Open Image...");
+    m_fileMenu = menuBar()->addMenu(tr("&File"));
+    m_actionOpen = m_fileMenu->addAction(tr("&Open Image..."));
     m_actionOpen->setShortcut(QKeySequence::Open);
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
-    m_actionSaveSnapshot = m_fileMenu->addAction("&Save Snapshot of Current");
+    m_actionSaveSnapshot = m_fileMenu->addAction(tr("&Save Snapshot of Current"));
     m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
 
-    m_actionDeleteSnapshot = m_fileMenu->addAction("&Delete Selected Snapshot");
+    m_actionDeleteSnapshot = m_fileMenu->addAction(tr("&Delete Selected Snapshot"));
     m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
     connect(m_actionDeleteSnapshot,
             &QAction::triggered,
             this,
             &MainWindow::onDeleteCurrentSnapshotRequested);
 
-    m_actionCloseTab = m_fileMenu->addAction("Close &Tab");
+    m_actionCloseTab = m_fileMenu->addAction(tr("Close &Tab"));
     m_actionCloseTab->setShortcut(QKeySequence::Close);
     connect(m_actionCloseTab, &QAction::triggered, this, &MainWindow::onCloseCurrentTab);
 
     m_fileMenu->addSeparator();
 
-    m_actionExit = m_fileMenu->addAction("E&xit");
+    m_actionExit = m_fileMenu->addAction(tr("E&xit"));
     m_actionExit->setShortcut(QKeySequence::Quit);
     connect(m_actionExit, &QAction::triggered, this, &QWidget::close);
 
-    m_editMenu = menuBar()->addMenu("&Edit");
-    m_actionSettings = m_editMenu->addAction("&Settings");
+    m_editMenu = menuBar()->addMenu(tr("&Edit"));
+    m_actionSettings = m_editMenu->addAction(tr("&Settings"));
     connect(m_actionSettings, &QAction::triggered, this, &MainWindow::onSettings);
 
-    m_viewMenu = menuBar()->addMenu("&View");
-    m_actionFitWindow = m_viewMenu->addAction("&Fit to Window");
+    m_viewMenu = menuBar()->addMenu(tr("&View"));
+    m_actionFitWindow = m_viewMenu->addAction(tr("&Fit to Window"));
     m_actionFitWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
     connect(m_actionFitWindow, &QAction::triggered, this, &MainWindow::onFitToWindow);
 
-    m_actionResetZoom = m_viewMenu->addAction("Reset &Zoom");
+    m_actionResetZoom = m_viewMenu->addAction(tr("Reset &Zoom"));
     m_actionResetZoom->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
     connect(m_actionResetZoom, &QAction::triggered, this, &MainWindow::onResetZoom);
 
-    m_effectsMenu = menuBar()->addMenu("&Effects");
-    m_actionGrayscale = m_effectsMenu->addAction("&Grayscale");
+    m_effectsMenu = menuBar()->addMenu(tr("&Effects"));
+    m_actionGrayscale = m_effectsMenu->addAction(tr("&Grayscale"));
     m_actionGrayscale->setCheckable(true);
     m_actionGrayscale->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
     connect(m_actionGrayscale, &QAction::triggered, this, [this]() {
         m_effectsController->toggleGrayscale();
     });
 
-    m_actionMirror = m_effectsMenu->addAction("&Mirror");
+    m_actionMirror = m_effectsMenu->addAction(tr("&Mirror"));
     m_actionMirror->setCheckable(true);
     m_actionMirror->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(m_actionMirror, &QAction::triggered, this, [this]() {

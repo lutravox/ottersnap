@@ -1167,11 +1167,11 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         } else if (me->button() == Qt::RightButton) {
             QMenu menu(this);
 
-            auto *grayscaleAction = menu.addAction("Grayscale");
+            auto *grayscaleAction = menu.addAction(tr("Grayscale"));
             grayscaleAction->setCheckable(true);
             grayscaleAction->setChecked(m_renderer->grayscaleEnabled());
 
-            auto *mirrorAction = menu.addAction("Mirror");
+            auto *mirrorAction = menu.addAction(tr("Mirror"));
             mirrorAction->setCheckable(true);
             mirrorAction->setChecked(m_renderer->mirrorEnabled());
 

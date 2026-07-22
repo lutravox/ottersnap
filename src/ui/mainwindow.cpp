@@ -125,11 +125,11 @@ void MainWindow::setupMenu() {
     m_actionOpen->setShortcut(QKeySequence::Open);
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
-    m_actionSaveSnapshot = m_fileMenu->addAction("&Save Snapshot");
+    m_actionSaveSnapshot = m_fileMenu->addAction("&Save Snapshot of Current");
     m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
 
-    m_actionDeleteSnapshot = m_fileMenu->addAction("Delete &Current Snapshot");
+    m_actionDeleteSnapshot = m_fileMenu->addAction("&Delete Selected Snapshot");
     m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
     connect(m_actionDeleteSnapshot,
             &QAction::triggered,
@@ -264,7 +264,7 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
     int         index = tab->session()->currentSnapshotIndex();
     const auto& snapshots = tab->session()->snapshots();
 
-    // The last snapshot is the current disk image ('C') and cannot be deleted.
+    // The last "snapshot" is the current disk image ('C') and cannot be deleted.
     if (index < 0 || index >= static_cast<int>(snapshots.size())) {
         return;
     }
@@ -342,6 +342,7 @@ void MainWindow::onTabChanged(int index) {
     updateSnapshotTimeline();
     updateViewer();
     updateState();
+    updateMenuBar();
     setTabThumbnail(index);
 }
 
@@ -417,6 +418,19 @@ void MainWindow::updateViewer() {
         m_viewController->syncSessionToViewer();
         m_viewerState->viewer()->setImage(image, true);
         m_effectsController->setTargetState(tab->session());
+        m_viewerState->statusBar()->setDimensions(image.width(), image.height());
+
+        // Update timestamp in status bar
+        int         idx = tab->session()->currentSnapshotIndex();
+        const auto& snapshots = tab->session()->snapshots();
+        if (idx >= 0 && idx < static_cast<int>(snapshots.size())) {
+            m_viewerState->statusBar()->setTimestamp(
+                snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
+        } else if (idx == static_cast<int>(snapshots.size())) {
+            m_viewerState->statusBar()->setTimestamp(tr("Current"));
+        } else {
+            m_viewerState->statusBar()->setTimestamp("");
+        }
     }
 
     m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->zoomPercentage());
@@ -468,7 +482,6 @@ void MainWindow::onSnapshotDeletionRequested(int index) {
     msgBox.setText(tr("Delete snapshot %1?").arg(index + 1));
     msgBox.setIcon(QMessageBox::Warning);
 
-    // Apply styling from resources
     QFile qssFile(":/qss/messagebox.qss");
     if (qssFile.open(QIODevice::ReadOnly)) {
         msgBox.setStyleSheet(qssFile.readAll());

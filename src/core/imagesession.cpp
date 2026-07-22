@@ -149,7 +149,7 @@ void ImageSession::rebuildSnapshotList() {
     m_snapshots = SnapshotStore::loadSnapshots(m_filePath);
     m_labels.clear();
     for (const auto& v : m_snapshots) {
-        m_labels.append(QString("s%1 — %2").arg(v.snapshotIndex).arg(v.timestamp.toString()));
+        m_labels.append(v.timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
     }
     m_labels.append("Current");
     emit snapshotsChanged();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDoubleSpinBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QWidget>
 
@@ -22,6 +23,15 @@ class StatusBar : public QWidget {
     /// @param emitSignal If true, emits zoomChanged after setting.
     void setZoom(double pct, bool emitSignal = false);
 
+    /// @brief Set the image dimensions to display.
+    /// @param width Image width in pixels.
+    /// @param height Image height in pixels.
+    void setDimensions(int width, int height);
+
+    /// @brief Set the snapshot timestamp to display.
+    /// @param timestamp The formatted timestamp string.
+    void setTimestamp(const QString& timestamp);
+
   signals:
     /// @brief Emitted when the user changes the zoom via the spinbox.
     /// @param pct The new zoom percentage.
@@ -31,6 +41,8 @@ class StatusBar : public QWidget {
     void fitRequested();
 
   private:
+    QLabel         *m_timestampLabel;
+    QLabel         *m_dimensionsLabel;
     QDoubleSpinBox *spinbox;
     QPushButton    *btnFit;
 };

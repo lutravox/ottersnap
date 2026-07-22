@@ -41,7 +41,7 @@ QImage ImageCache::loadThumbnail(const QString&          imageKey,
 
     QDir().mkpath(cacheDir);
 
-    QString thumbPath = cacheDir + '/' + QString::asprintf("v%04d.jpg", version);
+    QString thumbPath = cacheDir + '/' + QString::asprintf("v%04d.webp", version);
 
     if (QFile::exists(thumbPath)) {
         return QImage(thumbPath);
@@ -53,7 +53,7 @@ QImage ImageCache::loadThumbnail(const QString&          imageKey,
     }
 
     QImage thumb = full.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    if (!thumb.save(thumbPath, "JPG")) {
+    if (!thumb.save(thumbPath, "WEBP")) {
         qWarning() << "[ImageCache] Failed to save thumbnail in cache:" << thumbPath;
     }
 

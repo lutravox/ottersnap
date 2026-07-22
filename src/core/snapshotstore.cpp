@@ -363,6 +363,10 @@ void SnapshotStore::deleteAllSnapshots(const QString& filePath) {
     // The images will be evicted naturally via LRU.
 }
 
+void SnapshotStore::clearCache() {
+    s_snapshotsCache.clear();
+}
+
 bool SnapshotStore::deleteSnapshot(const QString& filePath, int snapshotIndex) {
     QString                key = imageKey(filePath);
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);

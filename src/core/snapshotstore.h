@@ -65,6 +65,9 @@ class SnapshotStore {
     /// @brief Delete all stored snapshots for an image file.
     static void deleteAllSnapshots(const QString& filePath);
 
+    /// @brief Clear the in-memory snapshot cache.
+    static void clearCache();
+
   private:
     /// @brief In-memory cache of all snapshot records, keyed by image key (hash of filePath).
     static QHash<QString, QVector<ImageSnapshot>> s_snapshotsCache;

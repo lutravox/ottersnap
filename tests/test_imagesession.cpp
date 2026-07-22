@@ -23,6 +23,7 @@ class TestImageSession : public QObject {
     void testSaveSnapshot();
     void testSnapshotNavigation();
     void testViewStateAccess();
+    void testSnapshotDeletion();
 
   private:
     QTemporaryFile *m_tempFile = nullptr;
@@ -85,7 +86,6 @@ void TestImageSession::testSelectSnapshot() {
 }
 
 void TestImageSession::testAutoSaveOnChange() {
-    // Enable autosave for the test
     AppSettings::setAutosaveSnapshots(true);
 
     ImageSession session;
@@ -97,7 +97,6 @@ void TestImageSession::testAutoSaveOnChange() {
     createTestImage(m_testFilePath, Qt::blue);
 
     // ImageSession uses ImageMonitor, so we wait for the signal to propagate
-    // This is an integration test of Session -> Monitor -> Disk
     QVERIFY(spy.wait(2000));
 
     // The image should now be blue
@@ -155,7 +154,7 @@ void TestImageSession::testSnapshotNavigation() {
     // Modify image to a unique color to ensure the snapshot is not a duplicate
     createTestImage(m_testFilePath, Qt::green);
 
-    // Manually trigger reload instead of waiting for monitor
+    // Manually trigger reload
     session.reloadImage();
 
     // Create a snapshot of the updated image
@@ -181,6 +180,62 @@ void TestImageSession::testViewStateAccess() {
     vs.setPercentage(200.0);
 
     QCOMPARE(session.viewState().percentage(), 200.0);
+}
+
+void TestImageSession::testSnapshotDeletion() {
+    ImageSession session;
+
+    QString uniquePath = m_tempFile->fileName() + "_del.png";
+    AppSettings::setAutosaveSnapshots(false);
+    SnapshotStore::deleteAllSnapshots(uniquePath);
+    createTestImage(uniquePath, Qt::red);
+    session.openImage(uniquePath);
+
+    // 1. Create snapshots with unique colors to ensure they are saved
+    QColor colors[] = {Qt::blue, Qt::green, Qt::yellow};
+    for (int i = 0; i < 3; ++i) {
+        createTestImage(uniquePath, colors[i]);
+        session.reloadImage();
+        session.saveSnapshot();
+        QSignalSpy spy(&session, &ImageSession::snapshotsChanged);
+        QVERIFY(spy.wait(2000));
+    }
+
+    // Current state: snapshots [S1, S2, S3], current image is Disk Image (index 3)
+    QCOMPARE(session.snapshots().size(), 3);
+    session.selectSnapshot(3);
+    QCOMPARE(session.currentSnapshotIndex(), 3);
+    QVERIFY(!session.currentImage().isNull());
+
+    // Scenario A: Delete a snapshot before the current one (e.g., index 1 / S2)
+    session.deleteSnapshot(1);
+
+    // After deletion, snapshots size is 2. m_currentIndex should be updated to 2.
+    QCOMPARE(session.snapshots().size(), 2);
+    QCOMPARE(session.currentSnapshotIndex(), 2);
+    QVERIFY(!session.currentImage().isNull());
+
+    // Scenario B: Viewing a snapshot and deleting one before it.
+    // Current state: [S1, S3]. Select S3 (index 1).
+    session.selectSnapshot(1);
+    QCOMPARE(session.currentSnapshotIndex(), 1);
+
+    // Delete S1 (index 0).
+    session.deleteSnapshot(0);
+
+    // After deletion, snapshots size is 1. S3 is now at index 0.
+    // m_currentIndex should have shifted from 1 to 0.
+    QCOMPARE(session.snapshots().size(), 1);
+    QCOMPARE(session.currentSnapshotIndex(), 0);
+    QVERIFY(!session.currentImage().isNull());
+
+    // Scenario C: Viewing a snapshot and deleting it.
+    session.deleteSnapshot(0); // Delete the only remaining snapshot S3
+
+    // Should move back to "Current" (index 0 now)
+    QCOMPARE(session.snapshots().size(), 0);
+    QCOMPARE(session.currentSnapshotIndex(), 0);
+    QVERIFY(!session.currentImage().isNull());
 }
 
 QTEST_MAIN(TestImageSession)

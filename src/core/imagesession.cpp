@@ -104,12 +104,27 @@ void ImageSession::deleteSnapshot(int index) {
     int relativeVersion = index + 1;
 
     if (SnapshotStore::deleteSnapshot(m_filePath, snapshotId)) {
+        // Store current index to adjust it after the list is rebuilt
+        int oldIndex = m_currentIndex;
+
         rebuildSnapshotList();
 
-        if (m_currentIndex == index) {
+        if (oldIndex == index) {
+            // Viewing the deleted snapshot -> move to current disk image
             m_currentIndex = static_cast<int>(m_snapshots.size());
-            emit imageChanged();
+        } else if (oldIndex > index && oldIndex < static_cast<int>(m_snapshots.size()) + 1) {
+            // Viewed snapshot shifted left, or we were viewing the disk image
+            // If oldIndex was S, and we deleted one, new S is S-1.
+            // Either way, if it's above the deletion point, it shifts.
+            m_currentIndex = oldIndex - 1;
+        } else {
+            m_currentIndex = oldIndex;
         }
+
+        // Ensure we are still within valid bounds [0, m_snapshots.size()]
+        m_currentIndex = qBound(0, m_currentIndex, static_cast<int>(m_snapshots.size()));
+
+        emit imageChanged();
         emit statusMessage(QString("Snapshot %1 deleted.").arg(relativeVersion));
     } else {
         emit statusMessage("Failed to delete snapshot.");

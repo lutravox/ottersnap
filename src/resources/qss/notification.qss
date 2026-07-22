@@ -1,0 +1,7 @@
+#notification {
+    background-color: palette(Window);
+    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 5px;
+    border: 1px solid palette(Midlight);
+}

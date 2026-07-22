@@ -175,6 +175,9 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 class VkImageViewerWindow : public QVulkanWindow {
   public:
     explicit VkImageViewerWindow(QWindow *parent = nullptr) : QVulkanWindow(parent) {
+        QSurfaceFormat format;
+        format.setAlphaBufferSize(8);
+        setFormat(format);
     }
 
     void setViewerRenderer(VkImageViewerRenderer *r) {

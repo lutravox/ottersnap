@@ -81,6 +81,7 @@ void ImageSession::saveSnapshot() {
                 auto res = watcher->result();
                 if (res && res->status == SnapshotStore::SaveStatus::Created) {
                     rebuildSnapshotList();
+                    emit statusMessage("Snapshot saved.");
                 } else {
                     emit statusMessage(res ? "Snapshot already exists." : "Save failed.");
                 }
@@ -103,6 +104,7 @@ void ImageSession::deleteSnapshot(int index) {
             m_currentIndex = static_cast<int>(m_snapshots.size());
             emit imageChanged();
         }
+        emit statusMessage("Snapshot deleted.");
     } else {
         emit statusMessage("Failed to delete snapshot.");
     }

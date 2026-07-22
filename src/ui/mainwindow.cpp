@@ -18,7 +18,7 @@
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
-#include "ui/notificationbar.h"
+#include "ui/notification.h"
 #include "ui/snapshottimeline.h"
 #include "ui/tabbar.h"
 #include "ui/viewerstate.h"
@@ -111,8 +111,7 @@ void MainWindow::setupUi() {
     connect(m_emptyState, &EmptyState::settingsRequested, this, &MainWindow::onSettings);
 
     // Notification bar
-    m_notification = new NotificationBar(central);
-    centralLayout->addWidget(m_notification, 0);
+    m_notification = new Notification(central);
 
     setCentralWidget(central);
 

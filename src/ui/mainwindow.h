@@ -14,7 +14,7 @@
 class QAction;
 
 class ImageTab;
-class NotificationBar;
+class Notification;
 
 /// @brief Main application window. Manages tabs, shared viewer, zoom
 /// navigation, modifiers, and session persistence.
@@ -77,7 +77,7 @@ class MainWindow : public QMainWindow {
 
     TabBar            *m_tabBar;
     QStackedWidget    *m_contentStack;
-    NotificationBar   *m_notification;
+    Notification      *m_notification;
     ViewerState       *m_viewerState;
     EmptyState        *m_emptyState;
     QSettings          m_settings;

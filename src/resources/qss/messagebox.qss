@@ -1,0 +1,3 @@
+QMessageBox QLabel {
+    padding: 15px;
+}

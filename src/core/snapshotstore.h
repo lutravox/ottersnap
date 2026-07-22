@@ -45,8 +45,10 @@ class SnapshotStore {
     static QString computeChecksum(const QImage& image);
 
     /// @brief Load all snapshot records for an image file.
-    /// @param filePath Absolute path of the source image.
     static QVector<ImageSnapshot> loadSnapshots(const QString& filePath);
+
+    /// @brief Delete a specific snapshot for an image file.
+    static bool deleteSnapshot(const QString& filePath, int snapshotIndex);
 
     /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.

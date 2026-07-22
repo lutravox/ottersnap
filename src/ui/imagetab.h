@@ -40,6 +40,9 @@ class ImageTab : public QWidget {
     /// @brief Create a manual snapshot of the current image on disk.
     void saveSnapshot();
 
+    /// @brief Delete a specific snapshot.
+    void deleteSnapshot(int index);
+
     /// @brief Fetches thumbnails of all snapshots and current image.
     /// @param size Desired thumbnail size in pixels (square).
     /// @return thumbnails and associated labels

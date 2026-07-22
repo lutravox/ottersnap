@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QPixmap>
+#include <QPushButton>
 #include <QVector>
 #include <QWidget>
 
@@ -44,9 +45,17 @@ class SnapshotTimeline : public QWidget {
     /// @param index Zero-based index of the selected snapshot.
     void snapshotSelected(int index);
 
+    /// @brief Emitted when the create snapshot button is clicked.
+    void createSnapshotRequested();
+
+    /// @brief Emitted when a snapshot deletion is requested via context menu.
+    /// @param index Zero-based index of the snapshot to delete.
+    void snapshotDeletionRequested(int index);
+
   private:
     void buildStrip(const QVector<QPixmap>& thumbnails);
     void updateSelection(int oldIndex, int newIndex);
+    void updateTabState(int index, bool selected);
     void setThumbnailState(QLabel *lbl, const char *state);
     void doScrollToCurrent();
 
@@ -57,5 +66,9 @@ class SnapshotTimeline : public QWidget {
     QWidget               *m_contentWidget = nullptr;
     QHBoxLayout           *m_contentLayout = nullptr;
     QVector<SnapshotTab *> m_snapshottabs;
+    QVector<QLabel *>      m_snapshotLabels;
+    QVector<QWidget *>     m_containers;
     QTimer                 m_scrollTimer;
+    QWidget               *m_createButtonWrapper = nullptr;
+    QPushButton           *m_createButton = nullptr;
 };

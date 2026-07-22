@@ -4,5 +4,6 @@
         <file alias="qss/snapshottab.qss">qss/snapshottab.qss</file>
         <file alias="qss/notificationbar.qss">qss/notificationbar.qss</file>
         <file alias="qss/vkimageviewer.qss">qss/vkimageviewer.qss</file>
+        <file alias="qss/messagebox.qss">qss/messagebox.qss</file>
     </qresource>
 </RCC>

@@ -41,6 +41,7 @@ class MainWindow : public QMainWindow {
   private slots:
     void onFileOpen();
     void onSaveSnapshot();
+    void onDeleteCurrentSnapshotRequested();
     void onCloseTab(int index);
     void onCloseCurrentTab();
     void onFitToWindow();
@@ -48,6 +49,7 @@ class MainWindow : public QMainWindow {
     void onSettings();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
+    void onSnapshotDeletionRequested(int index);
 
   private:
     void      setupUi();
@@ -91,6 +93,7 @@ class MainWindow : public QMainWindow {
 
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
+    QAction *m_actionDeleteSnapshot;
     QAction *m_actionCloseTab;
     QAction *m_actionExit;
     QAction *m_actionFitWindow;

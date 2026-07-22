@@ -29,5 +29,8 @@ void SnapshotTab::setSelected(bool selected) {
 }
 
 void SnapshotTab::mousePressEvent(QMouseEvent *event) {
-    emit clicked();
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+    QLabel::mousePressEvent(event);
 }

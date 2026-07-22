@@ -52,6 +52,9 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Manually trigger a snapshot of the current image on disk.
     void saveSnapshot();
 
+    /// @brief Delete a snapshot by its index.
+    void deleteSnapshot(int index);
+
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
     std::pair<QVector<QImage>, QVector<QString>> snapshotThumbnails(int size);
 

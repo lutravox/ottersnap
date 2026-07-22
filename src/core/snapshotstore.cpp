@@ -362,3 +362,89 @@ void SnapshotStore::deleteAllSnapshots(const QString& filePath) {
     // We cannot easily remove specific keys from QCache by prefix.
     // The images will be evicted naturally via LRU.
 }
+
+bool SnapshotStore::deleteSnapshot(const QString& filePath, int snapshotIndex) {
+    QString                key = imageKey(filePath);
+    QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
+
+    int targetIdx = -1;
+    for (int i = 0; i < snapshots.size(); ++i) {
+        if (snapshots[i].snapshotIndex == snapshotIndex) {
+            targetIdx = i;
+            break;
+        }
+    }
+
+    if (targetIdx == -1) {
+        qWarning() << "[SnapshotStore] Snapshot not found for deletion:" << snapshotIndex;
+        return false;
+    }
+
+    // If we are deleting a snapshot that has dependents (i.e., not the last one),
+    // we must repair the chain to avoid orphaning subsequent snapshots.
+    if (targetIdx < snapshots.size() - 1) {
+        int nextIdxInList = targetIdx + 1;
+        int nextSnapshotId = snapshots[nextIdxInList].snapshotIndex;
+
+        // Reconstruct the image of the next snapshot using the current (valid) chain
+        auto optImgNext = loadSnapshotImage(filePath, nextSnapshotId);
+        if (!optImgNext) {
+            qWarning() << "[SnapshotStore] Failed to reconstruct next snapshot for chain repair";
+            return false;
+        }
+
+        QString sd = snapshotDirPath(key);
+        if (targetIdx == 0) {
+            // Deleting the first snapshot; the next one must now become the base
+            snapshots[nextIdxInList].isBase = true;
+            snapshots[nextIdxInList].fileName = QString::asprintf("s%04d.png", nextSnapshotId);
+            if (!saveImageFile(sd + '/' + snapshots[nextIdxInList].fileName, *optImgNext)) {
+                qWarning() << "[SnapshotStore] Failed to save new base image during chain repair:"
+                           << snapshots[nextIdxInList].fileName;
+                return false;
+            }
+        } else {
+            // Rebase the next snapshot onto the predecessor
+            int  prevIdxInList = targetIdx - 1;
+            auto optImgPrev = loadSnapshotImage(filePath, snapshots[prevIdxInList].snapshotIndex);
+            if (!optImgPrev) {
+                qWarning() << "[SnapshotStore] Failed to reconstruct predecessor for rebasing";
+                return false;
+            }
+
+            QByteArray delta = computeDelta(*optImgNext, *optImgPrev);
+            if (delta.isEmpty()) {
+                qWarning() << "[SnapshotStore] Failed to compute rebase delta for snapshot"
+                           << nextSnapshotId;
+                return false;
+            }
+
+            snapshots[nextIdxInList].isBase = false;
+            snapshots[nextIdxInList].fileName = QString::asprintf("s%04d.delta", nextSnapshotId);
+            if (!saveFile(sd + '/' + snapshots[nextIdxInList].fileName, delta)) {
+                qWarning() << "[SnapshotStore] Failed to save rebase delta file:"
+                           << snapshots[nextIdxInList].fileName;
+                return false;
+            }
+        }
+    }
+
+    // Delete the target snapshot file
+    QString sd = snapshotDirPath(key);
+    QFile::remove(sd + '/' + snapshots[targetIdx].fileName);
+
+    // Remove from list and update index
+    snapshots.removeAt(targetIdx);
+    QJsonArray arr;
+    for (const ImageSnapshot& s : snapshots) {
+        arr.append(toJsonObject(s));
+    }
+
+    if (!saveFile(indexPath(sd), QJsonDocument(arr).toJson(QJsonDocument::Compact))) {
+        qWarning() << "[SnapshotStore] Failed to update index after deletion";
+        return false;
+    }
+
+    s_snapshotsCache[key] = snapshots;
+    return true;
+}

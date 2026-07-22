@@ -1,8 +1,11 @@
 #include "ui/snapshottimeline.h"
 
+#include <QAction>
+#include <QContextMenuEvent>
 #include <QFile>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
@@ -66,9 +69,41 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
 }
 
 bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
-    if (obj == m_scrollArea->viewport() && event->type() == QEvent::Wheel) {
-        wheelEvent(static_cast<QWheelEvent *>(event));
-        return true;
+    if (obj == m_scrollArea->viewport()) {
+        if (event->type() == QEvent::Wheel) {
+            wheelEvent(static_cast<QWheelEvent *>(event));
+            return true;
+        }
+    } else if (QWidget *widget = qobject_cast<QWidget *>(obj)) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::RightButton) {
+                // Identify the container that owns this widget
+                QWidget *container = widget;
+                if (container->parentWidget() &&
+                    std::find(m_containers.begin(),
+                              m_containers.end(),
+                              container->parentWidget()) != m_containers.end()) {
+                    container = container->parentWidget();
+                }
+
+                // Identify which container was clicked
+                for (int i = 0; i < static_cast<int>(m_containers.size()); ++i) {
+                    if (m_containers[i] == container) {
+                        // Don't allow deleting the current disk image (the last tab)
+                        if (i < static_cast<int>(m_snapshottabs.size()) - 1) {
+                            QMenu    menu(this);
+                            QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
+                            connect(deleteAct, &QAction::triggered, this, [this, i]() {
+                                emit snapshotDeletionRequested(i);
+                            });
+                            menu.exec(me->globalPosition().toPoint());
+                        }
+                        return true; // Consume the event
+                    }
+                }
+            }
+        }
     }
     return QWidget::eventFilter(obj, event);
 }
@@ -168,6 +203,7 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         snapshotLabel->setAlignment(Qt::AlignCenter);
         snapshotLabel->setText(i == thumbnails.size() - 1 ? "C" : QString::number(i + 1));
         snapshotLabel->setGeometry(0, 0, c_thumbnailSize, 16);
+        snapshotLabel->setContextMenuPolicy(Qt::NoContextMenu);
 
         bool isSelected = (i == m_currentIndex);
         snapshotLabel->setProperty("selected", isSelected ? "true" : "false");
@@ -179,6 +215,7 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         lbl->setPixmap(thumbnails[i]);
         lbl->setGeometry(0, 16, c_thumbnailSize, c_thumbnailSize);
         lbl->setContentsMargins(0, 0, 0, 0);
+        lbl->setContextMenuPolicy(Qt::NoContextMenu);
 
         // Select the current thumbnail
         lbl->setSelected(isSelected);
@@ -192,6 +229,10 @@ void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
         m_snapshotLabels.append(snapshotLabel);
         m_containers.append(container);
         m_contentLayout->addWidget(container);
+
+        snapshotLabel->installEventFilter(this);
+        lbl->installEventFilter(this);
+        container->installEventFilter(this);
     }
 
     // adjust to fit container

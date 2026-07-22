@@ -35,6 +35,9 @@ class TestSnapshotStore : public QObject {
     void testSaveDuplicateSkipped();
 
     // Delete
+    void testDeleteLastSnapshot();
+    void testDeleteMiddleSnapshotRebase();
+    void testDeleteFirstSnapshotRebase();
     void testDeleteAllSnapshots();
 
     // Edge cases
@@ -316,7 +319,84 @@ void TestSnapshotStore::testSaveDuplicateSkipped() {
     QCOMPARE(snapshots.size(), 1);
 }
 
-// Delete
+void TestSnapshotStore::testDeleteLastSnapshot() {
+    QString path = testFilePath("deleteLast");
+    SnapshotStore::deleteAllSnapshots(path);
+
+    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::red));
+    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::blue));
+
+    QVector<ImageSnapshot> snapsBefore = SnapshotStore::loadSnapshots(path);
+    QCOMPARE(snapsBefore.size(), 2);
+
+    // Delete the last one (index 2)
+    QVERIFY(SnapshotStore::deleteSnapshot(path, 2));
+
+    QVector<ImageSnapshot> snapsAfter = SnapshotStore::loadSnapshots(path);
+    QCOMPARE(snapsAfter.size(), 1);
+    QCOMPARE(snapsAfter[0].snapshotIndex, 1);
+}
+
+void TestSnapshotStore::testDeleteMiddleSnapshotRebase() {
+    QString path = testFilePath("deleteMiddle");
+    SnapshotStore::deleteAllSnapshots(path);
+
+    QImage img1 = makeImage(10, 10, Qt::red);
+    QImage img2 = makeImage(10, 10, Qt::green);
+    QImage img3 = makeImage(10, 10, Qt::blue);
+
+    SnapshotStore::saveSnapshot(path, img1);
+    SnapshotStore::saveSnapshot(path, img2);
+    SnapshotStore::saveSnapshot(path, img3);
+
+    // Verify initial state: S1(Base), S2(Delta), S3(Delta)
+    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 3);
+    QVERIFY(snaps[0].isBase);
+    QVERIFY(!snaps[1].isBase);
+    QVERIFY(!snaps[2].isBase);
+
+    // Delete S2 (middle)
+    QVERIFY(SnapshotStore::deleteSnapshot(path, 2));
+
+    // Verify new state: S1(Base), S3(Delta of S1)
+    snaps = SnapshotStore::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 2);
+    QCOMPARE(snaps[0].snapshotIndex, 1);
+    QCOMPARE(snaps[1].snapshotIndex, 3);
+    QVERIFY(snaps[0].isBase);
+    QVERIFY(!snaps[1].isBase); // S3 should be rebased as a delta of S1
+
+    // Verify reconstruction of S3
+    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 3);
+    QVERIFY(optLoaded.has_value());
+    QCOMPARE(optLoaded->pixelColor(0, 0), img3.pixelColor(0, 0));
+}
+
+void TestSnapshotStore::testDeleteFirstSnapshotRebase() {
+    QString path = testFilePath("deleteFirst");
+    SnapshotStore::deleteAllSnapshots(path);
+
+    QImage img1 = makeImage(10, 10, Qt::red);
+    QImage img2 = makeImage(10, 10, Qt::blue);
+
+    SnapshotStore::saveSnapshot(path, img1);
+    SnapshotStore::saveSnapshot(path, img2);
+
+    // Delete S1 (the base)
+    QVERIFY(SnapshotStore::deleteSnapshot(path, 1));
+
+    // Verify new state: S2(Base)
+    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 1);
+    QCOMPARE(snaps[0].snapshotIndex, 2);
+    QVERIFY(snaps[0].isBase);
+
+    // Verify reconstruction of S2
+    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 2);
+    QVERIFY(optLoaded.has_value());
+    QCOMPARE(optLoaded->pixelColor(0, 0), img2.pixelColor(0, 0));
+}
 
 void TestSnapshotStore::testDeleteAllSnapshots() {
     QString path = testFilePath("delete");

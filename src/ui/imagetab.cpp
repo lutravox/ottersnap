@@ -1,8 +1,5 @@
 #include "ui/imagetab.h"
-#include "config/appsettings.h"
-#include "core/diskutils.h"
 #include "core/imagecache.h"
-#include "core/snapshotstore.h"
 
 #include <QDir>
 #include <QFile>
@@ -82,4 +79,8 @@ QPixmap ImageTab::thumbnail(int size) const {
 
 void ImageTab::saveSnapshot() {
     m_session->saveSnapshot();
+}
+
+void ImageTab::deleteSnapshot(int index) {
+    m_session->deleteSnapshot(index);
 }

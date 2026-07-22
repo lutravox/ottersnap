@@ -90,6 +90,24 @@ void ImageSession::saveSnapshot() {
         QtConcurrent::run([path, img]() { return SnapshotStore::saveSnapshot(path, img); }));
 }
 
+void ImageSession::deleteSnapshot(int index) {
+    if (index < 0 || index >= static_cast<int>(m_snapshots.size()))
+        return;
+
+    int snapshotId = m_snapshots[index].snapshotIndex;
+
+    if (SnapshotStore::deleteSnapshot(m_filePath, snapshotId)) {
+        rebuildSnapshotList();
+
+        if (m_currentIndex == index) {
+            m_currentIndex = static_cast<int>(m_snapshots.size());
+            emit imageChanged();
+        }
+    } else {
+        emit statusMessage("Failed to delete snapshot.");
+    }
+}
+
 void ImageSession::onFileChanged() {
     reloadImage();
 }

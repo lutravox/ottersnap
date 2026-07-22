@@ -7,6 +7,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QStyleHints>
@@ -86,6 +87,11 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSaveSnapshot);
 
+    connect(m_viewerState->snapshotTimeline(),
+            &SnapshotTimeline::snapshotDeletionRequested,
+            this,
+            &MainWindow::onSnapshotDeletionRequested);
+
     // Empty state
     m_emptyState = new EmptyState(m_contentStack);
 
@@ -122,6 +128,13 @@ void MainWindow::setupMenu() {
     m_actionSaveSnapshot = m_fileMenu->addAction("&Save Snapshot");
     m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
+
+    m_actionDeleteSnapshot = m_fileMenu->addAction("Delete &Current Snapshot");
+    m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    connect(m_actionDeleteSnapshot,
+            &QAction::triggered,
+            this,
+            &MainWindow::onDeleteCurrentSnapshotRequested);
 
     m_actionCloseTab = m_fileMenu->addAction("Close &Tab");
     m_actionCloseTab->setShortcut(QKeySequence::Close);
@@ -172,6 +185,19 @@ void MainWindow::updateMenuBar() {
     m_fileMenu->menuAction()->setVisible(true);
     m_editMenu->menuAction()->setVisible(true);
 
+    // Update action states based on current selection
+    auto *tab = currentTab();
+    if (tab) {
+        int         index = tab->session()->currentSnapshotIndex();
+        const auto& snapshots = tab->session()->snapshots();
+        // Disable if no snapshot is selected or if it's the current image ('C')
+        // The current image is at index == snapshots.size()
+        m_actionDeleteSnapshot->setEnabled(index >= 0 &&
+                                           index < static_cast<int>(snapshots.size()));
+    } else {
+        m_actionDeleteSnapshot->setEnabled(false);
+    }
+
     switch (m_currentState) {
         case ContentState::Empty:
             m_actionSaveSnapshot->setVisible(false);
@@ -187,6 +213,7 @@ void MainWindow::updateMenuBar() {
 
         case ContentState::Viewer:
             m_actionSaveSnapshot->setVisible(true);
+            m_actionDeleteSnapshot->setVisible(true);
             m_actionCloseTab->setVisible(true);
             m_actionFitWindow->setVisible(true);
             m_actionResetZoom->setVisible(true);
@@ -227,6 +254,22 @@ void MainWindow::onSaveSnapshot() {
     if (tab) {
         tab->saveSnapshot();
     }
+}
+
+void MainWindow::onDeleteCurrentSnapshotRequested() {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    int         index = tab->session()->currentSnapshotIndex();
+    const auto& snapshots = tab->session()->snapshots();
+
+    // The last snapshot is the current disk image ('C') and cannot be deleted.
+    if (index < 0 || index >= static_cast<int>(snapshots.size())) {
+        return;
+    }
+
+    onSnapshotDeletionRequested(index);
 }
 
 void MainWindow::openImageFile(const QString& path) {
@@ -318,6 +361,8 @@ void MainWindow::setTabThumbnail(int index) {
 }
 
 ImageTab *MainWindow::currentTab() {
+    if (!m_tabBar)
+        return nullptr;
     return qobject_cast<ImageTab *>(m_tabBar->currentWidget());
 }
 
@@ -399,6 +444,7 @@ void MainWindow::onSnapshotSelected(int index) {
     tab->selectSnapshot(index);
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
     updateViewer();
+    updateMenuBar();
 }
 
 void MainWindow::updateSnapshotTimeline() {
@@ -410,6 +456,35 @@ void MainWindow::updateSnapshotTimeline() {
     auto [thumbs, labels] = tab->snapshotThumbnails(48);
     m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+}
+
+void MainWindow::onSnapshotDeletionRequested(int index) {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Delete Snapshot"));
+    msgBox.setText(tr("Delete snapshot %1?").arg(index + 1));
+    msgBox.setIcon(QMessageBox::Warning);
+
+    // Apply styling from resources
+    QFile qssFile(":/qss/messagebox.qss");
+    if (qssFile.open(QIODevice::ReadOnly)) {
+        msgBox.setStyleSheet(qssFile.readAll());
+    }
+
+    QPushButton *deleteButton = msgBox.addButton(tr("Delete"), QMessageBox::AcceptRole);
+    QPushButton *cancelButton = msgBox.addButton(tr("Cancel"), QMessageBox::RejectRole);
+
+    msgBox.setDefaultButton(cancelButton);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == deleteButton) {
+        tab->deleteSnapshot(index);
+        updateSnapshotTimeline();
+        updateViewer();
+    }
 }
 
 void MainWindow::switchContentState(ContentState state) {

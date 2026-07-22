@@ -76,12 +76,9 @@ void Notification::paintEvent(QPaintEvent *event) {
 
 void Notification::hideAfterTimeout() {
     hide();
+    emit finished();
 }
 
 bool Notification::eventFilter(QObject *watched, QEvent *event) {
-    if (event->type() == QEvent::Resize || event->type() == QEvent::Move) {
-        // Need to update the position on window resize/move events otherwise it be left behind
-        updatePosition();
-    }
     return QLabel::eventFilter(watched, event);
 }

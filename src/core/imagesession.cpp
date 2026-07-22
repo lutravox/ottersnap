@@ -82,8 +82,13 @@ void ImageSession::saveSnapshot() {
                 if (res && res->status == SnapshotStore::SaveStatus::Created) {
                     rebuildSnapshotList();
                     emit statusMessage("Snapshot saved.");
+                } else if (res && res->status == SnapshotStore::SaveStatus::Existing) {
+                    int  pos = getRelativeVersion(res->snapshotIndex);
+                    emit statusMessage(QString("Current already saved as snapshot %1.")
+                                           .arg(pos != -1 ? QString::number(pos)
+                                                          : QString::number(res->snapshotIndex)));
                 } else {
-                    emit statusMessage(res ? "Snapshot already exists." : "Save failed.");
+                    emit statusMessage("Save failed.");
                 }
                 watcher->deleteLater();
             });
@@ -96,6 +101,7 @@ void ImageSession::deleteSnapshot(int index) {
         return;
 
     int snapshotId = m_snapshots[index].snapshotIndex;
+    int relativeVersion = index + 1;
 
     if (SnapshotStore::deleteSnapshot(m_filePath, snapshotId)) {
         rebuildSnapshotList();
@@ -104,7 +110,7 @@ void ImageSession::deleteSnapshot(int index) {
             m_currentIndex = static_cast<int>(m_snapshots.size());
             emit imageChanged();
         }
-        emit statusMessage("Snapshot deleted.");
+        emit statusMessage(QString("Snapshot %1 deleted.").arg(relativeVersion));
     } else {
         emit statusMessage("Failed to delete snapshot.");
     }
@@ -135,6 +141,15 @@ bool ImageSession::autosaveSnapshot(const QImage& img) {
         return true;
     }
     return false;
+}
+
+int ImageSession::getRelativeVersion(int snapshotIndex) const {
+    for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+        if (m_snapshots[i].snapshotIndex == snapshotIndex) {
+            return i + 1;
+        }
+    }
+    return -1;
 }
 
 void ImageSession::setGrayscale(bool enabled) {

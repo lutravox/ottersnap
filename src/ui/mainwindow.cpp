@@ -28,8 +28,8 @@ static const int c_defaultWidth = 1000;
 static const int c_defaultHeight = 700;
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), m_tabBar(nullptr), m_notification(nullptr), m_viewerState(nullptr),
-      m_emptyState(nullptr), m_session(m_settings) {
+    : QMainWindow(parent), m_tabBar(nullptr), m_viewerState(nullptr), m_emptyState(nullptr),
+      m_session(m_settings) {
     m_effectsController = new EffectsController(this);
     m_viewController = new ViewController(this);
     setupMenu();
@@ -110,8 +110,8 @@ void MainWindow::setupUi() {
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
     connect(m_emptyState, &EmptyState::settingsRequested, this, &MainWindow::onSettings);
 
-    // Notification bar
-    m_notification = new Notification(central);
+    // Notifications
+    m_notificationManager = new NotificationManager(this);
 
     setCentralWidget(central);
 
@@ -367,11 +367,18 @@ ImageTab *MainWindow::currentTab() {
 }
 
 void MainWindow::notify(const QString& msg, int timeoutMs) {
-    if (timeoutMs == -1) {
-        m_notification->notify(msg);
-    } else {
-        m_notification->notify(msg, timeoutMs);
+    m_notificationManager->notify(msg, timeoutMs);
+}
+
+void MainWindow::updateSnapshotTimeline() {
+    auto *tab = currentTab();
+    if (!tab) {
+        return;
     }
+
+    auto [thumbs, labels] = tab->snapshotThumbnails(48);
+    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
 
 void MainWindow::showEvent(QShowEvent *event) {
@@ -458,17 +465,6 @@ void MainWindow::onSnapshotSelected(int index) {
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
     updateViewer();
     updateMenuBar();
-}
-
-void MainWindow::updateSnapshotTimeline() {
-    auto *tab = currentTab();
-    if (!tab) {
-        return;
-    }
-
-    auto [thumbs, labels] = tab->snapshotThumbnails(48);
-    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
 
 void MainWindow::onSnapshotDeletionRequested(int index) {

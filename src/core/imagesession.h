@@ -87,6 +87,7 @@ class ImageSession : public QObject, public IEffectsState {
   private:
     void rebuildSnapshotList();
     bool autosaveSnapshot(const QImage& newImage);
+    int  getRelativeVersion(int snapshotIndex) const;
 
     QString                m_filePath;
     QImage                 m_diskImage;

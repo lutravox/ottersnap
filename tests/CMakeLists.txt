@@ -68,6 +68,7 @@ target_sources(test_mainwindow PRIVATE
     ${CMAKE_SOURCE_DIR}/src/ui/tabbar.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/emptystate.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/notification.cpp
+    ${CMAKE_SOURCE_DIR}/src/ui/notificationmanager.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/viewerstate.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/snapshottimeline.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/vkimageviewer.cpp

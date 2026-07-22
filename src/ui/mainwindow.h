@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QList>
 #include <QMainWindow>
 #include <QMap>
 #include <QStackedWidget>
@@ -8,6 +9,7 @@
 #include "controllers/viewcontroller.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
+#include "ui/notificationmanager.h"
 #include "ui/tabbar.h"
 #include "ui/viewerstate.h"
 
@@ -15,6 +17,7 @@ class QAction;
 
 class ImageTab;
 class Notification;
+class NotificationManager;
 
 /// @brief Main application window. Manages tabs, shared viewer, zoom
 /// navigation, modifiers, and session persistence.
@@ -75,19 +78,19 @@ class MainWindow : public QMainWindow {
     enum class ContentState { Empty, Viewer };
     void switchContentState(ContentState state);
 
-    TabBar            *m_tabBar;
-    QStackedWidget    *m_contentStack;
-    Notification      *m_notification;
-    ViewerState       *m_viewerState;
-    EmptyState        *m_emptyState;
-    QSettings          m_settings;
-    SessionManager     m_session;
-    EffectsController *m_effectsController;
-    ViewController    *m_viewController;
-    QMenu             *m_fileMenu;
-    QMenu             *m_editMenu;
-    QMenu             *m_viewMenu;
-    QMenu             *m_effectsMenu;
+    TabBar              *m_tabBar;
+    QStackedWidget      *m_contentStack;
+    NotificationManager *m_notificationManager;
+    ViewerState         *m_viewerState;
+    EmptyState          *m_emptyState;
+    QSettings            m_settings;
+    SessionManager       m_session;
+    EffectsController   *m_effectsController;
+    ViewController      *m_viewController;
+    QMenu               *m_fileMenu;
+    QMenu               *m_editMenu;
+    QMenu               *m_viewMenu;
+    QMenu               *m_effectsMenu;
 
     ContentState m_currentState = ContentState::Empty;
 

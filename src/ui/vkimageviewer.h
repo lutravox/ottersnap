@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QMouseEvent>
 #include <QWidget>
 
 #include <QVulkanInstance>
@@ -73,7 +74,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     void imageClicked();
 
     /// @brief Emitted whenever the zoom level changes.
-    /// @param percentage The new zoom percentage (100.0 = 1:1).
     void zoomChanged(double percentage);
 
     /// @brief Emitted when grayscale mode is toggled.
@@ -81,6 +81,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
 
     /// @brief Emitted when mirroring mode is toggled.
     void mirrorToggled(bool enabled);
+
+    /// @brief Emitted when an image drop is requested.
+    void imageOpenRequested(const QString& path);
 
   protected:
     void showEvent(QShowEvent *event) override;

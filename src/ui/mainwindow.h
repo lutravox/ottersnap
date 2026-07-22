@@ -40,6 +40,8 @@ class MainWindow : public QMainWindow {
   protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
   private slots:
     void onFileOpen();

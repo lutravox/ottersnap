@@ -4,10 +4,14 @@
 
 #include <QAction>
 #include <QDebug>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QGuiApplication>
 #include <QMenu>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QShowEvent>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QVulkanFunctions>
 #include <QWheelEvent>
@@ -17,6 +21,8 @@
 #include <array>
 #include <cstring>
 #include <vector>
+
+class VkImageViewer;
 
 // Safely destroys a Vulkan object if the handle is valid, then nulls it.
 #define DESTROY_VK(df, dev, handle, destroyFn)                                                     \
@@ -1154,84 +1160,119 @@ void VkImageViewer::setNotificationCallback(IEffectsRenderer::EffectChangedCallb
 }
 
 bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
-    if (obj != m_vulkanWindow)
+    if (obj != m_vulkanWindow && obj != m_container)
         return QObject::eventFilter(obj, event);
 
-    if (event->type() == QEvent::MouseButtonPress) {
-        auto *me = static_cast<QMouseEvent *>(event);
-        if (me->button() == Qt::LeftButton) {
-            m_isDragging = true;
-            m_lastMousePos = me->position().toPoint();
-            setFocus();
-            return true;
-        } else if (me->button() == Qt::RightButton) {
-            QMenu menu(this);
-
-            auto *grayscaleAction = menu.addAction(tr("Grayscale"));
-            grayscaleAction->setCheckable(true);
-            grayscaleAction->setChecked(m_renderer->grayscaleEnabled());
-
-            auto *mirrorAction = menu.addAction(tr("Mirror"));
-            mirrorAction->setCheckable(true);
-            mirrorAction->setChecked(m_renderer->mirrorEnabled());
-
-            QAction *selectedAction = menu.exec(me->globalPosition().toPoint());
-
-            if (selectedAction == grayscaleAction) {
-                bool enabled = grayscaleAction->isChecked();
-                emit grayscaleToggled(enabled);
-                if (m_notificationCallback) {
-                    m_notificationCallback(enabled, m_renderer->mirrorEnabled());
+    switch (event->type()) {
+        // Offer Image Drop
+        case QEvent::DragEnter: {
+            if (obj == m_vulkanWindow) {
+                auto *de = static_cast<QDragEnterEvent *>(event);
+                if (de->mimeData()->hasUrls()) {
+                    de->acceptProposedAction();
+                    return true;
                 }
-                return true;
-            } else if (selectedAction == mirrorAction) {
-                bool enabled = mirrorAction->isChecked();
-                emit mirrorToggled(enabled);
-                if (m_notificationCallback) {
-                    m_notificationCallback(m_renderer->grayscaleEnabled(), enabled);
+            }
+            break;
+        }
+        // Open Image on Drop
+        case QEvent::Drop: {
+            if (obj == m_vulkanWindow) {
+                auto            *dp = static_cast<QDropEvent *>(event);
+                const QMimeData *mimeData = dp->mimeData();
+                if (mimeData && mimeData->hasUrls()) {
+                    for (const QUrl& url : mimeData->urls()) {
+                        QString path = url.toLocalFile();
+                        if (!path.isEmpty()) {
+                            emit imageOpenRequested(path);
+                        }
+                    }
+                    dp->acceptProposedAction();
+                    return true;
+                }
+            }
+            break;
+        }
+        case QEvent::MouseButtonPress: {
+            if (obj == m_vulkanWindow) {
+                auto *me = static_cast<QMouseEvent *>(event);
+                if (me->button() == Qt::LeftButton) {
+                    m_isDragging = true;
+                    m_lastMousePos = me->position().toPoint();
+                    setFocus();
+                    return true;
+                } else if (me->button() == Qt::RightButton) {
+                    //  Context Menu
+                    QMenu menu(this);
+
+                    auto *grayscaleAction = menu.addAction(tr("Grayscale"));
+                    grayscaleAction->setCheckable(true);
+                    grayscaleAction->setChecked(m_renderer->grayscaleEnabled());
+
+                    auto *mirrorAction = menu.addAction(tr("Mirror"));
+                    mirrorAction->setCheckable(true);
+                    mirrorAction->setChecked(m_renderer->mirrorEnabled());
+
+                    QAction *selectedAction = menu.exec(me->globalPosition().toPoint());
+
+                    if (selectedAction == grayscaleAction) {
+                        bool enabled = grayscaleAction->isChecked();
+                        emit grayscaleToggled(enabled);
+                        if (m_notificationCallback) {
+                            m_notificationCallback(enabled, m_renderer->mirrorEnabled());
+                        }
+                        return true;
+                    } else if (selectedAction == mirrorAction) {
+                        bool enabled = mirrorAction->isChecked();
+                        emit mirrorToggled(enabled);
+                        if (m_notificationCallback) {
+                            m_notificationCallback(m_renderer->grayscaleEnabled(), enabled);
+                        }
+                        return true;
+                    }
+                }
+            }
+            break;
+        }
+        case QEvent::MouseButtonRelease: {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                if (m_isDragging) {
+                    m_isDragging = false;
+                } else {
+                    emit imageClicked();
                 }
                 return true;
             }
+            break;
         }
-    }
-
-    if (event->type() == QEvent::MouseButtonRelease) {
-        auto *me = static_cast<QMouseEvent *>(event);
-        if (me->button() == Qt::LeftButton) {
-            if (m_isDragging) {
+        // Pan
+        case QEvent::MouseMove: {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (!(me->buttons() & Qt::LeftButton)) {
                 m_isDragging = false;
-            } else {
-                emit imageClicked();
             }
+
+            if (m_isDragging && m_viewState.hasImage()) {
+                QPoint delta = me->position().toPoint() - m_lastMousePos;
+                m_viewState.applyPanDelta(delta.x(), delta.y());
+                m_renderer->setPan(m_viewState.pan());
+            }
+            m_lastMousePos = me->position().toPoint();
+            return false;
+        }
+        // Zoom
+        case QEvent::Wheel: {
+            auto *we = static_cast<QWheelEvent *>(event);
+            if (!m_viewState.hasImage())
+                return QObject::eventFilter(obj, event);
+
+            m_viewState.applyWheelZoom(we->angleDelta().y() >= 0,
+                                       we->modifiers() & Qt::ControlModifier);
+            m_renderer->setZoom(m_viewState.zoom());
+            emit zoomChanged(m_viewState.percentage());
             return true;
         }
-    }
-
-    if (event->type() == QEvent::MouseMove) {
-        auto *me = static_cast<QMouseEvent *>(event);
-        if (!(me->buttons() & Qt::LeftButton)) {
-            m_isDragging = false;
-        }
-
-        if (m_isDragging && m_viewState.hasImage()) {
-            QPoint delta = me->position().toPoint() - m_lastMousePos;
-            m_viewState.applyPanDelta(delta.x(), delta.y());
-            m_renderer->setPan(m_viewState.pan());
-        }
-        m_lastMousePos = me->position().toPoint();
-        return false;
-    }
-
-    if (event->type() == QEvent::Wheel) {
-        auto *we = static_cast<QWheelEvent *>(event);
-        if (!m_viewState.hasImage())
-            return QObject::eventFilter(obj, event);
-
-        m_viewState.applyWheelZoom(we->angleDelta().y() >= 0,
-                                   we->modifiers() & Qt::ControlModifier);
-        m_renderer->setZoom(m_viewState.zoom());
-        emit zoomChanged(m_viewState.percentage());
-        return true;
     }
 
     return QObject::eventFilter(obj, event);
@@ -1329,22 +1370,10 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     if (!m_hasImage)
         return;
-
     QSize sz = m_container->size();
     if (sz.isEmpty())
         return;
-
-    // Update the shader with the new widget size
     m_renderer->setViewportSize(sz);
-
-    if (AppSettings::resizeToFit()) {
-        // Recompute zoom so the image scales with the window.
-        m_viewState.setViewportSize(sz.width(), sz.height());
-        m_renderer->setZoom(m_viewState.zoom());
-    }
-    // Otherwise keep zoom constant.
-
-    emit zoomChanged(m_viewState.percentage());
 }
 
 void VkImageViewer::setGrayscale(bool enabled) {

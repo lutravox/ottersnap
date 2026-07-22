@@ -3,11 +3,14 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDebug>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QStyleHints>
@@ -18,7 +21,6 @@
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
-#include "ui/notification.h"
 #include "ui/snapshottimeline.h"
 #include "ui/tabbar.h"
 #include "ui/viewerstate.h"
@@ -60,6 +62,7 @@ QStringList MainWindow::collectOpenPaths() const {
 void MainWindow::setupUi() {
     setWindowTitle(AppSettings::applicationName());
     resize(c_defaultWidth, c_defaultHeight);
+    setAcceptDrops(true);
 
     QWidget *central = new QWidget(this);
     auto    *centralLayout = new QVBoxLayout(central);
@@ -112,6 +115,11 @@ void MainWindow::setupUi() {
 
     // Notifications
     m_notificationManager = new NotificationManager(this);
+
+    connect(m_viewerState->viewer(),
+            &VkImageViewer::imageOpenRequested,
+            this,
+            [this](const QString& path) { openImageFile(path); });
 
     setCentralWidget(central);
 
@@ -392,6 +400,25 @@ void MainWindow::showEvent(QShowEvent *event) {
     for (const QString& path : m_session.restorePaths()) {
         if (QFile::exists(path))
             openImageFile(path);
+    }
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *event) {
+    const QMimeData *mimeData = event->mimeData();
+    if (mimeData && mimeData->hasUrls()) {
+        for (const QUrl& url : mimeData->urls()) {
+            QString path = url.toLocalFile();
+            if (!path.isEmpty()) {
+                openImageFile(path);
+            }
+        }
+        event->acceptProposedAction();
     }
 }
 

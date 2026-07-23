@@ -117,27 +117,6 @@ class TestViewController : public QObject {
         QCOMPARE(session.viewState().percentage(), viewer.lastState().percentage());
     }
 
-    void testResetView() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
-
-        controller.setActiveSession(&session);
-        controller.setViewer(&viewer);
-
-        // Initialize session with dummy image size
-        session.viewState().resetState(1000, 1000);
-
-        // Start with non-100% zoom
-        session.viewState().setPercentage(50.0);
-
-        controller.resetView();
-
-        // Reset now performs Fit to Window
-        QCOMPARE(session.viewState().zoomRatio(), 1.0f);
-        QCOMPARE(viewer.lastState().zoomRatio(), 1.0f);
-    }
-
     void testHandleViewportResize() {
         ViewController controller;
         ImageSession   session;
@@ -163,7 +142,6 @@ class TestViewController : public QObject {
         controller.syncSessionToViewer();
         controller.syncViewerToSession();
         controller.fitToWindow();
-        controller.resetView();
         controller.handleViewportResize(800, 600);
 
         QVERIFY(true); // If we reached here, no crash occurred.

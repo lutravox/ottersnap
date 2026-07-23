@@ -47,13 +47,6 @@ void ViewController::fitToWindow() {
     m_viewer->update();
 }
 
-void ViewController::resetView() {
-    if (!m_session || !m_viewer)
-        return;
-
-    fitToWindow();
-}
-
 void ViewController::setZoomPercentage(double pct) {
     if (!m_session || !m_viewer)
         return;

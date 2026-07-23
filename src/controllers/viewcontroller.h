@@ -25,9 +25,6 @@ class ViewController : public QObject {
     /// @brief Command the viewer to fit the image to the window.
     void fitToWindow();
 
-    /// @brief Command the viewer to reset the view state (zoom and pan).
-    void resetView();
-
     /// @brief Set whether images should scale with window on resize.
     void setScaleWithWindowEnabled(bool enabled);
 

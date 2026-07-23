@@ -51,7 +51,7 @@ class MainWindow : public QMainWindow {
     void onCloseCurrentTab();
     void onCloseAllTabs();
     void onToggleScaleWithWindow();
-    void onResetZoom();
+    void onResetView();
     void onZoomIn();
     void onZoomOut();
     void onActualSize();
@@ -112,8 +112,8 @@ class MainWindow : public QMainWindow {
     QAction *m_actionCloseTab;
     QAction *m_actionCloseAllTabs;
     QAction *m_actionExit;
-    QAction *m_actionFitWindow;
-    QAction *m_actionResetZoom;
+    QAction *m_actionScaleWithWindow;
+    QAction *m_actionResetView;
     QAction *m_actionZoomIn;
     QAction *m_actionZoomOut;
     QAction *m_actionActualSize;

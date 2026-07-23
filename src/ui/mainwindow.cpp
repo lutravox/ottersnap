@@ -130,11 +130,13 @@ void MainWindow::setupUi() {
     // Notifications
     m_notificationManager = new NotificationManager(this);
 
+    // Connect viewer resizes to controller
     connect(m_viewerState->viewer(),
             &VkImageViewer::viewportResized,
             m_viewController,
             &ViewController::handleViewportResize);
 
+    // Connect image drop and drop on viewer
     connect(m_viewerState->viewer(),
             &VkImageViewer::imageOpenRequested,
             this,
@@ -189,14 +191,15 @@ void MainWindow::setupMenu() {
     connect(m_actionSettings, &QAction::triggered, this, &MainWindow::onSettings);
 
     m_viewMenu = menuBar()->addMenu(tr("&View"));
-    m_actionFitWindow = m_viewMenu->addAction(tr("&Scale with Window"));
-    m_actionFitWindow->setCheckable(true);
-    m_actionFitWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
-    connect(m_actionFitWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
+    m_actionScaleWithWindow = m_viewMenu->addAction(tr("&Scale with Window"));
+    m_actionScaleWithWindow->setCheckable(true);
+    m_actionScaleWithWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
+    connect(
+        m_actionScaleWithWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
 
-    m_actionResetZoom = m_viewMenu->addAction(tr("Reset &View"));
-    m_actionResetZoom->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-    connect(m_actionResetZoom, &QAction::triggered, this, &MainWindow::onResetZoom);
+    m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
+    m_actionResetView->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    connect(m_actionResetView, &QAction::triggered, this, &MainWindow::onResetView);
 
     m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
     m_actionActualSize->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
@@ -267,8 +270,8 @@ void MainWindow::updateMenuBar() {
             m_actionDeleteSnapshot->setVisible(false);
             m_actionCloseTab->setVisible(false);
             m_actionCloseAllTabs->setVisible(false);
-            m_actionFitWindow->setVisible(false);
-            m_actionResetZoom->setVisible(false);
+            m_actionScaleWithWindow->setVisible(false);
+            m_actionResetView->setVisible(false);
             m_actionGrayscale->setVisible(false);
             m_actionMirror->setVisible(false);
 
@@ -281,9 +284,9 @@ void MainWindow::updateMenuBar() {
             m_actionDeleteSnapshot->setVisible(true);
             m_actionCloseTab->setVisible(true);
             m_actionCloseAllTabs->setVisible(true);
-            m_actionFitWindow->setVisible(true);
-            m_actionFitWindow->setChecked(m_viewController->isScaleWithWindowEnabled());
-            m_actionResetZoom->setVisible(true);
+            m_actionScaleWithWindow->setVisible(true);
+            m_actionScaleWithWindow->setChecked(m_viewController->isScaleWithWindowEnabled());
+            m_actionResetView->setVisible(true);
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
 
@@ -307,11 +310,11 @@ void MainWindow::onCloseAllTabs() {
 void MainWindow::onToggleScaleWithWindow() {
     bool enabled = !m_viewController->isScaleWithWindowEnabled();
     m_viewController->setScaleWithWindowEnabled(enabled);
-    m_actionFitWindow->setChecked(enabled);
+    m_actionScaleWithWindow->setChecked(enabled);
 }
 
-void MainWindow::onResetZoom() {
-    m_viewController->resetView();
+void MainWindow::onResetView() {
+    m_viewController->fitToWindow();
 }
 
 void MainWindow::onFileOpen() {

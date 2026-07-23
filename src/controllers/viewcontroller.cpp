@@ -60,9 +60,6 @@ void ViewController::setZoomPercentage(double pct) {
 
 void ViewController::setScaleWithWindowEnabled(bool enabled) {
     AppSettings::setScaleWithWindow(enabled);
-    if (enabled) {
-        fitToWindow();
-    }
 }
 
 bool ViewController::isScaleWithWindowEnabled() const {

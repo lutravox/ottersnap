@@ -100,4 +100,5 @@ void ViewState::updateZoomForRelativeScaling() {
     }
 
     m_zoom = m_fitScale * m_zoomRatio;
+    m_zoom = std::clamp(m_zoom, 0.05f, 64.0f);
 }

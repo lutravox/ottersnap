@@ -24,6 +24,10 @@ bool ImageSession::openImage(const QString& filePath) {
     rebuildSnapshotList();
     m_monitor->watch(m_filePath);
     m_currentIndex = static_cast<int>(m_snapshots.size());
+
+    // Initialize view state with image dimensions
+    m_viewState.resetState(m_diskImage.width(), m_diskImage.height());
+
     emit imageChanged();
     return true;
 }

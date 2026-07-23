@@ -52,6 +52,7 @@ target_sources(test_viewcontroller PRIVATE
     ${CMAKE_SOURCE_DIR}/src/core/diskutils.cpp
     ${CMAKE_SOURCE_DIR}/src/core/imagecache.cpp
     ${CMAKE_SOURCE_DIR}/src/config/appsettings.cpp
+    ${CMAKE_SOURCE_DIR}/src/ui/vkimageviewer.cpp
 )
 
 # ── SnapshotStore ─────────────────────────────────────────────────────

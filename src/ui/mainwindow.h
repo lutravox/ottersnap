@@ -49,8 +49,15 @@ class MainWindow : public QMainWindow {
     void onDeleteCurrentSnapshotRequested();
     void onCloseTab(int index);
     void onCloseCurrentTab();
-    void onFitToWindow();
+    void onCloseAllTabs();
+    void onToggleScaleWithWindow();
     void onResetZoom();
+    void onZoomIn();
+    void onZoomOut();
+    void onActualSize();
+    void onToggleFullScreen();
+    void onExportSnapshot();
+    void onResetEffects();
     void onSettings();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
@@ -60,6 +67,7 @@ class MainWindow : public QMainWindow {
     void      setupUi();
     void      setupMenu();
     void      updateMenuBar();
+    void      updateRecentFilesMenu();
     void      openImageFile(const QString& path);
     ImageTab *currentTab();
     void      applyEffects();
@@ -90,6 +98,7 @@ class MainWindow : public QMainWindow {
     EffectsController   *m_effectsController;
     ViewController      *m_viewController;
     QMenu               *m_fileMenu;
+    QMenu               *m_recentFilesMenu;
     QMenu               *m_editMenu;
     QMenu               *m_viewMenu;
     QMenu               *m_effectsMenu;
@@ -98,13 +107,20 @@ class MainWindow : public QMainWindow {
 
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
+    QAction *m_actionExportSnapshot;
     QAction *m_actionDeleteSnapshot;
     QAction *m_actionCloseTab;
+    QAction *m_actionCloseAllTabs;
     QAction *m_actionExit;
     QAction *m_actionFitWindow;
     QAction *m_actionResetZoom;
+    QAction *m_actionZoomIn;
+    QAction *m_actionZoomOut;
+    QAction *m_actionActualSize;
+    QAction *m_actionFullScreen;
     QAction *m_actionGrayscale;
     QAction *m_actionMirror;
+    QAction *m_actionResetEffects;
     QAction *m_actionSettings;
 
     ImageTab *m_currentTabInView = nullptr;

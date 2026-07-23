@@ -7,12 +7,12 @@ class AppSettings {
     Q_DISABLE_COPY(AppSettings)
 
   public:
-    /// @brief Return whether window resize should keep the image fitted to the viewport.
-    /// @return True to fit on resize, false to keep zoom percentage constant.
-    static bool resizeToFit();
-    /// @brief Set the resize-to-fit preference.
+    /// @brief Return whether window resize should keep the image scaled with the viewport.
+    /// @return True to scale on resize, false to keep zoom percentage constant.
+    static bool scaleWithWindow();
+    /// @brief Set the scale-with-window preference.
     /// @param value The new value.
-    static void setResizeToFit(bool value);
+    static void setScaleWithWindow(bool value);
 
     /// @brief Return whether the previous session should be restored on startup.
     static bool restoreSession();

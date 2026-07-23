@@ -1253,10 +1253,9 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                 m_isDragging = false;
             }
 
-            if (m_isDragging && m_viewState.hasImage()) {
+            if (m_isDragging && m_hasImage) {
                 QPoint delta = me->position().toPoint() - m_lastMousePos;
-                m_viewState.applyPanDelta(delta.x(), delta.y());
-                m_renderer->setPan(m_viewState.pan());
+                emit   panRequested(delta.x(), delta.y());
             }
             m_lastMousePos = me->position().toPoint();
             return false;
@@ -1264,13 +1263,10 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         // Zoom
         case QEvent::Wheel: {
             auto *we = static_cast<QWheelEvent *>(event);
-            if (!m_viewState.hasImage())
+            if (!m_hasImage)
                 return QObject::eventFilter(obj, event);
 
-            m_viewState.applyWheelZoom(we->angleDelta().y() >= 0,
-                                       we->modifiers() & Qt::ControlModifier);
-            m_renderer->setZoom(m_viewState.zoom());
-            emit zoomChanged(m_viewState.percentage());
+            emit zoomRequested(we->angleDelta().y() >= 0, we->modifiers() & Qt::ControlModifier);
             return true;
         }
     }
@@ -1278,20 +1274,23 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
     return QObject::eventFilter(obj, event);
 }
 
+void VkImageViewer::setViewState(const ViewState& state) {
+    m_currentViewState = state;
+    if (m_renderer) {
+        m_renderer->setZoom(state.zoom());
+        m_renderer->setPan(state.pan());
+    }
+    emit zoomChanged(state.percentage());
+}
+
 void VkImageViewer::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
 
     QSize sz = m_container->size();
-    if (m_hasImage && !sz.isEmpty()) {
-        // Compute zoom from the current widget size.
-        m_viewState.setViewportSize(sz.width(), sz.height());
-        m_renderer->setZoom(m_viewState.zoom());
-        m_renderer->setPan(m_viewState.pan());
-        emit zoomChanged(m_viewState.percentage());
+    if (!sz.isEmpty()) {
+        m_renderer->setViewportSize(sz);
+        emit viewportResized(sz.width(), sz.height());
     }
-
-    // Initialize viewport size
-    m_renderer->setViewportSize(sz);
 
     m_vulkanWindow->requestUpdate();
 }
@@ -1301,64 +1300,14 @@ void VkImageViewer::setImage(const QImage& image, bool preserveView) {
     if (!m_hasImage)
         return;
 
-    if (!preserveView) {
-        m_viewState.resetState(image.width(), image.height());
-    } else {
-        m_viewState.updateImageSize(image.width(), image.height());
-    }
-
-    emit zoomChanged(m_viewState.percentage());
-
-    // Forward the image to the renderer and update view state.
+    // Initial state is now managed by the ViewController.
+    // We only forward the image to the renderer.
     m_renderer->setImage(image, preserveView);
 
     QSize sz = m_container->size();
     if (!sz.isEmpty()) {
-        m_viewState.setViewportSize(sz.width(), sz.height());
         m_renderer->setViewportSize(sz);
     }
-    m_renderer->setZoom(m_viewState.zoom());
-    m_renderer->setPan(m_viewState.pan());
-
-    emit zoomChanged(m_viewState.percentage());
-}
-
-void VkImageViewer::fitToWindow() {
-    if (!m_hasImage)
-        return;
-
-    QSize sz = m_container->size();
-    if (sz.isEmpty())
-        return;
-
-    m_viewState.setViewportSize(sz.width(), sz.height());
-    m_viewState.fitToWindow();
-    m_renderer->setViewportSize(sz);
-    m_renderer->setZoom(m_viewState.zoom());
-    m_renderer->setPan(m_viewState.pan());
-    emit zoomChanged(m_viewState.percentage());
-}
-
-void VkImageViewer::resetZoom() {
-    if (!m_hasImage)
-        return;
-
-    QSize sz = m_container->size();
-    if (sz.isEmpty())
-        return;
-
-    m_viewState.setViewportSize(sz.width(), sz.height());
-    m_viewState.fitToWindow();
-    m_renderer->setViewportSize(sz);
-    m_renderer->setZoom(m_viewState.zoom());
-    m_renderer->setPan(m_viewState.pan());
-    emit zoomChanged(m_viewState.percentage());
-}
-
-void VkImageViewer::setZoomPercentage(double pct) {
-    m_viewState.setPercentage(pct);
-    m_renderer->setZoom(m_viewState.zoom());
-    emit zoomChanged(m_viewState.percentage());
 }
 
 void VkImageViewer::clear() {
@@ -1374,11 +1323,13 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
     if (sz.isEmpty())
         return;
     m_renderer->setViewportSize(sz);
+    emit viewportResized(sz.width(), sz.height());
 }
 
 void VkImageViewer::setGrayscale(bool enabled) {
     m_renderer->setGrayscale(enabled);
 }
+
 void VkImageViewer::setMirror(bool enabled) {
     m_renderer->setMirror(enabled);
 }

@@ -91,9 +91,15 @@ class ViewState {
     /// Requires setViewportSize() to have been called.
     void fitToWindow();
 
-  private:
+    /// @brief Update absolute zoom to maintain the current zoom ratio.
+    /// Used for relative scaling during viewport resizes.
+    void updateZoomForRelativeScaling();
+
+    /// @brief Update the zoom ratio to match the current absolute zoom.
+    /// Used for absolute scaling during viewport resizes.
     void updateZoomRatio();
 
+  private:
     float   m_zoom = 1.0f;
     float   m_fitScale = 0.0f;
     float   m_zoomRatio = 1.0f;

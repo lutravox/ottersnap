@@ -34,6 +34,10 @@ class ViewerState : public QWidget {
         return m_statusBar;
     }
 
+  signals:
+    void zoomRequested(double pct);
+    void fitRequested();
+
   private:
     SnapshotTimeline *m_snapshotTimeline = nullptr;
     ImageViewer      *m_viewer = nullptr;

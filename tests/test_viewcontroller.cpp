@@ -16,12 +16,19 @@ class MockViewer : public IViewer {
         m_setViewStateCalled = true;
     }
 
+    void update() override {
+    }
+
     ViewState getViewState() const override {
         return m_currentState;
     }
 
     double zoomPercentage() const override {
         return m_currentState.percentage();
+    }
+
+    QSize getViewportSize() const override {
+        return QSize(800, 600);
     }
 
     // Helpers for testing
@@ -110,7 +117,7 @@ class TestViewController : public QObject {
         QCOMPARE(session.viewState().percentage(), viewer.lastState().percentage());
     }
 
-    void testResetZoom() {
+    void testResetView() {
         ViewController controller;
         ImageSession   session;
         MockViewer     viewer;
@@ -124,10 +131,11 @@ class TestViewController : public QObject {
         // Start with non-100% zoom
         session.viewState().setPercentage(50.0);
 
-        controller.resetZoom();
+        controller.resetView();
 
-        QCOMPARE(session.viewState().percentage(), 100.0);
-        QCOMPARE(viewer.lastState().percentage(), 100.0);
+        // Reset now performs Fit to Window
+        QCOMPARE(session.viewState().zoomRatio(), 1.0f);
+        QCOMPARE(viewer.lastState().zoomRatio(), 1.0f);
     }
 
     void testHandleViewportResize() {
@@ -155,10 +163,65 @@ class TestViewController : public QObject {
         controller.syncSessionToViewer();
         controller.syncViewerToSession();
         controller.fitToWindow();
-        controller.resetZoom();
+        controller.resetView();
         controller.handleViewportResize(800, 600);
 
         QVERIFY(true); // If we reached here, no crash occurred.
+    }
+
+    void testScaleWithWindowToggle() {
+        ViewController controller;
+        bool           initial = controller.isScaleWithWindowEnabled();
+
+        controller.setScaleWithWindowEnabled(!initial);
+        QVERIFY(controller.isScaleWithWindowEnabled() != initial);
+
+        controller.setScaleWithWindowEnabled(initial);
+        QVERIFY(controller.isScaleWithWindowEnabled() == initial);
+    }
+
+    void testHandleZoomRequested() {
+        ViewController controller;
+        ImageSession   session;
+        MockViewer     viewer;
+
+        controller.setActiveSession(&session);
+        controller.setViewer(&viewer);
+        session.viewState().resetState(1000, 1000);
+
+        double initialZoom = session.viewState().percentage();
+        controller.handleZoomRequested(true, false); // Zoom In
+        QVERIFY(session.viewState().percentage() > initialZoom);
+        QCOMPARE(viewer.setViewStateCalled(), true);
+    }
+
+    void testHandlePanRequested() {
+        ViewController controller;
+        ImageSession   session;
+        MockViewer     viewer;
+
+        controller.setActiveSession(&session);
+        controller.setViewer(&viewer);
+        session.viewState().resetState(1000, 1000);
+
+        QPointF initialPan = session.viewState().pan();
+        controller.handlePanRequested(10, 20);
+        QVERIFY(session.viewState().pan() != initialPan);
+        QCOMPARE(viewer.setViewStateCalled(), true);
+    }
+
+    void testSetZoomPercentage() {
+        ViewController controller;
+        ImageSession   session;
+        MockViewer     viewer;
+
+        controller.setActiveSession(&session);
+        controller.setViewer(&viewer);
+        session.viewState().resetState(1000, 1000);
+
+        controller.setZoomPercentage(250.0);
+        QCOMPARE(session.viewState().percentage(), 250.0);
+        QCOMPARE(viewer.setViewStateCalled(), true);
     }
 };
 

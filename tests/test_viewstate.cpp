@@ -185,12 +185,12 @@ void TestViewState::testPanDelta() {
     ViewState zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(500, 500);
-    // fitScale = 0.5, zoom = 0.5
+    // fitScale = 0.5, zoom = 1.0
     zs.applyPanDelta(10, 20);
-    // pan.rx() -= 10 * (1/1000) / 0.5 = -0.02
-    // pan.ry() -= 20 * (1/1000) / 0.5 = -0.04
-    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().rx()), -0.02f));
-    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().ry()), -0.04f));
+    // pan.rx() -= 10 * (1/1000) / 1.0 = -0.01
+    // pan.ry() -= 20 * (1/1000) / 1.0 = -0.02
+    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().rx()), -0.01f));
+    QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().ry()), -0.02f));
 }
 
 void TestViewState::testPanZoomIndependent() {
@@ -244,8 +244,13 @@ void TestViewState::testResizePreservesZoomRatio() {
     zs.setPercentage(200.0);       // zoom = 2.0, zoomRatio = 4.0
     float ratioBefore = zs.zoomRatio();
 
-    // Resize viewport — ratio should be preserved
+    // Resize viewport
     zs.setViewportSize(500, 250); // fitScale = 0.25
+
+    // In the MVC architecture, the controller explicitly calls this
+    // when 'Scale with Window' is enabled.
+    zs.updateZoomForRelativeScaling();
+
     QCOMPARE(zs.zoomRatio(), ratioBefore);
     // zoom should have changed to match new fitScale
     QVERIFY(qFuzzyCompare(zs.zoom(), 0.25f * ratioBefore));

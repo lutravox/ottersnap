@@ -14,11 +14,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
 
     auto *layout = new QVBoxLayout(this);
 
-    // Fit behavior
-    m_cbResizeToFit = new QCheckBox(tr("Fit"), this);
-    m_cbResizeToFit->setChecked(AppSettings::resizeToFit());
-    layout->addWidget(m_cbResizeToFit);
-
     m_cbRestoreSession = new QCheckBox(tr("Restore session"), this);
     m_cbRestoreSession->setChecked(AppSettings::restoreSession());
     layout->addWidget(m_cbRestoreSession);
@@ -44,7 +39,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     layout->addWidget(buttonBox);
 
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
-        AppSettings::setResizeToFit(m_cbResizeToFit->isChecked());
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
         AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
         AppSettings::setMaxSnapshotCacheSizeMB(m_sbCacheSize->value());

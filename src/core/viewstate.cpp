@@ -32,9 +32,7 @@ void ViewState::setViewportSize(int viewWidth, int viewHeight) {
     float newFit = std::min(static_cast<float>(viewWidth) / m_imageWidth,
                             static_cast<float>(viewHeight) / m_imageHeight);
 
-    updateZoomRatio();
     m_fitScale = newFit;
-    m_zoom = m_fitScale * m_zoomRatio;
 }
 
 void ViewState::setPercentage(double pct) {
@@ -93,4 +91,13 @@ void ViewState::fitToWindow() {
     m_zoomRatio = 1.0f;
     m_zoom = m_fitScale;
     m_pan = QPointF(0, 0);
+}
+
+void ViewState::updateZoomForRelativeScaling() {
+    if (!hasImage()) {
+        qDebug() << "[updateZoomForRelativeScaling] No image dimensions set";
+        return;
+    }
+
+    m_zoom = m_fitScale * m_zoomRatio;
 }

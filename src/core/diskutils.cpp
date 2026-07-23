@@ -51,4 +51,12 @@ QImage loadImage(const QString& filePath) {
     qWarning() << "[DiskUtils] failed to load image:" << filePath;
     return {};
 }
+
+bool saveImage(const QString& filePath, const QImage& image) {
+    if (!image.save(filePath)) {
+        qWarning() << "[DiskUtils] Failed to save image:" << filePath;
+        return false;
+    }
+    return true;
+}
 } // namespace DiskUtils

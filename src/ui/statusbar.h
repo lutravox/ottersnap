@@ -43,6 +43,6 @@ class StatusBar : public QWidget {
   private:
     QLabel         *m_timestampLabel;
     QLabel         *m_dimensionsLabel;
-    QDoubleSpinBox *spinbox;
-    QPushButton    *btnFit;
+    QDoubleSpinBox *zoomSpinbox;
+    QPushButton    *resetButton;
 };

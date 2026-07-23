@@ -17,7 +17,6 @@ class SettingsDialog : public QDialog {
     explicit SettingsDialog(QWidget *parent = nullptr);
 
   private:
-    QCheckBox *m_cbResizeToFit;
     QCheckBox *m_cbRestoreSession;
     QCheckBox *m_cbAutosave;
     QSpinBox  *m_sbCacheSize;

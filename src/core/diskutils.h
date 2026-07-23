@@ -23,8 +23,12 @@ bool ensureDir(const QString& path);
 /// @return The resulting absolute path.
 QString getAndEnsureDir(const QString& baseDir, const QString& key);
 
-/// @brief Load an image from the given path.
-/// @param filePath The path to load.
+/// @brief Save an image to a file.
+/// @param filePath The destination path.
+/// @param image The image to save.
+/// @return True if the operation succeeded, false otherwise.
+bool saveImage(const QString& filePath, const QImage& image);
+
 /// @return The loaded image, or an empty image on failure.
 QImage loadImage(const QString& filePath);
 } // namespace DiskUtils

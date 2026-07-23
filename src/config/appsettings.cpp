@@ -9,11 +9,11 @@ QSettings& AppSettings::settings() {
     return s;
 }
 
-bool AppSettings::resizeToFit() {
+bool AppSettings::scaleWithWindow() {
     return settings().value("General/resizeToFit", true).toBool();
 }
 
-void AppSettings::setResizeToFit(bool value) {
+void AppSettings::setScaleWithWindow(bool value) {
     settings().setValue("General/resizeToFit", value);
 }
 

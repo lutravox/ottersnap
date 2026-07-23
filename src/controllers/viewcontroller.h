@@ -25,13 +25,25 @@ class ViewController : public QObject {
     /// @brief Command the viewer to fit the image to the window.
     void fitToWindow();
 
-    /// @brief Command the viewer to reset zoom to 1:1.
-    void resetZoom();
+    /// @brief Command the viewer to reset the view state (zoom and pan).
+    void resetView();
+
+    /// @brief Set whether images should scale with window on resize.
+    void setScaleWithWindowEnabled(bool enabled);
+
+    /// @brief Return whether images should scale with window on resize.
+    bool isScaleWithWindowEnabled() const;
 
     /// @brief Notify the controller that the viewport size has changed.
     void handleViewportResize(int width, int height);
 
+  public slots:
+    void handleZoomRequested(bool zoomIn, bool ctrlHeld);
+    void handlePanRequested(int dx, int dy);
+    void setZoomPercentage(double pct);
+
   private:
     ImageSession *m_session = nullptr;
     IViewer      *m_viewer = nullptr;
+    QSize         m_lastViewportSize;
 };

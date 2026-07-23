@@ -15,9 +15,11 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
+#include <algorithm>
 
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
+#include "core/diskutils.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
@@ -85,6 +87,18 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSnapshotSelected);
 
+    connect(m_viewerState, &ViewerState::zoomRequested, this, [this](double pct) {
+        if (m_viewController) {
+            m_viewController->setZoomPercentage(pct);
+        }
+    });
+
+    connect(m_viewerState, &ViewerState::fitRequested, this, [this]() {
+        if (m_viewController) {
+            m_viewController->fitToWindow();
+        }
+    });
+
     connect(m_viewerState->snapshotTimeline(),
             &SnapshotTimeline::createSnapshotRequested,
             this,
@@ -117,6 +131,11 @@ void MainWindow::setupUi() {
     m_notificationManager = new NotificationManager(this);
 
     connect(m_viewerState->viewer(),
+            &VkImageViewer::viewportResized,
+            m_viewController,
+            &ViewController::handleViewportResize);
+
+    connect(m_viewerState->viewer(),
             &VkImageViewer::imageOpenRequested,
             this,
             [this](const QString& path) { openImageFile(path); });
@@ -132,9 +151,16 @@ void MainWindow::setupMenu() {
     m_actionOpen->setShortcut(QKeySequence::Open);
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
+    m_recentFilesMenu = m_fileMenu->addMenu(tr("Recent Files"));
+
+    m_fileMenu->addSeparator();
+
     m_actionSaveSnapshot = m_fileMenu->addAction(tr("&Save Snapshot of Current"));
     m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
+
+    m_actionExportSnapshot = m_fileMenu->addAction(tr("&Export Snapshot As..."));
+    connect(m_actionExportSnapshot, &QAction::triggered, this, &MainWindow::onExportSnapshot);
 
     m_actionDeleteSnapshot = m_fileMenu->addAction(tr("&Delete Selected Snapshot"));
     m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
@@ -143,9 +169,14 @@ void MainWindow::setupMenu() {
             this,
             &MainWindow::onDeleteCurrentSnapshotRequested);
 
+    m_fileMenu->addSeparator();
+
     m_actionCloseTab = m_fileMenu->addAction(tr("Close &Tab"));
     m_actionCloseTab->setShortcut(QKeySequence::Close);
     connect(m_actionCloseTab, &QAction::triggered, this, &MainWindow::onCloseCurrentTab);
+
+    m_actionCloseAllTabs = m_fileMenu->addAction(tr("Close All &Tabs"));
+    connect(m_actionCloseAllTabs, &QAction::triggered, this, &MainWindow::onCloseAllTabs);
 
     m_fileMenu->addSeparator();
 
@@ -158,13 +189,34 @@ void MainWindow::setupMenu() {
     connect(m_actionSettings, &QAction::triggered, this, &MainWindow::onSettings);
 
     m_viewMenu = menuBar()->addMenu(tr("&View"));
-    m_actionFitWindow = m_viewMenu->addAction(tr("&Fit to Window"));
+    m_actionFitWindow = m_viewMenu->addAction(tr("&Scale with Window"));
+    m_actionFitWindow->setCheckable(true);
     m_actionFitWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
-    connect(m_actionFitWindow, &QAction::triggered, this, &MainWindow::onFitToWindow);
+    connect(m_actionFitWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
 
-    m_actionResetZoom = m_viewMenu->addAction(tr("Reset &Zoom"));
+    m_actionResetZoom = m_viewMenu->addAction(tr("Reset &View"));
     m_actionResetZoom->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
     connect(m_actionResetZoom, &QAction::triggered, this, &MainWindow::onResetZoom);
+
+    m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
+    m_actionActualSize->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    connect(m_actionActualSize, &QAction::triggered, this, &MainWindow::onActualSize);
+
+    m_viewMenu->addSeparator();
+
+    m_actionZoomIn = m_viewMenu->addAction(tr("Zoom &In"));
+    m_actionZoomIn->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
+    connect(m_actionZoomIn, &QAction::triggered, this, &MainWindow::onZoomIn);
+
+    m_actionZoomOut = m_viewMenu->addAction(tr("Zoom &Out"));
+    m_actionZoomOut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+    connect(m_actionZoomOut, &QAction::triggered, this, &MainWindow::onZoomOut);
+
+    m_viewMenu->addSeparator();
+
+    m_actionFullScreen = m_viewMenu->addAction(tr("Toggle &Full Screen"));
+    m_actionFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
+    connect(m_actionFullScreen, &QAction::triggered, this, &MainWindow::onToggleFullScreen);
 
     m_effectsMenu = menuBar()->addMenu(tr("&Effects"));
     m_actionGrayscale = m_effectsMenu->addAction(tr("&Grayscale"));
@@ -180,6 +232,10 @@ void MainWindow::setupMenu() {
     connect(m_actionMirror, &QAction::triggered, this, [this]() {
         m_effectsController->toggleMirror();
     });
+
+    m_effectsMenu->addSeparator();
+    m_actionResetEffects = m_effectsMenu->addAction(tr("Reset All &Effects"));
+    connect(m_actionResetEffects, &QAction::triggered, this, &MainWindow::onResetEffects);
 
     updateMenuBar();
 }
@@ -208,7 +264,9 @@ void MainWindow::updateMenuBar() {
     switch (m_currentState) {
         case ContentState::Empty:
             m_actionSaveSnapshot->setVisible(false);
+            m_actionDeleteSnapshot->setVisible(false);
             m_actionCloseTab->setVisible(false);
+            m_actionCloseAllTabs->setVisible(false);
             m_actionFitWindow->setVisible(false);
             m_actionResetZoom->setVisible(false);
             m_actionGrayscale->setVisible(false);
@@ -222,7 +280,9 @@ void MainWindow::updateMenuBar() {
             m_actionSaveSnapshot->setVisible(true);
             m_actionDeleteSnapshot->setVisible(true);
             m_actionCloseTab->setVisible(true);
+            m_actionCloseAllTabs->setVisible(true);
             m_actionFitWindow->setVisible(true);
+            m_actionFitWindow->setChecked(m_viewController->isScaleWithWindowEnabled());
             m_actionResetZoom->setVisible(true);
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
@@ -231,21 +291,27 @@ void MainWindow::updateMenuBar() {
             m_effectsMenu->menuAction()->setVisible(true);
             break;
     }
-
-    // Clear the "Tools" menu as we now use dedicated menus
-    // (Removed m_contextMenu as it is no longer used)
 }
 
 void MainWindow::onCloseCurrentTab() {
     onCloseTab(m_tabBar->currentIndex());
 }
 
-void MainWindow::onFitToWindow() {
-    m_viewController->fitToWindow();
+void MainWindow::onCloseAllTabs() {
+    while (m_tabBar->count() > 0) {
+        onCloseTab(0);
+    }
+    m_currentVersionInView = -1;
+}
+
+void MainWindow::onToggleScaleWithWindow() {
+    bool enabled = !m_viewController->isScaleWithWindowEnabled();
+    m_viewController->setScaleWithWindowEnabled(enabled);
+    m_actionFitWindow->setChecked(enabled);
 }
 
 void MainWindow::onResetZoom() {
-    m_viewController->resetZoom();
+    m_viewController->resetView();
 }
 
 void MainWindow::onFileOpen() {
@@ -254,6 +320,83 @@ void MainWindow::onFileOpen() {
     if (path.isEmpty())
         return;
     openImageFile(path);
+
+    // Track recent files
+    QStringList recent = m_settings.value("recentFiles").toStringList();
+    recent.removeAll(path);
+    recent.prepend(path);
+    while (recent.size() > 10)
+        recent.removeLast();
+    m_settings.setValue("recentFiles", recent);
+    updateRecentFilesMenu();
+}
+
+void MainWindow::updateRecentFilesMenu() {
+    m_recentFilesMenu->clear();
+    QStringList recent = m_settings.value("recentFiles").toStringList();
+    for (const QString& path : recent) {
+        QAction *action = m_recentFilesMenu->addAction(QFileInfo(path).fileName());
+        connect(action, &QAction::triggered, this, [this, path]() { openImageFile(path); });
+    }
+}
+
+void MainWindow::onResetEffects() {
+    if (m_effectsController) {
+        m_effectsController->setGrayscale(false);
+        m_effectsController->setMirror(false);
+    }
+}
+
+void MainWindow::onZoomIn() {
+    if (!m_viewController)
+        return;
+    m_viewController->handleZoomRequested(true, false);
+}
+
+void MainWindow::onZoomOut() {
+    if (!m_viewController)
+        return;
+    m_viewController->handleZoomRequested(false, false);
+}
+
+void MainWindow::onActualSize() {
+    if (!m_viewController)
+        return;
+    m_viewController->setZoomPercentage(100.0);
+}
+
+void MainWindow::onToggleFullScreen() {
+    if (isFullScreen()) {
+        showNormal();
+    } else {
+        showFullScreen();
+    }
+}
+
+void MainWindow::onExportSnapshot() {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    QString baseName = QFileInfo(tab->filePath()).baseName();
+    QString suggestedName;
+    if (m_currentVersionInView >= 0) {
+        suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(m_currentVersionInView + 1);
+    } else {
+        suggestedName = baseName;
+    }
+
+    QString path = QFileDialog::getSaveFileName(
+        this, tr("Export Snapshot"), suggestedName, AppSettings::fileFilter());
+    if (path.isEmpty())
+        return;
+
+    QImage img = tab->currentImage();
+    if (DiskUtils::saveImage(path, img)) {
+        notify(tr("Snapshot exported successfully."));
+    } else {
+        notify(tr("Failed to export snapshot."), 5000);
+    }
 }
 
 void MainWindow::onSaveSnapshot() {
@@ -346,6 +489,7 @@ void MainWindow::onTabChanged(int index) {
         return;
     }
 
+    m_currentVersionInView = -1;
     updateSnapshotTimeline();
     updateViewer();
     updateState();
@@ -453,6 +597,9 @@ void MainWindow::updateViewer() {
         m_effectsController->setTargetState(tab->session());
         m_viewerState->statusBar()->setDimensions(image.width(), image.height());
 
+        // Fit the image to the window on load
+        m_viewController->fitToWindow();
+
         // Update timestamp in status bar
         int         idx = tab->session()->currentSnapshotIndex();
         const auto& snapshots = tab->session()->snapshots();
@@ -489,6 +636,14 @@ void MainWindow::onSnapshotSelected(int index) {
     if (!tab)
         return;
     tab->selectSnapshot(index);
+
+    // If index is equal to the number of snapshots, it refers to the original image.
+    if (index == static_cast<int>(tab->session()->snapshots().size())) {
+        m_currentVersionInView = -1;
+    } else {
+        m_currentVersionInView = index;
+    }
+
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
     updateViewer();
     updateMenuBar();

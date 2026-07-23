@@ -15,15 +15,15 @@ static constexpr double c_zoomStep = 10.0;
 
 StatusBar::StatusBar(QWidget *parent)
     : QWidget(parent), m_timestampLabel(new QLabel(this)), m_dimensionsLabel(new QLabel(this)),
-      spinbox(new QDoubleSpinBox(this)), btnFit(new QPushButton(tr("Fit"), this)) {
-    spinbox->setRange(c_minZoom, c_maxZoom);
-    spinbox->setSingleStep(c_zoomStep);
-    spinbox->setValue(c_defaultZoom);
-    spinbox->setDecimals(1);
-    spinbox->setSuffix("%");
-    spinbox->setMinimumWidth(90);
+      zoomSpinbox(new QDoubleSpinBox(this)), resetButton(new QPushButton(tr("Reset"), this)) {
+    zoomSpinbox->setRange(c_minZoom, c_maxZoom);
+    zoomSpinbox->setSingleStep(c_zoomStep);
+    zoomSpinbox->setValue(c_defaultZoom);
+    zoomSpinbox->setDecimals(1);
+    zoomSpinbox->setSuffix("%");
+    zoomSpinbox->setMinimumWidth(90);
 
-    btnFit->setFixedWidth(60);
+    resetButton->setFixedWidth(60);
 
     m_timestampLabel->setText("");
     m_timestampLabel->setObjectName("timestampLabel");
@@ -43,26 +43,26 @@ StatusBar::StatusBar(QWidget *parent)
     layout->addWidget(m_timestampLabel);
     layout->addStretch();
     layout->addWidget(m_dimensionsLabel);
-    layout->addWidget(spinbox);
-    layout->addWidget(btnFit);
+    layout->addWidget(zoomSpinbox);
+    layout->addWidget(resetButton);
 
-    connect(spinbox,
+    connect(zoomSpinbox,
             QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this,
             &StatusBar::zoomChanged);
-    connect(btnFit, &QPushButton::clicked, this, &StatusBar::fitRequested);
+    connect(resetButton, &QPushButton::clicked, this, &StatusBar::fitRequested);
 }
 
 double StatusBar::zoom() const {
-    return spinbox->value();
+    return zoomSpinbox->value();
 }
 
 void StatusBar::setZoom(double pct, bool emitSignal) {
     if (!emitSignal) {
-        spinbox->blockSignals(true);
+        zoomSpinbox->blockSignals(true);
     }
-    spinbox->setValue(pct);
-    spinbox->blockSignals(false);
+    zoomSpinbox->setValue(pct);
+    zoomSpinbox->blockSignals(false);
 }
 
 void StatusBar::setDimensions(int width, int height) {

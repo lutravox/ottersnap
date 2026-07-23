@@ -1,5 +1,7 @@
 #include <QDebug>
 #include "controllers/viewcontroller.h"
+#include "config/appsettings.h"
+#include "ui/vkimageviewer.h"
 
 ViewController::ViewController(QObject *parent) : QObject(parent) {
 }
@@ -10,12 +12,18 @@ void ViewController::setActiveSession(ImageSession *session) {
 
 void ViewController::setViewer(IViewer *viewer) {
     m_viewer = viewer;
+    if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
+        connect(
+            vkViewer, &VkImageViewer::zoomRequested, this, &ViewController::handleZoomRequested);
+        connect(vkViewer, &VkImageViewer::panRequested, this, &ViewController::handlePanRequested);
+    }
 }
 
 void ViewController::syncSessionToViewer() {
     if (!m_session || !m_viewer)
         return;
     m_viewer->setViewState(m_session->viewState());
+    m_viewer->update();
 }
 
 void ViewController::syncViewerToSession() {
@@ -28,35 +36,83 @@ void ViewController::fitToWindow() {
     if (!m_session || !m_viewer)
         return;
 
-    // We assume the viewer is already aware of its size,
-    // but we ensure the session state is updated.
-    ViewState state = m_session->viewState();
+    // Ensure we have the current viewport size before fitting
+    QSize      sz = m_viewer->getViewportSize();
+    ViewState& state = m_session->viewState();
+    state.setViewportSize(sz.width(), sz.height());
+
     state.fitToWindow();
 
-    m_session->viewState() = state;
     m_viewer->setViewState(state);
+    m_viewer->update();
 }
 
-void ViewController::resetZoom() {
+void ViewController::resetView() {
     if (!m_session || !m_viewer)
         return;
 
-    ViewState state = m_session->viewState();
-    state.setPercentage(100.0);
+    fitToWindow();
+}
 
-    m_session->viewState() = state;
+void ViewController::setZoomPercentage(double pct) {
+    if (!m_session || !m_viewer)
+        return;
+
+    ViewState& state = m_session->viewState();
+    state.setPercentage(pct);
+
     m_viewer->setViewState(state);
+    m_viewer->update();
+}
+
+void ViewController::setScaleWithWindowEnabled(bool enabled) {
+    AppSettings::setScaleWithWindow(enabled);
+    if (enabled) {
+        fitToWindow();
+    }
+}
+
+bool ViewController::isScaleWithWindowEnabled() const {
+    return AppSettings::scaleWithWindow();
 }
 
 void ViewController::handleViewportResize(int width, int height) {
-    if (!m_session)
+    if (!m_session || !m_viewer)
         return;
 
-    // Update the model's understanding of the viewport
-    m_session->viewState().setViewportSize(width, height);
+    ViewState& state = m_session->viewState();
 
-    // If we have a viewer, we might need to trigger a re-render or sync
-    if (m_viewer) {
-        syncSessionToViewer();
+    state.setViewportSize(width, height);
+
+    // Maintain relative zoom if enabled, otherwise maintain absolute zoom
+    if (isScaleWithWindowEnabled()) {
+        state.updateZoomForRelativeScaling();
+    } else {
+        state.updateZoomRatio();
     }
+
+    m_viewer->setViewState(state);
+    m_viewer->update();
+}
+
+void ViewController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
+    if (!m_session || !m_viewer)
+        return;
+
+    ViewState& state = m_session->viewState();
+    state.applyWheelZoom(zoomIn, ctrlHeld);
+
+    m_viewer->setViewState(state);
+    m_viewer->update();
+}
+
+void ViewController::handlePanRequested(int dx, int dy) {
+    if (!m_session || !m_viewer)
+        return;
+
+    ViewState& state = m_session->viewState();
+    state.applyPanDelta(dx, dy);
+
+    m_viewer->setViewState(state);
+    m_viewer->update();
 }

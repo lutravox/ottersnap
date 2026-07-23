@@ -30,11 +30,7 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @param preserveView If true, keep the current zoom and pan. If false, reset to fit.
     void setImage(const QImage& image, bool preserveView = false) override;
 
-    /// @brief Fit the image to the window, adjusting zoom and pan.
-    void fitToWindow();
-
-    /// @brief Reset zoom to 1:1 pixel scale and center the image.
-    void resetZoom();
+    /// @brief Enable or disable grayscale rendering in the fragment shader.
 
     /// @brief Enable or disable grayscale rendering in the fragment shader.
     void setGrayscale(bool enabled) override;
@@ -48,30 +44,45 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
     double zoomPercentage() const override {
-        return m_viewState.percentage();
+        return m_currentViewState.percentage();
     }
 
-    /// @brief Set the zoom level by percentage (100.0 = 1:1).
-    /// @param pct The desired zoom percentage.
-    void setZoomPercentage(double pct);
+    QSize getViewportSize() const override {
+        return m_container ? m_container->size() : QSize(0, 0);
+    }
 
     /// @brief Clear the current image from the viewer.
     void clear();
 
     /// @brief Get the current view state.
     ViewState getViewState() const override {
-        return m_viewState;
+        return m_currentViewState;
     }
 
     /// @brief Set the view state.
     /// @param state The new view state.
-    void setViewState(const ViewState& state) override {
-        m_viewState = state;
+    void setViewState(const ViewState& state) override;
+
+    /// @brief Trigger a redraw of the viewer.
+    void update() override {
+        QWidget::update();
+        if (m_vulkanWindow) {
+            m_vulkanWindow->requestUpdate();
+        }
     }
 
   signals:
     /// @brief Emitted when the user clicks the image.
     void imageClicked();
+
+    /// @brief Emitted whenever the viewport size changes.
+    void viewportResized(int width, int height);
+
+    /// @brief Emitted when the user requests a zoom change via the wheel.
+    void zoomRequested(bool zoomIn, bool ctrlHeld);
+
+    /// @brief Emitted when the user requests a pan change via dragging.
+    void panRequested(int dx, int dy);
 
     /// @brief Emitted whenever the zoom level changes.
     void zoomChanged(double percentage);
@@ -97,7 +108,7 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     QWidget               *m_container = nullptr;
 
     bool      m_hasImage = false;
-    ViewState m_viewState;
+    ViewState m_currentViewState;
     bool      m_isDragging = false;
     QPoint    m_lastMousePos;
 

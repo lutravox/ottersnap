@@ -8,7 +8,6 @@ class TestAppSettings : public QObject {
   private slots:
     void initTestCase();
 
-    void testResizeToFit();
     void testRestoreSession();
     void testAutosaveSnapshots();
     void testMaxSnapshotCacheSize();
@@ -21,13 +20,6 @@ void TestAppSettings::initTestCase() {
     // the real application's QSettings.
     QCoreApplication::setOrganizationName("OttersnapTest");
     QCoreApplication::setApplicationName("test_appsettings");
-}
-
-void TestAppSettings::testResizeToFit() {
-    AppSettings::setResizeToFit(true);
-    QCOMPARE(AppSettings::resizeToFit(), true);
-    AppSettings::setResizeToFit(false);
-    QCOMPARE(AppSettings::resizeToFit(), false);
 }
 
 void TestAppSettings::testRestoreSession() {

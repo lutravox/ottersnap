@@ -22,9 +22,9 @@ ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     layout->addWidget(m_viewer, 1);
     layout->addWidget(m_statusBar, 0);
 
-    // Wire status bar -> viewer
-    connect(m_statusBar, &StatusBar::zoomChanged, m_viewer, &ImageViewer::setZoomPercentage);
-    connect(m_statusBar, &StatusBar::fitRequested, m_viewer, &ImageViewer::fitToWindow);
+    // Wire status bar -> ViewerState signals
+    connect(m_statusBar, &StatusBar::zoomChanged, this, &ViewerState::zoomRequested);
+    connect(m_statusBar, &StatusBar::fitRequested, this, &ViewerState::fitRequested);
 
     // Wire viewer zoom -> status bar
     connect(m_viewer, &ImageViewer::zoomChanged, m_statusBar, [this](double pct) {

@@ -14,6 +14,12 @@ class IViewer {
     /// @brief Update the viewer's viewport state.
     virtual void setViewState(const ViewState& state) = 0;
 
+    /// @brief Trigger a redraw of the viewer.
+    virtual void update() = 0;
+
+    /// @brief Retrieve the current viewport size.
+    virtual QSize getViewportSize() const = 0;
+
     /// @brief Retrieve the current viewport state from the viewer.
     virtual ViewState getViewState() const = 0;
 

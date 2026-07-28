@@ -3,7 +3,7 @@
 #include <QEvent>
 #include <QList>
 #include <QObject>
-#include <QWidget>
+#include <QWindow>
 #include "ui/notification.h"
 
 /// @brief Manages a stack of transient notifications overlaying a target window.

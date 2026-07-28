@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 # ── Shader pipeline ──────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src)
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent)
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml)
 
 add_executable(${PROJECT_NAME}
     # Entry point
@@ -142,7 +142,7 @@ add_executable(${PROJECT_NAME}
 add_dependencies(${PROJECT_NAME} shader_rcc)
 
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent)
+target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml)
 
 qt_add_translations(${PROJECT_NAME}
     RESOURCE_PREFIX "/translations"

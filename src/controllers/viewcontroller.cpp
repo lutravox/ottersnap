@@ -9,9 +9,6 @@ ViewController::ViewController(QObject *parent) : QObject(parent) {
 void ViewController::setActiveSession(ImageSession *session) {
     m_session = session;
     if (m_session && m_viewer) {
-        qDebug() << "[ViewController] setActiveSession: session =" << session
-                 << "reconstructor =" << m_session->sharedReconstructor().get();
-
         m_viewer->setSession(m_session);
         m_viewer->setReconstructor(m_session->sharedReconstructor());
 

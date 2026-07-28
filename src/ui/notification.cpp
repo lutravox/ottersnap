@@ -1,45 +1,47 @@
 #include "ui/notification.h"
 
 #include <QEvent>
-#include <QFile>
-#include <QPainter>
-#include <QStyle>
-#include <QStyleOption>
+#include <QGuiApplication>
+#include <QPalette>
+#include <QQmlContext>
+#include <QQmlProperty>
+#include <QQuickItem>
+#include <QSurfaceFormat>
 #include <QTimer>
+#include <QWidget>
 
-Notification::Notification(QWidget *parent)
-    : QLabel(parent), m_hideTimer(nullptr), m_parent(parent) {
-    setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground);
-    setWordWrap(true);
-    setFixedWidth(300);
-    setAlignment(Qt::AlignCenter);
-    setObjectName("notification");
+Notification::Notification(QWindow *parent)
+    : QQuickView(parent), m_hideTimer(nullptr), m_parent(parent) {
+    QSurfaceFormat format = this->format();
+    format.setAlphaBufferSize(8);
+    setFormat(format);
 
-    {
-        QFile qss(":/qss/notification.qss");
-        if (qss.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            setStyleSheet(QString::fromUtf8(qss.readAll()));
-        }
-    }
+    setColor(Qt::transparent);
+
+    setSource(QUrl("qrc:/ui/qml/notification.qml"));
+    setFlags(Qt::ToolTip | Qt::FramelessWindowHint);
+
+    connect(rootObject(), SIGNAL(fadeOutFinished()), this, SLOT(onFadeOutFinished()));
 
     m_hideTimer = new QTimer(this);
     m_hideTimer->setSingleShot(true);
     connect(m_hideTimer, &QTimer::timeout, this, &Notification::hideAfterTimeout);
 
     if (m_parent) {
-        QWidget *mainWindow = m_parent->window();
-        if (mainWindow) {
-            mainWindow->installEventFilter(this);
-        }
+        m_parent->installEventFilter(this);
     }
 
     hide();
 }
 
+Notification::~Notification() {
+}
+
 void Notification::notify(const QString& message, int timeoutMs) {
-    setText(message);
-    adjustSize();
+    if (rootObject()) {
+        rootObject()->setProperty("message", message);
+        rootObject()->setProperty("fadeOut", false);
+    }
 
     show();
     raise();
@@ -52,33 +54,31 @@ void Notification::updatePosition() {
         return;
 
     if (m_parent) {
-        QWidget *mainWindow = m_parent->window();
-        if (mainWindow) {
-            int marginX = 20;
-            int marginY = 60;
+        int marginX = 20;
+        int marginY = 60;
 
-            QRect geom = mainWindow->geometry();
-            int   x = geom.x() + geom.width() - width() - marginX;
-            int   y = geom.y() + geom.height() - height() - marginY;
+        QPoint globalPos = m_parent->mapToGlobal(QPoint(m_parent->width(), m_parent->height()));
+        int    x = globalPos.x() - width() - marginX;
+        int    y = globalPos.y() - height() - marginY;
 
-            move(x, y);
-        }
+        setPosition(QPoint(x, y));
     }
 }
 
-void Notification::paintEvent(QPaintEvent *event) {
-    QStyleOption opt;
-    opt.initFrom(this);
-    QPainter p(this);
-    style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
-    QLabel::paintEvent(event);
+void Notification::hideAfterTimeout() {
+    if (rootObject()) {
+        rootObject()->setProperty("fadeOut", true);
+    }
 }
 
-void Notification::hideAfterTimeout() {
+void Notification::onFadeOutFinished() {
     hide();
     emit finished();
 }
 
 bool Notification::eventFilter(QObject *watched, QEvent *event) {
-    return QLabel::eventFilter(watched, event);
+    if (watched == m_parent && (event->type() == QEvent::Resize || event->type() == QEvent::Move)) {
+        updatePosition();
+    }
+    return QQuickView::eventFilter(watched, event);
 }

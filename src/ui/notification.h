@@ -1,18 +1,17 @@
 #pragma once
 
-#include <QLabel>
-#include <QPainter>
-#include <QStyle>
-#include <QStyleOption>
+#include <QQuickView>
+#include <QTimer>
 
 /// @brief Notification that shows transient messages with a fade-out animation.
-class Notification : public QLabel {
+class Notification : public QQuickView {
     Q_OBJECT
 
   public:
     /// @brief Construct the notification.
-    /// @param parent Optional parent widget.
-    explicit Notification(QWidget *parent = nullptr);
+    /// @param parent Optional parent window.
+    explicit Notification(QWindow *parent = nullptr);
+    ~Notification();
 
     /// @brief Display a message that fades out after a timeout.
     /// @param message Text to display.
@@ -22,15 +21,17 @@ class Notification : public QLabel {
   signals:
     void finished();
 
+  private slots:
+    void onFadeOutFinished();
+
   private:
     void hideAfterTimeout();
-    void paintEvent(QPaintEvent *event) override;
+    void updatePosition();
 
   protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
   private:
-    void     updatePosition();
     QTimer  *m_hideTimer;
-    QWidget *m_parent;
+    QWindow *m_parent;
 };

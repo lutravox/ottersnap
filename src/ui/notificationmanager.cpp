@@ -1,4 +1,5 @@
 #include <QTimer>
+#include <QWidget>
 #include "ui/notificationmanager.h"
 
 NotificationManager::NotificationManager(QWidget *targetWindow, QObject *parent)
@@ -15,7 +16,7 @@ NotificationManager::~NotificationManager() {
 void NotificationManager::notify(const QString& message, int timeoutMs) {
     int timeout = (timeoutMs == -1) ? 3500 : timeoutMs;
 
-    Notification *n = new Notification(m_targetWindow);
+    Notification *n = new Notification(m_targetWindow->windowHandle());
     n->notify(message, timeout);
     m_notifications.append(n);
 
@@ -45,13 +46,17 @@ void NotificationManager::updatePositions() {
     if (m_notifications.isEmpty() || !m_targetWindow)
         return;
 
+    QWidget *mainWindow = m_targetWindow->window();
+    if (!mainWindow)
+        return;
+
     int marginX = 20;
     int marginY = 60;
     int spacing = 10;
 
-    QRect geom = m_targetWindow->geometry();
-    int   base_x = geom.x() + geom.width() - marginX;
-    int   base_y = geom.y() + geom.height() - marginY;
+    QPoint globalPos = mainWindow->mapToGlobal(QPoint(mainWindow->width(), mainWindow->height()));
+    int    base_x = globalPos.x() - marginX;
+    int    base_y = globalPos.y() - marginY;
 
     for (int i = 0; i < m_notifications.size(); ++i) {
         Notification *n = m_notifications[i];
@@ -62,6 +67,6 @@ void NotificationManager::updatePositions() {
         int offset = (m_notifications.size() - 1 - i) * (n->height() + spacing);
         int y = base_y - n->height() - offset;
 
-        n->move(x, y);
+        n->setPosition(QPoint(x, y));
     }
 }

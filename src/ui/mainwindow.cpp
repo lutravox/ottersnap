@@ -245,6 +245,7 @@ void MainWindow::setupMenu() {
     connect(m_actionResetEffects, &QAction::triggered, this, &MainWindow::onResetEffects);
 
     updateMenuBar();
+    updateRecentFilesMenu();
 }
 
 void MainWindow::updateMenuBar() {

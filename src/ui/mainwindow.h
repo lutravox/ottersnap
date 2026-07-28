@@ -80,7 +80,7 @@ class MainWindow : public QMainWindow {
     QStringList collectOpenPaths() const;
 
     /// @brief Update the viewer when the active tab changes.
-    void updateViewer();
+    void updateViewer(ImageTab *tab = nullptr);
 
     /// @brief Sync menu action states and content visibility with the active tab.
     void updateState();

@@ -481,7 +481,7 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
         if (setAsCurrent) {
             m_tabBar->setCurrentWidget(tab);
         }
-        updateViewer();
+        updateViewer(tab);
         m_viewController->fitToWindow();
     }
 }
@@ -614,7 +614,7 @@ void MainWindow::onSettings() {
     dialog.exec();
 }
 
-void MainWindow::updateViewer() {
+void MainWindow::updateViewer(ImageTab *tab) {
     if (m_currentState == ContentState::Empty) {
         // Clear the viewer so there's no stale content
         m_viewerState->viewer()->clear();
@@ -622,7 +622,10 @@ void MainWindow::updateViewer() {
         return;
     }
 
-    auto *tab = currentTab();
+    if (!tab) {
+        tab = currentTab();
+    }
+
     if (!tab)
         return;
 
@@ -676,7 +679,6 @@ void MainWindow::updateViewer() {
 
     m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->zoomPercentage());
     m_currentTabInView = tab;
-    m_currentVersionInView = snapshotIdx;
 }
 
 void MainWindow::updateState() {

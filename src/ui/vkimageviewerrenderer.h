@@ -126,7 +126,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     bool   m_reconstructionPending = false; ///< Set when reconstruction is pending
     QImage m_sourceImage;
 
-    ImageSession *m_session = nullptr;
+    QPointer<ImageSession> m_session = nullptr;
 
     // Qt Vulkan function wrappers
     QVulkanDeviceFunctions *m_devFuncs = nullptr;

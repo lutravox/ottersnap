@@ -419,8 +419,8 @@ void VkImageViewerRenderer::updateUniformBuffer() {
     ubo->uPanOffset[1] = state.pan().y();
     ubo->uFitScale = fitScale;
     ubo->uZoomLevel = state.zoom();
-    ubo->uGrayscale = m_session->grayscaleEnabled() ? VK_TRUE : VK_FALSE;
-    ubo->uMirror = m_session->mirrorEnabled() ? VK_TRUE : VK_FALSE;
+    ubo->uGrayscale = grayscaleEnabled() ? VK_TRUE : VK_FALSE;
+    ubo->uMirror = mirrorEnabled() ? VK_TRUE : VK_FALSE;
 }
 
 void VkImageViewerRenderer::updateDescriptors(VkDescriptorSet dstSet,

@@ -476,8 +476,12 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     setTabThumbnail(index);
     m_tabPaths.insert(path, tab);
 
-    if (setAsCurrent) {
-        m_tabBar->setCurrentWidget(tab);
+    if (setAsCurrent || m_isRestoringSession) {
+        if (setAsCurrent) {
+            m_tabBar->setCurrentWidget(tab);
+        }
+        updateViewer();
+        m_viewController->fitToWindow();
     }
 }
 
@@ -658,9 +662,6 @@ void MainWindow::updateViewer() {
     m_effectsController->setTargetState(tab->session());
     QSize dims = tab->session()->dimensions();
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
-
-    // Fit the image to the window on load
-    m_viewController->fitToWindow();
 
     // Update timestamp in status bar
     int         idx = tab->session()->currentSnapshotIndex();

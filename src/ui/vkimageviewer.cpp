@@ -60,6 +60,7 @@ VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
     auto *vkWindow = new VkImageViewerWindow();
     vkWindow->setViewerRenderer(m_renderer);
     vkWindow->setVulkanInstance(VulkanContext::instance().getInstance());
+    vkWindow->setFlags(QVulkanWindow::PersistentResources);
     m_vulkanWindow = vkWindow;
 
     m_container = QWidget::createWindowContainer(m_vulkanWindow, this);

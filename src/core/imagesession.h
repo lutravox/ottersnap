@@ -118,7 +118,7 @@ class ImageSession : public QObject, public IEffectsState {
   private:
     void   rebuildSnapshotList();
     void   createReconstructor();
-    bool   autosaveSnapshot(const QImage& newImage);
+    void   autosaveSnapshot(const QImage& img);
     int    getRelativeVersion(int snapshotIndex) const;
     QImage generateThumbnail(int index, int size);
 

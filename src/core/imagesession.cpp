@@ -191,27 +191,52 @@ void ImageSession::onFileChanged() {
 
 void ImageSession::reloadImage() {
     qDebug() << "[ImageSession] Reloading image:" << m_filePath;
-    QImage newImage = DiskUtils::loadImage(m_filePath);
-    if (newImage.isNull() || newImage == m_diskImage)
-        return;
 
-    if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
-        autosaveSnapshot(m_diskImage);
-    }
+    QString path = m_filePath;
+    auto    watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, [this, watcher]() {
+        QImage newImage = watcher->result();
+        watcher->deleteLater();
 
-    m_diskImage = newImage;
-    rebuildSnapshotList();
-    m_currentIndex = static_cast<int>(m_snapshots.size());
-    m_thumbnailCache = {-1, QImage()};
-    emit imageChanged();
+        if (newImage.isNull() || newImage == m_diskImage)
+            return;
+
+        if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
+            autosaveSnapshot(m_diskImage);
+        }
+
+        m_diskImage = newImage;
+        rebuildSnapshotList();
+        m_thumbnailCache = {-1, QImage()};
+        emit imageChanged();
+    });
+
+    watcher->setFuture(QtConcurrent::run([path]() { return DiskUtils::loadImage(path); }));
 }
 
-bool ImageSession::autosaveSnapshot(const QImage& img) {
-    auto res = SnapshotStore::saveSnapshot(m_filePath, img);
-    if (res && res->status == SnapshotStore::SaveStatus::Created) {
-        return true;
-    }
-    return false;
+void ImageSession::autosaveSnapshot(const QImage& img) {
+    QString path = m_filePath;
+    QImage  image = img;
+
+    auto watcher = new QFutureWatcher<std::optional<SnapshotStore::SaveResult>>(this);
+    connect(watcher,
+            &QFutureWatcher<std::optional<SnapshotStore::SaveResult>>::finished,
+            [this, watcher]() {
+                auto res = watcher->result();
+                if (res && res->status == SnapshotStore::SaveStatus::Created) {
+                    bool wasViewingCurrent =
+                        (m_currentIndex == static_cast<int>(m_snapshots.size()));
+                    rebuildSnapshotList();
+                    if (wasViewingCurrent) {
+                        m_currentIndex = static_cast<int>(m_snapshots.size());
+                        emit imageChanged();
+                    }
+                    emit statusMessage("Snapshot autosaved.");
+                }
+                watcher->deleteLater();
+            });
+    watcher->setFuture(
+        QtConcurrent::run([path, image]() { return SnapshotStore::saveSnapshot(path, image); }));
 }
 
 int ImageSession::getRelativeVersion(int snapshotIndex) const {

@@ -59,9 +59,7 @@ class VkSnapshotReconstructor {
 
     /// @brief Returns true if the base image is currently being uploaded to
     /// the GPU.
-    bool isUploadingBase() const {
-        return m_isUploadingBase;
-    }
+    bool isUploadingBase() const;
 
     /// @brief Resets the internal reconstruction state, clearing active and
     /// cached buffers.
@@ -69,33 +67,26 @@ class VkSnapshotReconstructor {
 
     /// @brief Returns the current state buffer handle.
     /// @return The VkBuffer handle of the current state.
-    VkBuffer stateBuffer() const {
-        return m_stateBuffer;
-    }
+    VkBuffer stateBuffer() const;
 
-    uint32_t width() const {
-        return m_width;
-    }
+    /// @brief Returns the width of the current reconstructed image in pixels.
+    uint32_t width() const;
 
-    uint32_t height() const {
-        return m_height;
-    }
+    /// @brief Returns the height of the current reconstructed image in pixels.
+    uint32_t height() const;
 
     /// @brief Returns true if the internal state has been updated and needs to be uploaded to the
     /// renderer.
-    bool isDirty() const {
-        return m_isDirty;
-    }
+    bool isDirty() const;
 
-    VkDeviceSize stateBufferSize() const {
-        return m_stateBufferSize;
-    }
+    /// @brief Returns the total size of the current state buffer in bytes.
+    VkDeviceSize stateBufferSize() const;
 
   private:
     bool updateCachedBase(VkDeviceSize size);
 
-    VulkanHandles        m_handles;
-    std::recursive_mutex m_mutex;
+    VulkanHandles                m_handles;
+    mutable std::recursive_mutex m_mutex;
 
     // Descriptor Set (Session-specific)
     VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;

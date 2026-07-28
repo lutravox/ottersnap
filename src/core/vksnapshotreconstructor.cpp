@@ -725,6 +725,36 @@ bool VkSnapshotReconstructor::updateCachedBase(VkDeviceSize size) {
     return true;
 }
 
+bool VkSnapshotReconstructor::isUploadingBase() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_isUploadingBase;
+}
+
+VkBuffer VkSnapshotReconstructor::stateBuffer() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_stateBuffer;
+}
+
+uint32_t VkSnapshotReconstructor::width() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_width;
+}
+
+uint32_t VkSnapshotReconstructor::height() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_height;
+}
+
+bool VkSnapshotReconstructor::isDirty() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_isDirty;
+}
+
+VkDeviceSize VkSnapshotReconstructor::stateBufferSize() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_stateBufferSize;
+}
+
 QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence& seq,
                                                    QSize                         targetSize,
                                                    VkSnapshotReconstructor      *worker) {

@@ -4,10 +4,8 @@
 #include <QImage>
 #include <QSize>
 #include <QString>
-#include <functional>
-#include <optional>
 
-/// @brief Cache for images and thumbnails.
+/// @brief Cache for images and thumbnails. UNUSED
 class ImageCache {
   public:
     /// @brief Return a pointer to a cached image, or nullptr if not found.
@@ -29,15 +27,13 @@ class ImageCache {
     /// @brief Formats a thumbnail of the given image, centered on a transparent canvas.
     static QImage formatThumbnail(const QImage& image, int size);
 
-    /// @brief Retrieves a thumbnail from the disk cache or generates it if missing.
+    /// @brief Retrieves a thumbnail from the disk cache.
     /// @param imageKey The unique identifier for the image.
     /// @param version The version number.
     /// @param size The desired thumbnail size.
-    /// @param loadFullImage Callback to load the full image if the thumbnail is missing.
-    static QImage loadThumbnail(const QString&          imageKey,
-                                int                     version,
-                                const QSize&            size,
-                                std::function<QImage()> loadFullImage);
+    /// @return The thumbnail image, or a null image if not found.
+    static QImage loadThumbnail(const QString& imageKey, int version, const QSize& size);
+    ;
 
   private:
     static QCache<QString, QImage> s_imageCache;

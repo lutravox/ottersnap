@@ -5,6 +5,8 @@
 #include <QPointer>
 #include <QString>
 #include <QVector>
+#include "core/vksnapshotreconstructor.h"
+#include "core/vulkan_types.h"
 
 #include "core/effects_interfaces.h"
 #include "core/effectsstate.h"
@@ -45,8 +47,24 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Close the current image and release resources.
     void close();
 
-    /// @brief Return the currently active image.
-    const QImage& currentImage();
+    /// @brief Return the current image loaded from disk.
+    QImage& diskImage() {
+        return m_diskImage;
+    }
+
+    /// @brief Return the dimensions of the image.
+    QSize dimensions() const {
+        return m_diskImage.size();
+    }
+
+    /// @brief Retrieve the reconstruction sequence (base image and deltas) for the current
+    /// snapshot.
+    std::optional<ReconstructionSequence> getReconstructionSequence() const;
+
+    /// @brief Retrieve the reconstruction sequence (base image and deltas) for a relative
+    /// snapshot index.
+    std::optional<ReconstructionSequence> getReconstructionSequence(int index) const;
+
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
     /// @brief Manually trigger a snapshot of the current image on disk.
@@ -56,7 +74,10 @@ class ImageSession : public QObject, public IEffectsState {
     void deleteSnapshot(int index);
 
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
-    std::pair<QVector<QImage>, QVector<QString>> snapshotThumbnails(int size);
+    std::pair<QVector<QImage>, QVector<QString>> snapshotTimelineThumbnails(int size);
+
+    /// @brief Generate and cache a thumbnail for the currently selected image.
+    QImage thumbnail(int size);
 
     // Getters
     QString filePath() const {
@@ -65,11 +86,20 @@ class ImageSession : public QObject, public IEffectsState {
     int currentSnapshotIndex() const {
         return m_currentIndex;
     }
+
+    bool isCurrentImageSelected() const {
+        return m_currentIndex == static_cast<int>(m_snapshots.size());
+    }
+
     const QVector<ImageSnapshot>& snapshots() const {
         return m_snapshots;
     }
     const QVector<QString>& labels() const {
         return m_labels;
+    }
+
+    std::shared_ptr<VkSnapshotReconstructor> sharedReconstructor() const {
+        return m_reconstructor;
     }
 
   signals:
@@ -83,22 +113,34 @@ class ImageSession : public QObject, public IEffectsState {
 
   private slots:
     void onFileChanged();
+    void onDeviceChanged();
 
   private:
-    void rebuildSnapshotList();
-    bool autosaveSnapshot(const QImage& newImage);
-    int  getRelativeVersion(int snapshotIndex) const;
+    void   rebuildSnapshotList();
+    void   createReconstructor();
+    bool   autosaveSnapshot(const QImage& newImage);
+    int    getRelativeVersion(int snapshotIndex) const;
+    QImage generateThumbnail(int index, int size);
 
     QString                m_filePath;
     QImage                 m_diskImage;
-    QImage                 m_cachedImage;
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
     int                    m_currentIndex = 0;
-    int                    m_loadedSnapshotIndex = -1;
+
+    struct {
+        int    size = -1;
+        QImage image;
+    } m_thumbnailCache;
+
+    mutable struct {
+        int    index = -1;
+        QImage image;
+    } m_baseCache;
 
     EffectsState m_effects;
     ViewState    m_viewState;
 
-    ImageMonitor *m_monitor;
+    ImageMonitor                            *m_monitor;
+    std::shared_ptr<VkSnapshotReconstructor> m_reconstructor;
 };

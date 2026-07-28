@@ -118,15 +118,10 @@ void TestImageCache::testLoadThumbnailCacheMiss() {
     QString key = "miss_key_" + QString::number(QRandomGenerator::global()->generate());
     int     version = 1;
     QSize   size(32, 32);
-    bool    callbackCalled = false;
 
-    QImage result = ImageCache::loadThumbnail(key, version, size, [&]() {
-        callbackCalled = true;
-        return QImage(64, 64, QImage::Format_RGB32);
-    });
+    QImage result = ImageCache::loadThumbnail(key, version, size);
 
-    QVERIFY(callbackCalled);
-    QCOMPARE(result.size(), size);
+    QVERIFY(result.isNull());
 }
 
 void TestImageCache::testLoadThumbnailCacheHit() {
@@ -134,18 +129,17 @@ void TestImageCache::testLoadThumbnailCacheHit() {
     int     version = 1;
     QSize   size(32, 32);
 
-    // First call to populate cache
-    ImageCache::loadThumbnail(
-        key, version, size, []() { return QImage(64, 64, QImage::Format_RGB32); });
+    // Manually populate cache by saving a file
+    QString baseThumbDir =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+    QString cacheDir = baseThumbDir + '/' + key;
+    QDir().mkpath(cacheDir);
+    QImage thumb(64, 64, QImage::Format_RGB32);
+    thumb.save(cacheDir + "/v0001.webp", "WEBP");
 
-    bool   callbackCalled = false;
-    QImage result = ImageCache::loadThumbnail(key, version, size, [&]() {
-        callbackCalled = true;
-        return QImage(64, 64, QImage::Format_RGB32);
-    });
+    QImage result = ImageCache::loadThumbnail(key, version, size);
 
-    // Callback should NOT be called on hit
-    QVERIFY(!callbackCalled);
+    QVERIFY(!result.isNull());
     QCOMPARE(result.size(), size);
 }
 

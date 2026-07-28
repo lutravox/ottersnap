@@ -133,7 +133,7 @@ void TestSnapshotStore::testLoadSnapshotImage() {
     auto   snap = SnapshotStore::saveSnapshot(path, img);
     QVERIFY(snap.has_value());
 
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, snap->snapshotIndex);
+    auto optLoaded = SnapshotStore::reconstruct(path, snap->snapshotIndex);
     QVERIFY(optLoaded.has_value());
     QCOMPARE(optLoaded->width(), 30);
     QCOMPARE(optLoaded->height(), 30);
@@ -177,7 +177,7 @@ void TestSnapshotStore::testDeltaReconstruction() {
     QVERIFY(!snaps[1].isBase);
 
     // 3. Load the second snapshot and verify reconstruction
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 2);
+    auto optLoaded = SnapshotStore::reconstruct(path, 2);
     QVERIFY(optLoaded.has_value());
 
     // Compare pixels of reconstructed image with original img2
@@ -220,7 +220,7 @@ void TestSnapshotStore::testDeltaReconstructionFromSubsequentBase() {
     QVERIFY(!snaps[4].isBase); // Snap 5
 
     // Reconstruct Snap 5. It should use Snap 4 as its base.
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 5);
+    auto optLoaded = SnapshotStore::reconstruct(path, 5);
     QVERIFY(optLoaded.has_value());
 
     QImage reconstructed = *optLoaded;
@@ -260,7 +260,7 @@ void TestSnapshotStore::testSizeChangeTriggersBase() {
     QVERIFY(snaps[2].isBase);  // Snap 3 - should be base due to size change
 
     // Verify we can actually load it
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 3);
+    auto optLoaded = SnapshotStore::reconstruct(path, 3);
     QVERIFY(optLoaded.has_value());
     QCOMPARE(optLoaded->width(), 200);
     QCOMPARE(optLoaded->height(), 200);
@@ -368,7 +368,7 @@ void TestSnapshotStore::testDeleteMiddleSnapshotRebase() {
     QVERIFY(!snaps[1].isBase); // S3 should be rebased as a delta of S1
 
     // Verify reconstruction of S3
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 3);
+    auto optLoaded = SnapshotStore::reconstruct(path, 3);
     QVERIFY(optLoaded.has_value());
     QCOMPARE(optLoaded->pixelColor(0, 0), img3.pixelColor(0, 0));
 }
@@ -393,7 +393,7 @@ void TestSnapshotStore::testDeleteFirstSnapshotRebase() {
     QVERIFY(snaps[0].isBase);
 
     // Verify reconstruction of S2
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 2);
+    auto optLoaded = SnapshotStore::reconstruct(path, 2);
     QVERIFY(optLoaded.has_value());
     QCOMPARE(optLoaded->pixelColor(0, 0), img2.pixelColor(0, 0));
 }
@@ -425,7 +425,7 @@ void TestSnapshotStore::testLoadBadSnapshotIndex() {
     SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::red));
 
     // Request a snapshot that doesn't exist
-    auto optLoaded = SnapshotStore::loadSnapshotImage(path, 999);
+    auto optLoaded = SnapshotStore::reconstruct(path, 999);
     QVERIFY(!optLoaded.has_value());
 }
 

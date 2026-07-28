@@ -44,11 +44,11 @@ QString getAndEnsureDir(const QString& baseDir, const QString& key) {
 QImage loadImage(const QString& filePath) {
     QImage image;
     if (image.load(filePath)) {
-        qDebug() << "[DiskUtils] loaded image:" << filePath;
+        qDebug() << "[DiskUtils] Loaded image:" << filePath;
         return image;
     }
 
-    qWarning() << "[DiskUtils] failed to load image:" << filePath;
+    qWarning() << "[DiskUtils] Failed to load image:" << filePath;
     return {};
 }
 

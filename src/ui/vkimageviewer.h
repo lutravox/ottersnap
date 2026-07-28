@@ -30,7 +30,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @param preserveView If true, keep the current zoom and pan. If false, reset to fit.
     void setImage(const QImage& image, bool preserveView = false) override;
 
-    /// @brief Enable or disable grayscale rendering in the fragment shader.
+    /// @brief Reconstructs a snapshot from a base image and a series of deltas.
+    void reconstruct(const ReconstructionSequence& seq) override;
 
     /// @brief Enable or disable grayscale rendering in the fragment shader.
     void setGrayscale(bool enabled) override;
@@ -62,6 +63,12 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Set the view state.
     /// @param state The new view state.
     void setViewState(const ViewState& state) override;
+
+    /// @brief Set the reconstructor to be used for GPU acceleration.
+    void setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor) override;
+
+    /// @brief Set the session associated with this viewer.
+    void setSession(class ImageSession *session);
 
     /// @brief Trigger a redraw of the viewer.
     void update() override {
@@ -102,7 +109,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     bool eventFilter(QObject *obj, QEvent *event) override;
 
   private:
-    QVulkanInstance       *m_vulkanInstance = nullptr;
     QVulkanWindow         *m_vulkanWindow = nullptr;
     VkImageViewerRenderer *m_renderer = nullptr;
     QWidget               *m_container = nullptr;

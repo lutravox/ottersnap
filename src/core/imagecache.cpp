@@ -31,10 +31,7 @@ void ImageCache::remove(const QString& key) {
     s_imageCache.remove(key);
 }
 
-QImage ImageCache::loadThumbnail(const QString&          imageKey,
-                                 int                     version,
-                                 const QSize&            size,
-                                 std::function<QImage()> loadFullImage) {
+QImage ImageCache::loadThumbnail(const QString& imageKey, int version, const QSize& size) {
     QString baseThumbDir =
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
     QString cacheDir = baseThumbDir + '/' + imageKey;
@@ -44,25 +41,20 @@ QImage ImageCache::loadThumbnail(const QString&          imageKey,
     QString thumbPath = cacheDir + '/' + QString::asprintf("v%04d.webp", version);
 
     if (QFile::exists(thumbPath)) {
-        return QImage(thumbPath);
+        QImage thumb(thumbPath);
+        if (!thumb.isNull()) {
+            return thumb.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
     }
 
-    QImage full = loadFullImage();
-    if (full.isNull()) {
-        return {};
-    }
-
-    QImage thumb = full.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    if (!thumb.save(thumbPath, "WEBP")) {
-        qWarning() << "[ImageCache] Failed to save thumbnail in cache:" << thumbPath;
-    }
-
-    return thumb;
+    return {};
 }
 
 QImage ImageCache::formatThumbnail(const QImage& image, int size) {
-    if (image.isNull())
+    if (image.isNull()) {
+        qWarning() << "[ImageCache] Null image provided for thumbnail";
         return QImage(size, size, QImage::Format_ARGB32);
+    }
 
     QImage scaled = image.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 

@@ -11,9 +11,18 @@ class MockViewer : public IViewer {
     void setImage(const QImage&, bool) override {
     }
 
+    void reconstruct(const ReconstructionSequence&) override {
+    }
+
+    void setSession(ImageSession *) override {
+    }
+
     void setViewState(const ViewState& state) override {
         m_lastState = state;
         m_setViewStateCalled = true;
+    }
+
+    void setReconstructor(std::shared_ptr<VkSnapshotReconstructor>) override {
     }
 
     void update() override {

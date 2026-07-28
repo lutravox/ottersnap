@@ -1,13 +1,21 @@
+#include <QCache>
 #include <QFutureWatcher>
 #include <QTimer>
 #include <QtConcurrent>
+#include <qlogging.h>
 #include "core/imagesession.h"
 #include "config/appsettings.h"
 #include "core/diskutils.h"
 #include "core/imagecache.h"
+#include "core/vksnapshotreconstructor.h"
+#include "core/vulkancontext.h"
 
 ImageSession::ImageSession(QObject *parent) : QObject(parent), m_monitor(new ImageMonitor(this)) {
     connect(m_monitor, &ImageMonitor::fileChanged, this, &ImageSession::onFileChanged);
+    connect(&VulkanContext::instance(),
+            &VulkanContext::deviceChanged,
+            this,
+            &ImageSession::onDeviceChanged);
 }
 
 ImageSession::~ImageSession() {
@@ -21,6 +29,9 @@ bool ImageSession::openImage(const QString& filePath) {
         emit statusMessage(QString("Failed to load: %1").arg(m_filePath));
         return false;
     }
+
+    createReconstructor();
+
     rebuildSnapshotList();
     m_monitor->watch(m_filePath);
     m_currentIndex = static_cast<int>(m_snapshots.size());
@@ -33,41 +44,80 @@ bool ImageSession::openImage(const QString& filePath) {
 }
 
 void ImageSession::close() {
+    if (m_filePath != "") {
+        qDebug() << "[ImageSession] Closing session for:" << m_filePath;
+    }
+
     m_monitor->stop();
     m_filePath.clear();
     m_diskImage = QImage();
-    m_cachedImage = QImage();
     m_snapshots.clear();
     m_labels.clear();
     m_currentIndex = 0;
-    m_loadedSnapshotIndex = -1;
+    m_baseCache = {-1, QImage()};
+
+    if (m_reconstructor) {
+        m_reconstructor->cleanup();
+        m_reconstructor.reset();
+    }
 }
 
-const QImage& ImageSession::currentImage() {
-    if (m_currentIndex < 0 || m_currentIndex > static_cast<int>(m_snapshots.size())) {
-        static QImage s_null;
-        return s_null;
-    }
-    if (m_currentIndex == static_cast<int>(m_snapshots.size()))
-        return m_diskImage;
-    if (m_loadedSnapshotIndex == m_currentIndex)
-        return m_cachedImage;
+std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() const {
+    return getReconstructionSequence(m_currentIndex);
+}
 
-    const ImageSnapshot& v = m_snapshots[m_currentIndex];
-    auto                 optImg = SnapshotStore::loadSnapshotImage(m_filePath, v.snapshotIndex);
-    if (optImg) {
-        m_cachedImage = std::move(*optImg);
-        m_loadedSnapshotIndex = m_currentIndex;
-        return m_cachedImage;
+std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_snapshots.size())) {
+        qWarning() << "[ImageSession] Index out of bounds for reconstruction sequence";
+        return std::nullopt;
     }
-    static QImage s_null;
-    return s_null;
+
+    const ImageSnapshot& target = m_snapshots[index];
+    int                  baseIdx = -1;
+    for (int i = index; i >= 0; --i) {
+        if (m_snapshots[i].isBase) {
+            baseIdx = i;
+            break;
+        }
+    }
+
+    if (baseIdx == -1) {
+        qWarning() << "[ImageSession] No base image found for reconstruction sequence";
+        return std::nullopt;
+    }
+
+    ReconstructionSequence seq;
+    seq.baseIdx = baseIdx;
+
+    int baseSnapshotIdx = m_snapshots[baseIdx].snapshotIndex;
+    if (m_baseCache.index == baseSnapshotIdx && !m_baseCache.image.isNull()) {
+        seq.base = m_baseCache.image;
+        seq.baseChecksum = m_snapshots[baseIdx].checksum;
+    } else {
+        auto optBase = SnapshotStore::loadBaseImage(m_filePath, baseSnapshotIdx);
+        if (!optBase)
+            return std::nullopt;
+
+        seq.base = std::move(optBase->image);
+        seq.baseChecksum = optBase->checksum;
+        m_baseCache = {baseSnapshotIdx, seq.base};
+    }
+
+    for (int i = baseIdx + 1; i <= index; ++i) {
+        auto optDelta = SnapshotStore::loadDelta(m_filePath, m_snapshots[i].snapshotIndex);
+        if (!optDelta)
+            return std::nullopt;
+        seq.deltas.append(std::move(*optDelta));
+    }
+
+    return seq;
 }
 
 void ImageSession::selectSnapshot(int index) {
     if (index < 0 || index > static_cast<int>(m_snapshots.size()))
         return;
     m_currentIndex = index;
+    m_thumbnailCache = {-1, QImage()};
     emit imageChanged();
 }
 
@@ -140,6 +190,7 @@ void ImageSession::onFileChanged() {
 }
 
 void ImageSession::reloadImage() {
+    qDebug() << "[ImageSession] Reloading image:" << m_filePath;
     QImage newImage = DiskUtils::loadImage(m_filePath);
     if (newImage.isNull() || newImage == m_diskImage)
         return;
@@ -151,6 +202,7 @@ void ImageSession::reloadImage() {
     m_diskImage = newImage;
     rebuildSnapshotList();
     m_currentIndex = static_cast<int>(m_snapshots.size());
+    m_thumbnailCache = {-1, QImage()};
     emit imageChanged();
 }
 
@@ -191,30 +243,109 @@ void ImageSession::rebuildSnapshotList() {
     emit snapshotsChanged();
 }
 
-std::pair<QVector<QImage>, QVector<QString>> ImageSession::snapshotThumbnails(int size) {
+std::pair<QVector<QImage>, QVector<QString>> ImageSession::snapshotTimelineThumbnails(int size) {
     QVector<QImage> thumbs;
     thumbs.reserve(m_snapshots.size() + 1);
 
-    for (const auto& v : m_snapshots) {
-        QImage thumbImg = ImageCache::loadThumbnail(
-            SnapshotStore::imageKey(m_filePath), v.snapshotIndex, QSize(size, size), [this, &v]() {
-                auto optFull = SnapshotStore::loadSnapshotImage(m_filePath, v.snapshotIndex);
-                return optFull.value_or(QImage());
-            });
-
-        if (!thumbImg.isNull()) {
-            thumbs.append(thumbImg);
-        } else {
-            thumbs.append(QImage(size, size, QImage::Format_ARGB32));
-        }
+    for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+        thumbs.append(generateThumbnail(i, size));
     }
 
-    QImage current = currentImage();
-    if (!current.isNull()) {
-        thumbs.append(ImageCache::formatThumbnail(current, size));
-    } else {
-        thumbs.append(QImage(size, size, QImage::Format_ARGB32));
-    }
+    thumbs.append(generateThumbnail(static_cast<int>(m_snapshots.size()), size));
 
     return {thumbs, m_labels};
+}
+
+QImage ImageSession::thumbnail(int size) {
+    if (m_thumbnailCache.size == size && !m_thumbnailCache.image.isNull()) {
+        qDebug() << "[ImageSession] Using cached thumbnail for current image";
+        return m_thumbnailCache.image;
+    }
+
+    QImage thumb = generateThumbnail(m_currentIndex, size);
+    m_thumbnailCache = {size, thumb};
+    return thumb;
+}
+
+QImage ImageSession::generateThumbnail(int index, int size) {
+    if (index < 0 || index > static_cast<int>(m_snapshots.size())) {
+        qDebug() << "[ImageSession] generateThumbnail: index out of bounds";
+        return QImage();
+    }
+
+    if (index == static_cast<int>(m_snapshots.size())) {
+        // Current disk image
+        if (m_diskImage.isNull()) {
+            if (m_filePath.isEmpty()) {
+                qDebug() << "[ImageSession] generateThumbnail: filepath empty";
+                return QImage();
+            }
+            qDebug() << "[ImageSession] Using placeholder thumbnail for current image"
+                     << m_filePath;
+            return QImage(size, size, QImage::Format_ARGB32); // Placeholder
+        }
+
+        auto *reconstructor = VulkanContext::instance().getUtilityReconstructor();
+        if (reconstructor) {
+            ReconstructionSequence diskSeq;
+            diskSeq.base = m_diskImage;
+            diskSeq.baseChecksum = "disk_image";
+
+            float aspect = float(m_diskImage.width()) / float(m_diskImage.height());
+            QSize targetSize = (aspect > 1.0f) ? QSize(size, qRound(size / aspect))
+                                               : QSize(qRound(size * aspect), size);
+
+            QImage thumb = reconstructor->reconstructToImage(diskSeq, targetSize, reconstructor);
+            if (!thumb.isNull())
+                return thumb;
+        }
+        return ImageCache::formatThumbnail(m_diskImage, size);
+    } else {
+        // Snapshot
+        const auto& v = m_snapshots[index];
+        QString     key = SnapshotStore::imageKey(m_filePath);
+        QImage      thumb = ImageCache::loadThumbnail(key, v.snapshotIndex, QSize(size, size));
+
+        if (!thumb.isNull())
+            return thumb;
+
+        auto  seq = getReconstructionSequence(index);
+        auto *reconstructor = VulkanContext::instance().getUtilityReconstructor();
+        if (seq && reconstructor) {
+            float aspect = float(seq->base.width()) / float(seq->base.height());
+            QSize targetSize = (aspect > 1.0f) ? QSize(size, qRound(size / aspect))
+                                               : QSize(qRound(size * aspect), size);
+
+            thumb = reconstructor->reconstructToImage(*seq, targetSize, reconstructor);
+            if (!thumb.isNull()) {
+                SnapshotStore::saveThumbnail(m_filePath, v.snapshotIndex, thumb);
+                return thumb;
+            }
+        }
+
+        qDebug() << "[ImageSession] Using placeholder thumbnail for snapshot";
+        QImage placeholder(size, size, QImage::Format_ARGB32);
+        placeholder.fill(Qt::transparent);
+        return placeholder;
+    }
+}
+
+void ImageSession::onDeviceChanged() {
+    if (m_reconstructor) {
+        m_reconstructor->cleanup();
+    }
+    createReconstructor();
+    emit imageChanged();
+}
+
+void ImageSession::createReconstructor() {
+    auto&         ctx = VulkanContext::instance();
+    VulkanHandles handles;
+    handles.physicalDevice = ctx.getPhysicalDevice();
+    handles.device = ctx.getDevice();
+    handles.queue = ctx.getQueue();
+    handles.queueFamilyIndex = ctx.getQueueFamilyIndex();
+    handles.deviceFunctions = ctx.getDeviceFunctions();
+    handles.commandPool = ctx.getCommandPool();
+    m_reconstructor = std::make_shared<VkSnapshotReconstructor>(handles);
 }

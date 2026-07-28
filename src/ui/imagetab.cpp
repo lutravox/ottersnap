@@ -36,8 +36,8 @@ void ImageTab::closeImage() {
     m_session->close();
 }
 
-const QImage& ImageTab::currentImage() const {
-    return m_session->currentImage();
+const QImage& ImageTab::diskImage() const {
+    return m_session->diskImage();
 }
 
 void ImageTab::selectSnapshot(int index) {
@@ -58,8 +58,9 @@ void ImageTab::onEffectsChanged() {
     }
 }
 
-std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::snapshotThumbnails(int size) const {
-    auto [images, labels] = m_session->snapshotThumbnails(size);
+std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::snapshotTimelineThumbnails(int size) const {
+    qDebug() << "[ImageTab] Creating snapshot thumbnails for" << m_session->filePath();
+    auto [images, labels] = m_session->snapshotTimelineThumbnails(size);
     QVector<QPixmap> thumbs;
     thumbs.reserve(images.size());
 
@@ -71,10 +72,10 @@ std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::snapshotThumbnails(int s
 }
 
 QPixmap ImageTab::thumbnail(int size) const {
-    QImage img = m_session->currentImage();
+    QImage img = m_session->thumbnail(size);
     if (img.isNull())
         return {};
-    return QPixmap::fromImage(ImageCache::formatThumbnail(img, size));
+    return QPixmap::fromImage(img);
 }
 
 void ImageTab::saveSnapshot() {

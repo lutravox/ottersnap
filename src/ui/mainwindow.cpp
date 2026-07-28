@@ -15,11 +15,12 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
-#include <algorithm>
 
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
 #include "core/diskutils.h"
+#include "core/vksnapshotreconstructor.h"
+#include "core/vulkancontext.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
@@ -36,6 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_session(m_settings) {
     m_effectsController = new EffectsController(this);
     m_viewController = new ViewController(this);
+
     setupMenu();
     setupUi();
     m_session.load();
@@ -71,17 +73,28 @@ void MainWindow::setupUi() {
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
 
+    // Stacked widget
+    m_contentStack = new QStackedWidget(central);
+
+    // Viewer state: thumbnail strip + viewer + nav bar
+    m_viewerState = new ViewerState(m_contentStack);
+
+    // Empty state
+    m_emptyState = new EmptyState(m_contentStack);
+
+    // Stack states
+    m_contentStack->addWidget(m_emptyState);
+    m_contentStack->addWidget(m_viewerState);
+    m_contentStack->setCurrentWidget(m_emptyState);
+
     // Tab bar
     m_tabBar = new TabBar(central);
     connect(m_tabBar, &QTabWidget::tabCloseRequested, this, &MainWindow::onCloseTab);
     connect(m_tabBar, &QTabWidget::currentChanged, this, &MainWindow::onTabChanged);
     centralLayout->addWidget(m_tabBar, 0);
 
-    // Stacked widget
-    m_contentStack = new QStackedWidget(central);
+    centralLayout->addWidget(m_contentStack, 1);
 
-    // Viewer state: thumbnail strip + viewer + nav bar
-    m_viewerState = new ViewerState(m_contentStack);
     connect(m_viewerState->snapshotTimeline(),
             &SnapshotTimeline::snapshotSelected,
             this,
@@ -108,15 +121,6 @@ void MainWindow::setupUi() {
             &SnapshotTimeline::snapshotDeletionRequested,
             this,
             &MainWindow::onSnapshotDeletionRequested);
-
-    // Empty state
-    m_emptyState = new EmptyState(m_contentStack);
-
-    // Stack states
-    m_contentStack->addWidget(m_emptyState);
-    m_contentStack->addWidget(m_viewerState);
-    m_contentStack->setCurrentWidget(m_emptyState);
-    centralLayout->addWidget(m_contentStack, 1);
 
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
@@ -394,11 +398,28 @@ void MainWindow::onExportSnapshot() {
     if (path.isEmpty())
         return;
 
-    QImage img = tab->currentImage();
+    QImage img;
+    if (m_currentVersionInView >= 0) {
+        auto session = tab->session();
+        auto seq =
+            session ? session->getReconstructionSequence(m_currentVersionInView) : std::nullopt;
+        if (!seq) {
+            notify(tr("Failed to retrieve reconstruction sequence for export."));
+            return;
+        }
+        img = VulkanContext::instance().getUtilityReconstructor()->reconstructToImage(*seq);
+        if (img.isNull()) {
+            notify(tr("Failed to reconstruct snapshot for export."));
+            return;
+        }
+    } else {
+        img = tab->diskImage();
+    }
+
     if (DiskUtils::saveImage(path, img)) {
         notify(tr("Snapshot exported successfully."));
     } else {
-        notify(tr("Failed to export snapshot."), 5000);
+        notify(tr("Failed to export snapshot."));
     }
 }
 
@@ -425,10 +446,12 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
     onSnapshotDeletionRequested(index);
 }
 
-void MainWindow::openImageFile(const QString& path) {
+void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     // Check if already open
     if (auto *existing = m_tabPaths.value(path)) {
-        m_tabBar->setCurrentWidget(existing);
+        if (setAsCurrent) {
+            m_tabBar->setCurrentWidget(existing);
+        }
         return;
     }
 
@@ -453,9 +476,9 @@ void MainWindow::openImageFile(const QString& path) {
     setTabThumbnail(index);
     m_tabPaths.insert(path, tab);
 
-    m_tabBar->setCurrentWidget(tab);
-    updateSnapshotTimeline();
-    updateViewer();
+    if (setAsCurrent) {
+        m_tabBar->setCurrentWidget(tab);
+    }
 }
 
 void MainWindow::onCloseTab(int index) {
@@ -469,6 +492,7 @@ void MainWindow::onCloseTab(int index) {
         disconnect(tab, &ImageTab::statusMessage, this, nullptr);
         disconnect(tab, &ImageTab::effectsChanged, this, nullptr);
         disconnect(tab, &ImageTab::snapshotChanged, this, nullptr);
+        tab->deleteLater();
     }
 
     m_tabBar->removeTab(index);
@@ -526,12 +550,16 @@ void MainWindow::notify(const QString& msg, int timeoutMs) {
 }
 
 void MainWindow::updateSnapshotTimeline() {
+    // No need to update the timeline repeatedly if restoring a bunch of tabs
+    if (m_isRestoringSession)
+        return;
+
     auto *tab = currentTab();
     if (!tab) {
         return;
     }
 
-    auto [thumbs, labels] = tab->snapshotThumbnails(48);
+    auto [thumbs, labels] = tab->snapshotTimelineThumbnails(48);
     m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
@@ -544,10 +572,17 @@ void MainWindow::showEvent(QShowEvent *event) {
 
     // Defer session restore until showEvent() so that the layout is fully
     // settled and QWindowContainer has its real size for proper rendering.
-    for (const QString& path : m_session.restorePaths()) {
-        if (QFile::exists(path))
-            openImageFile(path);
+    m_isRestoringSession = true;
+    QStringList paths = m_session.restorePaths();
+    for (size_t i = 0; i < paths.size(); ++i) {
+        const QString& path = paths.at(i);
+        if (QFile::exists(path)) {
+            bool isLast = (i == paths.size() - 1);
+            openImageFile(path, isLast);
+        }
     }
+    m_isRestoringSession = false;
+    updateSnapshotTimeline();
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
@@ -586,38 +621,60 @@ void MainWindow::updateViewer() {
     if (!tab)
         return;
 
+    int snapshotIdx = tab->session()->currentSnapshotIndex();
+    if (m_currentTabInView == tab && m_currentVersionInView == snapshotIdx) {
+        return; // Already rendering this snapshot
+    }
+
     // Save state of the current tab
     if (m_currentTabInView) {
         m_viewController->syncViewerToSession();
     }
 
-    const auto& image = tab->currentImage();
-    if (!image.isNull()) {
-        // Restore state for the new tab
-        m_viewController->setActiveSession(tab->session());
-        m_viewController->syncSessionToViewer();
-        m_viewerState->viewer()->setImage(image, true);
-        m_effectsController->setTargetState(tab->session());
-        m_viewerState->statusBar()->setDimensions(image.width(), image.height());
+    if (m_currentTabInView != tab) {
+        m_viewerState->viewer()->clear();
+    }
 
-        // Fit the image to the window on load
-        m_viewController->fitToWindow();
+    // Restore state for the new tab
+    m_viewController->setActiveSession(tab->session());
+    m_viewController->syncSessionToViewer();
 
-        // Update timestamp in status bar
-        int         idx = tab->session()->currentSnapshotIndex();
-        const auto& snapshots = tab->session()->snapshots();
-        if (idx >= 0 && idx < static_cast<int>(snapshots.size())) {
-            m_viewerState->statusBar()->setTimestamp(
-                snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
-        } else if (idx == static_cast<int>(snapshots.size())) {
-            m_viewerState->statusBar()->setTimestamp(tr("Current"));
-        } else {
-            m_viewerState->statusBar()->setTimestamp("");
+    bool isSnapshot = false;
+    if (!tab->session()->isCurrentImageSelected()) {
+        if (auto seq = tab->session()->getReconstructionSequence()) {
+            m_lastBaseIdx = seq->baseIdx;
+            isSnapshot = true;
         }
+    }
+
+    if (!isSnapshot) {
+        const auto& image = tab->diskImage();
+        if (!image.isNull()) {
+            m_viewerState->viewer()->setImage(image, true);
+        }
+        m_lastBaseIdx = -1;
+    }
+
+    m_effectsController->setTargetState(tab->session());
+    QSize dims = tab->session()->dimensions();
+    m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
+
+    // Fit the image to the window on load
+    m_viewController->fitToWindow();
+
+    // Update timestamp in status bar
+    int         idx = tab->session()->currentSnapshotIndex();
+    const auto& snapshots = tab->session()->snapshots();
+    if (idx >= 0 && idx < static_cast<int>(snapshots.size())) {
+        m_viewerState->statusBar()->setTimestamp(
+            snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
+    } else {
+        m_viewerState->statusBar()->setTimestamp(tr("Current"));
     }
 
     m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->zoomPercentage());
     m_currentTabInView = tab;
+    m_currentVersionInView = snapshotIdx;
 }
 
 void MainWindow::updateState() {

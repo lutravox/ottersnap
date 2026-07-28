@@ -63,7 +63,7 @@ void TestImageSession::testOpenClose() {
 
     session.close();
     QCOMPARE(session.filePath(), QString());
-    QVERIFY(session.currentImage().isNull());
+    QVERIFY(session.diskImage().isNull());
 }
 
 void TestImageSession::testSelectSnapshot() {
@@ -100,14 +100,14 @@ void TestImageSession::testAutoSaveOnChange() {
     QVERIFY(spy.wait(2000));
 
     // The image should now be blue
-    QCOMPARE(session.currentImage().pixelColor(0, 0), QColor(Qt::blue));
+    QCOMPARE(session.diskImage().pixelColor(0, 0), QColor(Qt::blue));
 }
 
 void TestImageSession::testSnapshotThumbnails() {
     ImageSession session;
     session.openImage(m_testFilePath);
 
-    auto [thumbs, labels] = session.snapshotThumbnails(32);
+    auto [thumbs, labels] = session.snapshotTimelineThumbnails(32);
 
     // Should at least contain the current image thumbnail
     QVERIFY(!thumbs.isEmpty());
@@ -167,7 +167,7 @@ void TestImageSession::testSnapshotNavigation() {
     QCOMPARE(session.currentSnapshotIndex(), 0);
 
     // Verify it's not null
-    QVERIFY(!session.currentImage().isNull());
+    QVERIFY(!session.diskImage().isNull());
 }
 
 void TestImageSession::testViewStateAccess() {
@@ -205,7 +205,7 @@ void TestImageSession::testSnapshotDeletion() {
     QCOMPARE(session.snapshots().size(), 3);
     session.selectSnapshot(3);
     QCOMPARE(session.currentSnapshotIndex(), 3);
-    QVERIFY(!session.currentImage().isNull());
+    QVERIFY(!session.diskImage().isNull());
 
     // Scenario A: Delete a snapshot before the current one (e.g., index 1 / S2)
     session.deleteSnapshot(1);
@@ -213,7 +213,7 @@ void TestImageSession::testSnapshotDeletion() {
     // After deletion, snapshots size is 2. m_currentIndex should be updated to 2.
     QCOMPARE(session.snapshots().size(), 2);
     QCOMPARE(session.currentSnapshotIndex(), 2);
-    QVERIFY(!session.currentImage().isNull());
+    QVERIFY(!session.diskImage().isNull());
 
     // Scenario B: Viewing a snapshot and deleting one before it.
     // Current state: [S1, S3]. Select S3 (index 1).
@@ -227,7 +227,7 @@ void TestImageSession::testSnapshotDeletion() {
     // m_currentIndex should have shifted from 1 to 0.
     QCOMPARE(session.snapshots().size(), 1);
     QCOMPARE(session.currentSnapshotIndex(), 0);
-    QVERIFY(!session.currentImage().isNull());
+    QVERIFY(!session.diskImage().isNull());
 
     // Scenario C: Viewing a snapshot and deleting it.
     session.deleteSnapshot(0); // Delete the only remaining snapshot S3
@@ -235,7 +235,7 @@ void TestImageSession::testSnapshotDeletion() {
     // Should move back to "Current" (index 0 now)
     QCOMPARE(session.snapshots().size(), 0);
     QCOMPARE(session.currentSnapshotIndex(), 0);
-    QVERIFY(!session.currentImage().isNull());
+    QVERIFY(!session.diskImage().isNull());
 }
 
 QTEST_MAIN(TestImageSession)

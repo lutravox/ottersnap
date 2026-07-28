@@ -1,0 +1,57 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) buffer ImageBuffer {
+    uint pixels[];
+};
+
+layout(std430, binding = 1) buffer DeltaBuffer {
+    uint deltas[];
+};
+
+layout(std430, binding = 2) buffer IndexBuffer {
+    uint indices[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint tileW;
+    uint tileH;
+    uint imageW;
+    uint imageH;
+    uint numTiles;
+} pc;
+
+void main() {
+    uint globalPixelIdx = gl_GlobalInvocationID.x;
+    uint pixelsPerTile = pc.tileW * pc.tileH;
+
+    if (globalPixelIdx >= pc.numTiles * pixelsPerTile) {
+        return;
+    }
+
+    uint tileIdx = globalPixelIdx / pixelsPerTile;
+    uint pixelInTileIdx = globalPixelIdx % pixelsPerTile;
+
+    uint imageTileIdx = indices[tileIdx * 2];
+    uint dataOffset = indices[tileIdx * 2 + 1];
+
+    uint tilesPerRow = (pc.imageW + pc.tileW - 1) / pc.tileW;
+    uint tileX = imageTileIdx % tilesPerRow;
+    uint tileY = imageTileIdx / tilesPerRow;
+
+    uint localX = pixelInTileIdx % pc.tileW;
+    uint localY = pixelInTileIdx / pc.tileW;
+
+    uint imgX = tileX * pc.tileW + localX;
+    uint imgY = tileY * pc.tileH + localY;
+
+    if (imgX >= pc.imageW || imgY >= pc.imageH) {
+        return;
+    }
+
+    uint imgIdx = imgY * pc.imageW + imgX;
+    uint deltaIdx = dataOffset + pixelInTileIdx;
+
+    pixels[imgIdx] ^= deltas[deltaIdx];
+}

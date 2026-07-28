@@ -8,6 +8,21 @@ ViewController::ViewController(QObject *parent) : QObject(parent) {
 
 void ViewController::setActiveSession(ImageSession *session) {
     m_session = session;
+    if (m_session && m_viewer) {
+        qDebug() << "[ViewController] setActiveSession: session =" << session
+                 << "reconstructor =" << m_session->sharedReconstructor().get();
+
+        m_viewer->setSession(m_session);
+        m_viewer->setReconstructor(m_session->sharedReconstructor());
+
+        if (m_session->isCurrentImageSelected()) {
+            // It's the disk image - use regular upload
+            m_viewer->setImage(m_session->diskImage(), false);
+        } else if (auto seq = m_session->getReconstructionSequence()) {
+            // It's a snapshot - use reconstruction path
+            m_viewer->reconstruct(*seq);
+        }
+    }
 }
 
 void ViewController::setViewer(IViewer *viewer) {
@@ -22,6 +37,7 @@ void ViewController::setViewer(IViewer *viewer) {
 void ViewController::syncSessionToViewer() {
     if (!m_session || !m_viewer)
         return;
+
     m_viewer->setViewState(m_session->viewState());
     m_viewer->update();
 }

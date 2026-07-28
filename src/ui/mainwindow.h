@@ -68,7 +68,7 @@ class MainWindow : public QMainWindow {
     void      setupMenu();
     void      updateMenuBar();
     void      updateRecentFilesMenu();
-    void      openImageFile(const QString& path);
+    void      openImageFile(const QString& path, bool setAsCurrent = true);
     ImageTab *currentTab();
     void      applyEffects();
     void      updateTabThumbnail(int index);
@@ -104,6 +104,7 @@ class MainWindow : public QMainWindow {
     QMenu               *m_effectsMenu;
 
     ContentState m_currentState = ContentState::Empty;
+    bool         m_isRestoringSession = false;
 
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
@@ -125,6 +126,7 @@ class MainWindow : public QMainWindow {
 
     ImageTab *m_currentTabInView = nullptr;
     int       m_currentVersionInView = -1;
+    int       m_lastBaseIdx = -1;
 
     QMap<QString, ImageTab *> m_tabPaths;
 };

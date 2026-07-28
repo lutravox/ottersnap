@@ -31,8 +31,8 @@ class ImageTab : public QWidget {
         return m_session ? m_session->filePath() : QString();
     }
 
-    /// @brief Returns the currently selected image.
-    const QImage& currentImage() const;
+    /// @brief Returns the image currently selected in the session.
+    const QImage& diskImage() const;
 
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
@@ -46,7 +46,7 @@ class ImageTab : public QWidget {
     /// @brief Fetches thumbnails of all snapshots and current image.
     /// @param size Desired thumbnail size in pixels (square).
     /// @return thumbnails and associated labels
-    std::pair<QVector<QPixmap>, QVector<QString>> snapshotThumbnails(int size) const;
+    std::pair<QVector<QPixmap>, QVector<QString>> snapshotTimelineThumbnails(int size) const;
 
     /// @param size Desired thumbnail size in pixels (square).
     QPixmap thumbnail(int size) const;

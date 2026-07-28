@@ -111,7 +111,9 @@ void TestImageMonitor::testFileDeletion() {
     QTest::qSleep(500);
 
     // Re-create file to restore state for other tests
-    m_tempFile->open();
+    if (!m_tempFile->open()) {
+        QFAIL("Could not re-open temporary file for restoration");
+    }
     m_tempFile->close();
 }
 

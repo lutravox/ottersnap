@@ -88,14 +88,12 @@ add_custom_command(
 add_custom_target(shader_rcc ALL DEPENDS ${SHADER_RCC_SRC})
 
 # ── Main executable ──────────────────────────────────────────────────────
-add_executable(${PROJECT_NAME}
-    # Entry point
-    src/main.cpp
-
+set(OTTERSNAP_CORE_SOURCES
     # UI
     src/ui/mainwindow.cpp
     src/ui/imagetab.cpp
     src/ui/vkimageviewer.cpp
+    src/ui/vkimageviewerrenderer.cpp
     src/controllers/effectscontroller.cpp
     src/controllers/viewcontroller.cpp
     src/ui/notification.cpp
@@ -112,6 +110,9 @@ add_executable(${PROJECT_NAME}
     src/core/diskutils.cpp
     src/core/imagecache.cpp
     src/core/snapshotstore.cpp
+    src/core/vksnapshotreconstructor.cpp
+    src/core/vulkancontext.cpp
+    src/core/vulkanutils.cpp
     src/core/viewstate.cpp
     src/core/sessionmanager.cpp
     src/core/imagesession.cpp
@@ -119,6 +120,15 @@ add_executable(${PROJECT_NAME}
 
     # Configuration
     src/config/appsettings.cpp
+)
+
+add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
+target_include_directories(ottersnap_core PUBLIC src)
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent)
+
+add_executable(${PROJECT_NAME}
+    # Entry point
+    src/main.cpp
 
     # Generated shader resource
     ${SHADER_RCC_SRC}
@@ -130,15 +140,13 @@ add_executable(${PROJECT_NAME}
 # Ensure shaders are compiled and the .qrc is generated before the
 # executable links, since ${SHADER_RCC_SRC} is part of the source list.
 add_dependencies(${PROJECT_NAME} shader_rcc)
-# Allows `#include "core/..."` from any source file.
-target_include_directories(${PROJECT_NAME} PRIVATE src)
 
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets Qt6::Gui Qt6::Concurrent)
+target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent)
 
 qt_add_translations(${PROJECT_NAME}
     RESOURCE_PREFIX "/translations"
-    TS_FILES 
+    TS_FILES
         src/resources/translations/ottersnap_en.ts
 )
 

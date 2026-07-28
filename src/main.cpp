@@ -3,10 +3,13 @@
 #include <QLocale>
 #include <QTranslator>
 #include "config/appsettings.h"
+#include "core/vulkancontext.h"
 #include "ui/mainwindow.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+    VulkanContext::instance().initializeInstance();
+
     app.setApplicationName(AppSettings::applicationName());
     app.setOrganizationName(AppSettings::organizationName());
     app.setOrganizationDomain(AppSettings::organizationDomain());

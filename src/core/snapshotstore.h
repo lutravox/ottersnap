@@ -85,9 +85,6 @@ class SnapshotStore {
     /// @brief Clear the in-memory snapshot cache.
     static void clearCache();
 
-    /// @brief Save a thumbnail image to disk.
-    static void saveThumbnail(const QString& filePath, int snapshotIndex, const QImage& image);
-
     /// @brief Apply a delta buffer to an image.
     static void applyDelta(QImage& image, const QByteArray& delta);
 

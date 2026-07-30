@@ -54,15 +54,12 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     root->addWidget(m_scrollArea, 1);
     root->addWidget(m_createButtonWrapper);
 
-    // Keep the strip to a compact, fixed height
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFixedHeight(c_thumbnailSize + 24);
 
-    {
-        QFile qss(":/qss/snapshottimeline.qss");
-        if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
-            setStyleSheet(QString::fromUtf8(qss.readAll()));
-    }
+    QFile qss(":/qss/snapshottimeline.qss");
+    if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
+        setStyleSheet(QString::fromUtf8(qss.readAll()));
 
     m_scrollTimer.setSingleShot(true);
     connect(&m_scrollTimer, &QTimer::timeout, this, &SnapshotTimeline::doScrollToCurrent);
@@ -129,6 +126,14 @@ void SnapshotTimeline::setThumbnails(const QVector<QPixmap>& thumbnails,
     m_labels = labels;
 
     buildStrip(thumbnails);
+}
+
+void SnapshotTimeline::updateThumbnail(int index, const QPixmap& pixmap) {
+    if (index < 0 || index >= static_cast<int>(m_snapshottabs.size())) {
+        return;
+    }
+
+    m_snapshottabs[index]->setPixmap(pixmap);
 }
 
 void SnapshotTimeline::setSelectedIndex(int index) {

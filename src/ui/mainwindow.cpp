@@ -1,4 +1,6 @@
 #include "ui/mainwindow.h"
+#include "core/imagesession.h"
+#include "core/thumbnailcache.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -8,6 +10,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
@@ -15,11 +18,11 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
+#include <QtConcurrent>
 
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
 #include "core/diskutils.h"
-#include "core/vksnapshotreconstructor.h"
 #include "core/vulkancontext.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
@@ -47,6 +50,17 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent *event) {
     m_session.save(collectOpenPaths());
+
+    //  Cleanup tab session resources
+    if (m_tabBar) {
+        for (int i = 0; i < m_tabBar->count(); ++i) {
+            auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(i));
+            if (tab) {
+                tab->closeImage();
+            }
+        }
+    }
+
     QMainWindow::closeEvent(event);
 }
 
@@ -262,9 +276,7 @@ void MainWindow::updateMenuBar() {
         int         index = tab->session()->currentSnapshotIndex();
         const auto& snapshots = tab->session()->snapshots();
         // Disable if no snapshot is selected or if it's the current image ('C')
-        // The current image is at index == snapshots.size()
-        m_actionDeleteSnapshot->setEnabled(index >= 0 &&
-                                           index < static_cast<int>(snapshots.size()));
+        m_actionDeleteSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
     } else {
         m_actionDeleteSnapshot->setEnabled(false);
     }
@@ -399,29 +411,53 @@ void MainWindow::onExportSnapshot() {
     if (path.isEmpty())
         return;
 
-    QImage img;
+    struct ExportParams {
+        QString                               path;
+        std::optional<ReconstructionSequence> seq;
+        QImage                                diskImage;
+        bool                                  isSnapshot;
+    };
+
+    ExportParams params;
+    params.path = path;
     if (m_currentVersionInView >= 0) {
+        params.isSnapshot = true;
         auto session = tab->session();
-        auto seq =
+        params.seq =
             session ? session->getReconstructionSequence(m_currentVersionInView) : std::nullopt;
-        if (!seq) {
-            notify(tr("Failed to retrieve reconstruction sequence for export."));
-            return;
-        }
-        img = VulkanContext::instance().getUtilityReconstructor()->reconstructToImage(*seq);
-        if (img.isNull()) {
-            notify(tr("Failed to reconstruct snapshot for export."));
+        if (!params.seq) {
+            notify(tr("Failed to export snapshot."));
+            qDebug() << "[MainWindow] Failed to retrieve reconstruction sequence for export.";
             return;
         }
     } else {
-        img = tab->diskImage();
+        params.isSnapshot = false;
+        params.diskImage = tab->diskImage();
     }
 
-    if (DiskUtils::saveImage(path, img)) {
-        notify(tr("Snapshot exported successfully."));
-    } else {
-        notify(tr("Failed to export snapshot."));
-    }
+    auto watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QFutureWatcher<bool>::finished, [this, watcher]() {
+        if (watcher->result()) {
+            notify(tr("Snapshot exported successfully."));
+        } else {
+            notify(tr("Failed to export snapshot."));
+        }
+        watcher->deleteLater();
+    });
+
+    watcher->setFuture(QtConcurrent::run([params]() {
+        QImage img;
+        if (params.isSnapshot) {
+            img = VulkanContext::instance().getUtilityReconstructor()->reconstructToImage(
+                *params.seq);
+        } else {
+            img = params.diskImage;
+        }
+
+        if (img.isNull())
+            return false;
+        return DiskUtils::saveImage(params.path, img);
+    }));
 }
 
 void MainWindow::onSaveSnapshot() {
@@ -436,11 +472,10 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
     if (!tab)
         return;
 
-    int         index = tab->session()->currentSnapshotIndex();
-    const auto& snapshots = tab->session()->snapshots();
+    int index = tab->session()->currentSnapshotIndex();
 
-    // The last "snapshot" is the current disk image ('C') and cannot be deleted.
-    if (index < 0 || index >= static_cast<int>(snapshots.size())) {
+    // The current disk image ('C') cannot be deleted.
+    if (index < 0 || tab->session()->isCurrentImage(index)) {
         return;
     }
 
@@ -460,16 +495,20 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg, int timeout) {
         notify(msg, timeout);
     });
-    connect(tab, &ImageTab::snapshotChanged, this, [this, tab](int /*index*/) {
-        if (m_tabBar->currentWidget() == tab) {
-            updateViewer();
+    connect(tab, &ImageTab::thumbnailUpdated, this, [this, tab](int index, const QPixmap& pixmap) {
+        if (tab == currentTab()) {
+            m_viewerState->snapshotTimeline()->updateThumbnail(index, pixmap);
         }
     });
-    connect(tab, &ImageTab::snapshotsChanged, this, [this, tab]() {
-        if (m_tabBar->currentWidget() == tab) {
-            updateSnapshotTimeline();
+    connect(tab, &ImageTab::tabIconChanged, this, [this, tab](const QPixmap& pixmap) {
+        int index = m_tabBar->indexOf(tab);
+        if (index != -1) {
+            m_tabBar->setTabIcon(
+                index, QIcon(pixmap.scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
         }
     });
+    connect(tab, &ImageTab::snapshotsChanged, this, &MainWindow::syncTimelineSelection);
+    connect(tab, &ImageTab::snapshotChanged, this, &MainWindow::onSnapshotChanged);
 
     QString displayName = QFileInfo(path).fileName();
     int     index = m_tabBar->addTab(tab, displayName);
@@ -537,11 +576,15 @@ void MainWindow::setTabThumbnail(int index) {
     }
 
     auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
+    if (!tab)
+        return;
 
-    QPixmap thumb = tab->thumbnail(40);
-    if (!thumb.isNull())
+    QImage img = tab->session()->thumbnail(ThumbnailConstants::StandardSize);
+    if (!img.isNull()) {
+        QPixmap thumb = QPixmap::fromImage(img);
         m_tabBar->setTabIcon(
             index, QIcon(thumb.scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+    }
 }
 
 ImageTab *MainWindow::currentTab() {
@@ -554,6 +597,21 @@ void MainWindow::notify(const QString& msg, int timeoutMs) {
     m_notificationManager->notify(msg, timeoutMs);
 }
 
+void MainWindow::syncTimelineSelection() {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+}
+
+void MainWindow::onSnapshotChanged(int index) {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    updateViewer(tab);
+}
+
 void MainWindow::updateSnapshotTimeline() {
     // No need to update the timeline repeatedly if restoring a bunch of tabs
     if (m_isRestoringSession)
@@ -564,7 +622,19 @@ void MainWindow::updateSnapshotTimeline() {
         return;
     }
 
-    auto [thumbs, labels] = tab->snapshotTimelineThumbnails(48);
+    auto [images, labels] =
+        tab->session()->snapshotTimelineThumbnails(ThumbnailConstants::StandardSize);
+    QVector<QPixmap> thumbs;
+    thumbs.reserve(images.size());
+
+    for (const auto& img : images) {
+        if (img.isNull()) {
+            thumbs.append(QPixmap());
+        } else {
+            thumbs.append(QPixmap::fromImage(img));
+        }
+    }
+
     m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
@@ -668,9 +738,9 @@ void MainWindow::updateViewer(ImageTab *tab) {
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
 
     // Update timestamp in status bar
-    int         idx = tab->session()->currentSnapshotIndex();
-    const auto& snapshots = tab->session()->snapshots();
-    if (idx >= 0 && idx < static_cast<int>(snapshots.size())) {
+    int idx = tab->session()->currentSnapshotIndex();
+    if (idx >= 0 && !tab->session()->isCurrentImage(idx)) {
+        const auto& snapshots = tab->session()->snapshots();
         m_viewerState->statusBar()->setTimestamp(
             snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
     } else {
@@ -701,7 +771,7 @@ void MainWindow::onSnapshotSelected(int index) {
         return;
     tab->selectSnapshot(index);
 
-    // If index is equal to the number of snapshots, it refers to the original image.
+    // Update the version tracker so updateViewer knows something changed
     if (index == static_cast<int>(tab->session()->snapshots().size())) {
         m_currentVersionInView = -1;
     } else {

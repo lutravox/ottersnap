@@ -1,12 +1,15 @@
 #include <QCache>
 #include <QFutureWatcher>
+#include <QThreadPool>
 #include <QTimer>
 #include <QtConcurrent>
 #include <qlogging.h>
+#include <qnamespace.h>
 #include "core/imagesession.h"
 #include "config/appsettings.h"
 #include "core/diskutils.h"
-#include "core/imagecache.h"
+#include "core/thumbnailcache.h"
+#include "core/thumbnailmanager.h"
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkancontext.h"
 
@@ -16,6 +19,11 @@ ImageSession::ImageSession(QObject *parent) : QObject(parent), m_monitor(new Ima
             &VulkanContext::deviceChanged,
             this,
             &ImageSession::onDeviceChanged);
+
+    connect(&ThumbnailManager::instance(),
+            &ThumbnailManager::thumbnailGenerated,
+            this,
+            &ImageSession::handleThumbnailGenerated);
 }
 
 ImageSession::~ImageSession() {
@@ -23,6 +31,8 @@ ImageSession::~ImageSession() {
 }
 
 bool ImageSession::openImage(const QString& filePath) {
+    ThumbnailCache::invalidate(SnapshotStore::imageKey(filePath), -1);
+
     m_filePath = filePath;
     m_diskImage = DiskUtils::loadImage(m_filePath);
     if (m_diskImage.isNull()) {
@@ -30,11 +40,9 @@ bool ImageSession::openImage(const QString& filePath) {
         return false;
     }
 
-    createReconstructor();
-
     rebuildSnapshotList();
     m_monitor->watch(m_filePath);
-    m_currentIndex = static_cast<int>(m_snapshots.size());
+    m_selectedIndex = static_cast<int>(m_snapshots.size());
 
     // Initialize view state with image dimensions
     m_viewState.resetState(m_diskImage.width(), m_diskImage.height());
@@ -53,17 +61,17 @@ void ImageSession::close() {
     m_diskImage = QImage();
     m_snapshots.clear();
     m_labels.clear();
-    m_currentIndex = 0;
+    m_selectedIndex = 0;
     m_baseCache = {-1, QImage()};
 
-    if (m_reconstructor) {
-        m_reconstructor->cleanup();
-        m_reconstructor.reset();
+    if (m_uiReconstructor) {
+        m_uiReconstructor->cleanup();
+        m_uiReconstructor.reset();
     }
 }
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() const {
-    return getReconstructionSequence(m_currentIndex);
+    return getReconstructionSequence(m_selectedIndex);
 }
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
@@ -114,10 +122,9 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
 }
 
 void ImageSession::selectSnapshot(int index) {
-    if (index < 0 || index > static_cast<int>(m_snapshots.size()))
+    if (index < 0 || (index > static_cast<int>(m_snapshots.size())))
         return;
-    m_currentIndex = index;
-    m_thumbnailCache = {-1, QImage()};
+    m_selectedIndex = index;
     emit imageChanged();
 }
 
@@ -159,30 +166,35 @@ void ImageSession::deleteSnapshot(int index) {
 
     if (SnapshotStore::deleteSnapshot(m_filePath, snapshotId)) {
         // Store current index to adjust it after the list is rebuilt
-        int oldIndex = m_currentIndex;
+        int oldIndex = m_selectedIndex;
 
         rebuildSnapshotList();
 
         if (oldIndex == index) {
             // Viewing the deleted snapshot -> move to current disk image
-            m_currentIndex = static_cast<int>(m_snapshots.size());
-        } else if (oldIndex > index && oldIndex < static_cast<int>(m_snapshots.size()) + 1) {
+            m_selectedIndex = static_cast<int>(m_snapshots.size());
+        } else if (oldIndex > index && (isCurrentImage(oldIndex) ||
+                                        oldIndex < static_cast<int>(m_snapshots.size()) + 1)) {
             // Viewed snapshot shifted left, or we were viewing the disk image
             // If oldIndex was S, and we deleted one, new S is S-1.
             // Either way, if it's above the deletion point, it shifts.
-            m_currentIndex = oldIndex - 1;
+            m_selectedIndex = oldIndex - 1;
         } else {
-            m_currentIndex = oldIndex;
+            m_selectedIndex = oldIndex;
         }
 
         // Ensure we are still within valid bounds [0, m_snapshots.size()]
-        m_currentIndex = qBound(0, m_currentIndex, static_cast<int>(m_snapshots.size()));
+        m_selectedIndex = qBound(0, m_selectedIndex, static_cast<int>(m_snapshots.size()));
 
         emit imageChanged();
         emit statusMessage(QString("Snapshot %1 deleted.").arg(relativeVersion));
     } else {
         emit statusMessage("Failed to delete snapshot.");
     }
+}
+
+bool ImageSession::isCurrentImage(int index) const {
+    return index == static_cast<int>(m_snapshots.size());
 }
 
 void ImageSession::onFileChanged() {
@@ -201,13 +213,14 @@ void ImageSession::reloadImage() {
         if (newImage.isNull() || newImage == m_diskImage)
             return;
 
+        ThumbnailCache::invalidate(SnapshotStore::imageKey(m_filePath), -1);
+
         if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
             autosaveSnapshot(m_diskImage);
         }
 
         m_diskImage = newImage;
         rebuildSnapshotList();
-        m_thumbnailCache = {-1, QImage()};
         emit imageChanged();
     });
 
@@ -224,11 +237,10 @@ void ImageSession::autosaveSnapshot(const QImage& img) {
             [this, watcher]() {
                 auto res = watcher->result();
                 if (res && res->status == SnapshotStore::SaveStatus::Created) {
-                    bool wasViewingCurrent =
-                        (m_currentIndex == static_cast<int>(m_snapshots.size()));
+                    bool wasViewingCurrent = isCurrentImage(m_selectedIndex);
                     rebuildSnapshotList();
                     if (wasViewingCurrent) {
-                        m_currentIndex = static_cast<int>(m_snapshots.size());
+                        m_selectedIndex = static_cast<int>(m_snapshots.size());
                         emit imageChanged();
                     }
                     emit statusMessage("Snapshot autosaved.");
@@ -282,14 +294,25 @@ std::pair<QVector<QImage>, QVector<QString>> ImageSession::snapshotTimelineThumb
 }
 
 QImage ImageSession::thumbnail(int size) {
-    if (m_thumbnailCache.size == size && !m_thumbnailCache.image.isNull()) {
-        qDebug() << "[ImageSession] Using cached thumbnail for current image";
-        return m_thumbnailCache.image;
+    QImage img = generateThumbnail(m_selectedIndex, size);
+    return img;
+}
+
+QImage ImageSession::getPlaceholder(int size) {
+    if (m_placeholderCache.contains(size)) {
+        return m_placeholderCache[size];
     }
 
-    QImage thumb = generateThumbnail(m_currentIndex, size);
-    m_thumbnailCache = {size, thumb};
-    return thumb;
+    QImage placeholder(size, size, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    m_placeholderCache[size] = placeholder;
+    return placeholder;
+}
+
+void ImageSession::handleThumbnailGenerated(const QString& path, int index, const QImage& img) {
+    if (path == m_filePath) {
+        emit thumbnailChanged(index);
+    }
 }
 
 QImage ImageSession::generateThumbnail(int index, int size) {
@@ -298,79 +321,35 @@ QImage ImageSession::generateThumbnail(int index, int size) {
         return QImage();
     }
 
-    if (index == static_cast<int>(m_snapshots.size())) {
-        // Current disk image
-        if (m_diskImage.isNull()) {
-            if (m_filePath.isEmpty()) {
-                qDebug() << "[ImageSession] generateThumbnail: filepath empty";
-                return QImage();
-            }
-            qDebug() << "[ImageSession] Using placeholder thumbnail for current image"
-                     << m_filePath;
-            return QImage(size, size, QImage::Format_ARGB32); // Placeholder
-        }
+    QImage result = ThumbnailManager::instance().getThumbnail(
+        index, size, m_filePath, index == static_cast<int>(m_snapshots.size()), m_snapshots);
 
-        auto *reconstructor = VulkanContext::instance().getUtilityReconstructor();
-        if (reconstructor) {
-            ReconstructionSequence diskSeq;
-            diskSeq.base = m_diskImage;
-            diskSeq.baseChecksum = "disk_image";
-
-            float aspect = float(m_diskImage.width()) / float(m_diskImage.height());
-            QSize targetSize = (aspect > 1.0f) ? QSize(size, qRound(size / aspect))
-                                               : QSize(qRound(size * aspect), size);
-
-            QImage thumb = reconstructor->reconstructToImage(diskSeq, targetSize, reconstructor);
-            if (!thumb.isNull())
-                return thumb;
-        }
-        return ImageCache::formatThumbnail(m_diskImage, size);
-    } else {
-        // Snapshot
-        const auto& v = m_snapshots[index];
-        QString     key = SnapshotStore::imageKey(m_filePath);
-        QImage      thumb = ImageCache::loadThumbnail(key, v.snapshotIndex, QSize(size, size));
-
-        if (!thumb.isNull())
-            return thumb;
-
-        auto  seq = getReconstructionSequence(index);
-        auto *reconstructor = VulkanContext::instance().getUtilityReconstructor();
-        if (seq && reconstructor) {
-            float aspect = float(seq->base.width()) / float(seq->base.height());
-            QSize targetSize = (aspect > 1.0f) ? QSize(size, qRound(size / aspect))
-                                               : QSize(qRound(size * aspect), size);
-
-            thumb = reconstructor->reconstructToImage(*seq, targetSize, reconstructor);
-            if (!thumb.isNull()) {
-                SnapshotStore::saveThumbnail(m_filePath, v.snapshotIndex, thumb);
-                return thumb;
-            }
-        }
-
-        qDebug() << "[ImageSession] Using placeholder thumbnail for snapshot";
-        QImage placeholder(size, size, QImage::Format_ARGB32);
-        placeholder.fill(Qt::transparent);
-        return placeholder;
+    if (result.isNull()) {
+        return getPlaceholder(size);
     }
+
+    return ThumbnailCache::formatThumbnail(result, size);
 }
 
 void ImageSession::onDeviceChanged() {
-    if (m_reconstructor) {
-        m_reconstructor->cleanup();
+    if (m_uiReconstructor) {
+        m_uiReconstructor->cleanup();
     }
-    createReconstructor();
+    // UI reconstructor will be re-initialized by the renderer via setUIReconstructorHandles.
     emit imageChanged();
 }
 
-void ImageSession::createReconstructor() {
-    auto&         ctx = VulkanContext::instance();
-    VulkanHandles handles;
-    handles.physicalDevice = ctx.getPhysicalDevice();
-    handles.device = ctx.getDevice();
-    handles.queue = ctx.getQueue();
-    handles.queueFamilyIndex = ctx.getQueueFamilyIndex();
-    handles.deviceFunctions = ctx.getDeviceFunctions();
-    handles.commandPool = ctx.getCommandPool();
-    m_reconstructor = std::make_shared<VkSnapshotReconstructor>(handles);
+void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {
+    if (m_uiReconstructor) {
+        if (m_uiReconstructor->getHandles().device == handles.device &&
+            m_uiReconstructor->getHandles().physicalDevice == handles.physicalDevice) {
+            return;
+        }
+    }
+    m_uiReconstructor = std::make_shared<VkSnapshotReconstructor>(handles);
+}
+
+std::shared_ptr<VkSnapshotReconstructor> ImageSession::utilityReconstructor() const {
+    // VulkanContext owns the utility reconstructor.
+    return VulkanContext::instance().getUtilityReconstructor();
 }

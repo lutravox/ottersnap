@@ -6,7 +6,6 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <algorithm>
-#include <array>
 #include <cstring>
 
 void VkImageViewerRenderer::setReconstructor(
@@ -45,19 +44,9 @@ void VkImageViewerRenderer::clear() {
 void VkImageViewerRenderer::initResources() {
     m_devFuncs = m_vkWindow->vulkanInstance()->deviceFunctions(m_vkWindow->device());
 
-    // Register device handles with the global context
-    VulkanContext::instance().setDevice(
-        m_vkWindow->physicalDevice(),
-        m_vkWindow->device(),
-        m_vkWindow->graphicsQueue(),
-        0, // Queue family index (typically 0 for graphics in this setup)
-        m_devFuncs);
-
-    // Initialize global resources needed by the reconstructor
-    VulkanContext::instance().initializeInternalResources();
-
     createSamplers();
-    VulkanContext::instance().createGraphicsPipeline(m_vkWindow->defaultRenderPass());
+    VulkanContext::instance().createGraphicsPipeline(
+        m_vkWindow->device(), m_devFuncs, m_vkWindow->defaultRenderPass());
     createDescriptorPoolAndSet();
     createUniformBuffer();
     createVertexBuffer();
@@ -350,9 +339,6 @@ void VkImageViewerRenderer::createViewAndUpdateDescriptors(int mipLevels) {
 void VkImageViewerRenderer::releaseResources() {
     VkDevice dev = m_vkWindow->device();
 
-    // Cleanup global Vulkan resources first, while device is still valid
-    VulkanContext::instance().cleanupResources();
-
     // Texture
     cleanupOldTexture();
 
@@ -383,6 +369,15 @@ void VkImageViewerRenderer::releaseResources() {
 
 void VkImageViewerRenderer::setSession(ImageSession *session) {
     m_session = session;
+    if (!m_session || !m_vkWindow)
+        return;
+
+    VulkanContext::instance().setUIDevice(
+        m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
+
+    VulkanHandles handles = VulkanContext::instance().getUIHandles();
+    m_session->setUIReconstructorHandles(handles);
+    setReconstructor(m_session->uiReconstructor());
 }
 
 void VkImageViewerRenderer::updateUniformBuffer() {
@@ -748,8 +743,17 @@ void VkImageViewerRenderer::performUploads(VkCommandBuffer                      
             return;
         }
 
+        // Try to promote pending base buffer to active state buffer
+        reconstructor->checkAndSwapBase();
+
         if (reconstructor->isUploadingBase()) {
             qDebug() << "[VkImageViewerRenderer] startNextFrame: Base image uploading, deferring";
+            return;
+        }
+
+        if (reconstructor->stateBuffer() == VK_NULL_HANDLE) {
+            qDebug() << "[VkImageViewerRenderer] startNextFrame: State buffer not yet allocated, "
+                        "deferring";
             return;
         }
 
@@ -776,7 +780,12 @@ void VkImageViewerRenderer::performUploads(VkCommandBuffer                      
         memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         memBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-        reconstructor->waitForDeltas();
+        if (!reconstructor->waitForDeltas()) {
+            qWarning() << "[VkImageViewerRenderer] Timeout waiting for deltas during upload";
+            m_uploadPending = false;
+            m_reconstructionPending = false;
+            return;
+        }
 
         // Transition image to TRANSFER_DST_OPTIMAL for the copy
         VkImageMemoryBarrier imgBarrier{};

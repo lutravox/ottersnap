@@ -1,6 +1,6 @@
-#include "core/snapshotstore.h"
 #include "config/appsettings.h"
 #include "core/diskutils.h"
+#include "core/thumbnailmanager.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -335,8 +335,9 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
         }
     }
 
-    // Generate and save thumbnail
-    saveThumbnail(filePath, s.snapshotIndex, image);
+    // Trigger thumbnail generation via the manager
+    ThumbnailManager::instance().enqueueRequest(
+        {.index = s.snapshotIndex, .filePath = filePath, .snapshotIndex = s.snapshotIndex});
 
     // Update index atomically
     snapshots.append(s);
@@ -432,16 +433,6 @@ std::optional<QByteArray> SnapshotStore::loadDelta(const QString& filePath, int 
         }
     }
     return std::nullopt;
-}
-
-void SnapshotStore::saveThumbnail(const QString& filePath, int snapshotIndex, const QImage& image) {
-    QString key = imageKey(filePath);
-    QString sd = thumbnailDir() + '/' + key;
-    if (!DiskUtils::ensureDir(sd))
-        return;
-
-    QString path = sd + '/' + QString::asprintf("v%04d.webp", snapshotIndex);
-    image.save(path, "WEBP");
 }
 
 void SnapshotStore::deleteAllSnapshots(const QString& filePath) {

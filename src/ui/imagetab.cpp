@@ -1,5 +1,5 @@
 #include "ui/imagetab.h"
-#include "core/imagecache.h"
+#include "core/thumbnailcache.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,6 +14,8 @@ ImageTab::ImageTab(QWidget *parent) : QWidget(parent), m_session(new ImageSessio
     connect(m_session, &ImageSession::snapshotsChanged, this, &ImageTab::onSnapshotsChanged);
     connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
+    connect(m_session, &ImageSession::thumbnailChanged, this, &ImageTab::onThumbnailChanged);
+    connect(&m_thumbnailUpdateTimer, &QTimer::timeout, this, &ImageTab::onThumbnailTimerTimeout);
 
     setupUi();
 }
@@ -58,24 +60,22 @@ void ImageTab::onEffectsChanged() {
     }
 }
 
-std::pair<QVector<QPixmap>, QVector<QString>> ImageTab::snapshotTimelineThumbnails(int size) const {
-    qDebug() << "[ImageTab] Creating snapshot thumbnails for" << m_session->filePath();
-    auto [images, labels] = m_session->snapshotTimelineThumbnails(size);
-    QVector<QPixmap> thumbs;
-    thumbs.reserve(images.size());
-
-    for (const auto& img : images) {
-        thumbs.append(QPixmap::fromImage(img));
+void ImageTab::onThumbnailChanged(int index) {
+    QImage img = m_session->generateThumbnail(index, ThumbnailConstants::StandardSize);
+    if (!img.isNull()) {
+        emit thumbnailUpdated(index, QPixmap::fromImage(img));
     }
 
-    return {thumbs, labels};
+    if (index == static_cast<int>(m_session->snapshots().size())) {
+        if (!img.isNull()) {
+            emit tabIconChanged(QPixmap::fromImage(img));
+        }
+    }
+    repaint();
 }
 
-QPixmap ImageTab::thumbnail(int size) const {
-    QImage img = m_session->thumbnail(size);
-    if (img.isNull())
-        return {};
-    return QPixmap::fromImage(img);
+void ImageTab::onThumbnailTimerTimeout() {
+    emit snapshotChanged(m_session->currentSnapshotIndex());
 }
 
 void ImageTab::saveSnapshot() {

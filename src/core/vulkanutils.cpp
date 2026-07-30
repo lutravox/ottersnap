@@ -45,6 +45,10 @@ uint32_t VulkanUtils::findMemoryType(QVulkanInstance      *inst,
                                      VkPhysicalDevice      physicalDevice,
                                      uint32_t              typeFilter,
                                      VkMemoryPropertyFlags properties) {
+    if (!physicalDevice) {
+        qCritical() << "[VulkanUtils] findMemoryType called with null physicalDevice";
+        return UINT32_MAX;
+    }
     VkPhysicalDeviceMemoryProperties memProps;
     inst->functions()->vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
 

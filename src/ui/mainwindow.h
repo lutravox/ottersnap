@@ -75,6 +75,8 @@ class MainWindow : public QMainWindow {
     void      setTabThumbnail(int index);
     void      notify(const QString& msg, int timeoutMs = -1);
     void      updateSnapshotTimeline();
+    void      onSnapshotChanged(int index);
+    void      syncTimelineSelection();
 
     /// @brief Collect file paths from all open tabs.
     QStringList collectOpenPaths() const;

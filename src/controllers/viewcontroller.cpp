@@ -10,7 +10,6 @@ void ViewController::setActiveSession(ImageSession *session) {
     m_session = session;
     if (m_session && m_viewer) {
         m_viewer->setSession(m_session);
-        m_viewer->setReconstructor(m_session->sharedReconstructor());
 
         if (m_session->isCurrentImageSelected()) {
             // It's the disk image - use regular upload

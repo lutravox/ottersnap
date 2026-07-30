@@ -43,14 +43,6 @@ class ImageTab : public QWidget {
     /// @brief Delete a specific snapshot.
     void deleteSnapshot(int index);
 
-    /// @brief Fetches thumbnails of all snapshots and current image.
-    /// @param size Desired thumbnail size in pixels (square).
-    /// @return thumbnails and associated labels
-    std::pair<QVector<QPixmap>, QVector<QString>> snapshotTimelineThumbnails(int size) const;
-
-    /// @param size Desired thumbnail size in pixels (square).
-    QPixmap thumbnail(int size) const;
-
   signals:
     /// @brief Emitted with a status message to show to the user.
     /// @param message Status text.
@@ -69,14 +61,22 @@ class ImageTab : public QWidget {
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
 
+    /// @brief Emitted when a specific thumbnail has been updated.
+    void thumbnailUpdated(int index, const QPixmap& pixmap);
+
+    /// @brief Emitted when the tab icon thumbnail has updated.
+    void tabIconChanged(const QPixmap& pixmap);
+
   private slots:
     void onImageChanged();
     void onSnapshotsChanged();
     void onEffectsChanged();
+    void onThumbnailChanged(int index);
+    void onThumbnailTimerTimeout();
 
   private:
     void setupUi();
 
-    // Remove the state members
+    QTimer        m_thumbnailUpdateTimer;
     ImageSession *m_session = nullptr;
 };

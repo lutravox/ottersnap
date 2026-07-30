@@ -37,6 +37,14 @@ void AppSettings::setMaxSnapshotCacheSizeMB(int value) {
     settings().setValue("General/maxSnapshotCacheSizeMB", value);
 }
 
+int AppSettings::maxThumbnailCacheSizeMB() {
+    return settings().value("General/maxThumbnailCacheSizeMB", 128).toInt();
+}
+
+void AppSettings::setMaxThumbnailCacheSizeMB(int value) {
+    settings().setValue("General/maxThumbnailCacheSizeMB", value);
+}
+
 bool AppSettings::autosaveSnapshots() {
     return settings().value("General/autosaveSnapshots", true).toBool();
 }

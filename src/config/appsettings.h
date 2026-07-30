@@ -47,6 +47,14 @@ class AppSettings {
     /// @param value The size in MB.
     static void setMaxSnapshotCacheSizeMB(int value);
 
+    /// @brief Return the maximum memory allowed for the thumbnail cache in MB.
+    /// @return The cache size in MB.
+    static int maxThumbnailCacheSizeMB();
+    /// @brief Set the maximum memory allowed for the thumbnail cache.
+    /// @param value The size in MB.
+    static void setMaxThumbnailCacheSizeMB(int value);
+
+    /// @brief Return whether snapshots should be automatically saved when the file changes.
   private:
     AppSettings() = delete;
     ~AppSettings() = delete;

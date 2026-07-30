@@ -8,6 +8,7 @@
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
+#include <functional>
 #include "core/effects_interfaces.h"
 #include "core/effectsstate.h"
 #include "core/imagemonitor.h"
@@ -65,6 +66,9 @@ class ImageSession : public QObject, public IEffectsState {
     /// snapshot index.
     std::optional<ReconstructionSequence> getReconstructionSequence(int index) const;
 
+    /// @brief Check if the given index refers to the current image (disk image).
+    bool isCurrentImage(int index) const;
+
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
     /// @brief Manually trigger a snapshot of the current image on disk.
@@ -72,6 +76,9 @@ class ImageSession : public QObject, public IEffectsState {
 
     /// @brief Delete a snapshot by its index.
     void deleteSnapshot(int index);
+
+    /// @brief Generate and cache a thumbnail for a specific snapshot.
+    QImage generateThumbnail(int index, int size);
 
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
     std::pair<QVector<QImage>, QVector<QString>> snapshotTimelineThumbnails(int size);
@@ -84,11 +91,11 @@ class ImageSession : public QObject, public IEffectsState {
         return m_filePath;
     }
     int currentSnapshotIndex() const {
-        return m_currentIndex;
+        return m_selectedIndex;
     }
 
     bool isCurrentImageSelected() const {
-        return m_currentIndex == static_cast<int>(m_snapshots.size());
+        return isCurrentImage(m_selectedIndex);
     }
 
     const QVector<ImageSnapshot>& snapshots() const {
@@ -98,49 +105,57 @@ class ImageSession : public QObject, public IEffectsState {
         return m_labels;
     }
 
-    std::shared_ptr<VkSnapshotReconstructor> sharedReconstructor() const {
-        return m_reconstructor;
+    /// @brief Returns the UI-bound reconstructor for the current session.
+    std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
+        return m_uiReconstructor;
     }
+
+    /// @brief Returns the shared utility reconstructor for background tasks.
+    std::shared_ptr<VkSnapshotReconstructor> utilityReconstructor() const;
+
+    /// @brief Initializes the UI reconstructor with the provided device handles.
+    void setUIReconstructorHandles(const VulkanHandles& handles);
 
   signals:
     /// @brief Emitted when the image data changes (requiring UI refresh).
     void imageChanged();
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
+    /// @brief Emitted when a specific thumbnail has been updated.
+    void thumbnailChanged(int index);
     void effectsChanged();
     /// @brief Emitted with a status message to show to the user.
     void statusMessage(const QString& message, int timeoutMs = -1);
 
   private slots:
+    void handleThumbnailGenerated(const QString& path, int index, const QImage& img);
     void onFileChanged();
     void onDeviceChanged();
 
   private:
     void   rebuildSnapshotList();
-    void   createReconstructor();
     void   autosaveSnapshot(const QImage& img);
     int    getRelativeVersion(int snapshotIndex) const;
-    QImage generateThumbnail(int index, int size);
+    QImage getPlaceholder(int size);
 
     QString                m_filePath;
     QImage                 m_diskImage;
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
-    int                    m_currentIndex = 0;
+    int                    m_selectedIndex = 0;
 
-    struct {
-        int    size = -1;
-        QImage image;
-    } m_thumbnailCache;
+    QMap<int, QImage> m_placeholderCache;
 
     mutable struct {
         int    index = -1;
         QImage image;
     } m_baseCache;
 
+    static std::mutex s_reconstructorMutex;
+
     EffectsState m_effects;
     ViewState    m_viewState;
 
     ImageMonitor                            *m_monitor;
-    std::shared_ptr<VkSnapshotReconstructor> m_reconstructor;
+    std::shared_ptr<VkSnapshotReconstructor> m_uiReconstructor;
 };

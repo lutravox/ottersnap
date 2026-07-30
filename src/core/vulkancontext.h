@@ -4,44 +4,60 @@
 #include <QObject>
 #include <QVulkanInstance>
 #include <memory>
+#include <mutex>
 #include <vulkan/vulkan.h>
 #include "core/vksnapshotreconstructor.h"
+
+static constexpr uint64_t FENCE_TIMEOUT_NS = 5000000000; // 5 seconds
 
 /// @brief VulkanContext manages the lifecycle of the Vulkan instance and device.
 ///
 /// It provides a centralized point of access for core Vulkan handles, enabling
 /// components like VkSnapshotReconstructor to operate independently of the UI.
+struct ComputeResources {
+    VkPipeline            computePipeline = VK_NULL_HANDLE;
+    VkPipelineLayout      computePipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout computeDescriptorSetLayout = VK_NULL_HANDLE;
+
+    VkPipeline            downsamplePipeline = VK_NULL_HANDLE;
+    VkPipelineLayout      downsamplePipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout downsampleDescriptorSetLayout = VK_NULL_HANDLE;
+
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+};
+
 class VulkanContext : public QObject {
     Q_OBJECT
   public:
+    static constexpr uint64_t FENCE_TIMEOUT_NS = 5000000000; // 5 seconds
+
     static VulkanContext& instance();
 
-    /// @brief Initializes the Vulkan instance.
-    bool initializeInstance();
+    bool          initializeInstance();
+    VulkanHandles getUIHandles() const;
+    void setUIDevice(VkDevice device, VkPhysicalDevice physicalDevice, QVulkanInstance *instance);
 
-    /// @brief Sets the device handles, typically called by a QVulkanWindow.
-    void setDevice(VkPhysicalDevice        physicalDevice,
-                   VkDevice                device,
-                   VkQueue                 queue,
-                   uint32_t                queueFamilyIndex,
-                   QVulkanDeviceFunctions *deviceFunctions);
+    VkDevice getUtilityDevice() const {
+        return m_utilityDevice;
+    }
+    QVulkanDeviceFunctions *getUtilityDeviceFunctions() const {
+        return m_utilityDeviceFunctions;
+    }
+    VkQueue getUtilityQueue() const {
+        return m_utilityQueue;
+    }
+    VkCommandPool getUtilityCommandPool() const {
+        return m_utilityCommandPool;
+    }
+    uint32_t getUtilityQueueFamilyIndex() const {
+        return m_utilityQueueFamilyIndex;
+    }
 
-    /// @brief Notifies listeners that the Vulkan device has changed.
     void notifyDeviceChanged() {
         emit deviceChanged();
     }
-
-    /// @brief Initializes internal resources (e.g., global command pool) after device is set.
     void initializeInternalResources();
-
-    /// @brief Creates the shared graphics pipeline. Must be called once a RenderPass is available.
-    void createGraphicsPipeline(VkRenderPass renderPass);
-
-    /// @brief Cleans up GPU resources (buffers, pipelines) that depend on the device.
-    /// This should be called before the VkDevice is destroyed.
-    void cleanupResources(VkDevice dev = VK_NULL_HANDLE, QVulkanDeviceFunctions *df = nullptr);
-
-    /// @brief Cleans up the Vulkan instance.
+    void createGraphicsPipeline(VkDevice dev, QVulkanDeviceFunctions *df, VkRenderPass renderPass);
     void cleanupInstance();
 
     QVulkanInstance *getInstance() const {
@@ -50,73 +66,59 @@ class VulkanContext : public QObject {
     VkPhysicalDevice getPhysicalDevice() const {
         return m_physicalDevice;
     }
-    VkDevice getDevice() const {
-        return m_device;
-    }
-    VkQueue getQueue() const {
-        return m_queue;
-    }
-    uint32_t getQueueFamilyIndex() const {
-        return m_queueFamilyIndex;
-    }
-    VkCommandPool getCommandPool() const {
-        return m_commandPool;
+
+    VkDescriptorPool getDescriptorPool(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.descriptorPool
+                                   : m_utilityResources.descriptorPool;
     }
 
-    VkDescriptorPool getDescriptorPool() const {
-        return m_descriptorPool;
-    }
-    QVulkanDeviceFunctions *getDeviceFunctions() const {
-        return m_deviceFunctions;
+    std::shared_ptr<VkSnapshotReconstructor> createReconstructor();
+    std::shared_ptr<VkSnapshotReconstructor> getUtilityReconstructor() const {
+        return m_utilityReconstructor;
     }
 
-    /// @brief Returns the shared reconstructor used for background tasks (e.g., thumbnails,
-    /// exports).
-    VkSnapshotReconstructor *getUtilityReconstructor() const {
-        return m_utilityReconstructor.get();
+    VkPipeline getComputePipeline(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.computePipeline
+                                   : m_utilityResources.computePipeline;
     }
 
-    VkPipeline getComputePipeline() const {
-        return m_computePipeline;
+    VkPipelineLayout getComputePipelineLayout(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.computePipelineLayout
+                                   : m_utilityResources.computePipelineLayout;
     }
 
-    VkPipelineLayout getComputePipelineLayout() const {
-        return m_computePipelineLayout;
+    VkDescriptorSetLayout getComputeDescriptorSetLayout(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.computeDescriptorSetLayout
+                                   : m_utilityResources.computeDescriptorSetLayout;
     }
 
-    VkDescriptorSetLayout getComputeDescriptorSetLayout() const {
-        return m_computeDescriptorSetLayout;
+    VkPipeline getDownsamplePipeline(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.downsamplePipeline
+                                   : m_utilityResources.downsamplePipeline;
     }
 
-    VkPipeline getDownsamplePipeline() const {
-        return m_downsamplePipeline;
+    VkPipelineLayout getDownsamplePipelineLayout(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.downsamplePipelineLayout
+                                   : m_utilityResources.downsamplePipelineLayout;
     }
 
-    VkPipelineLayout getDownsamplePipelineLayout() const {
-        return m_downsamplePipelineLayout;
-    }
-
-    VkDescriptorSetLayout getDownsampleDescriptorSetLayout() const {
-        return m_downsampleDescriptorSetLayout;
+    VkDescriptorSetLayout getDownsampleDescriptorSetLayout(VkDevice dev) const {
+        return (dev == m_uiDevice) ? m_uiResources.downsampleDescriptorSetLayout
+                                   : m_utilityResources.downsampleDescriptorSetLayout;
     }
 
     VkPipeline getGraphicsPipeline() const {
         return m_graphicsPipeline;
     }
-
     VkPipelineLayout getGraphicsPipelineLayout() const {
         return m_graphicsPipelineLayout;
     }
-
     VkDescriptorSetLayout getGraphicsDescriptorSetLayout() const {
         return m_graphicsDescriptorSetLayout;
     }
 
-    /// @brief Clears the device handles. Called when the Vulkan device is destroyed.
-    void clearDevice() {
-        m_device = VK_NULL_HANDLE;
-        m_deviceFunctions = nullptr;
-    }
+    void
+    initializeComputeResources(VkDevice dev, QVulkanDeviceFunctions *df, ComputeResources& res);
 
   signals:
     void deviceInitialized();
@@ -128,35 +130,36 @@ class VulkanContext : public QObject {
     VulkanContext(const VulkanContext&) = delete;
     VulkanContext& operator=(const VulkanContext&) = delete;
 
-    QVulkanInstance        *m_instance = nullptr;
-    VkPhysicalDevice        m_physicalDevice = VK_NULL_HANDLE;
-    VkDevice                m_device = VK_NULL_HANDLE;
-    VkQueue                 m_queue = VK_NULL_HANDLE;
-    uint32_t                m_queueFamilyIndex = 0;
-    VkCommandPool           m_commandPool = VK_NULL_HANDLE;
-    QVulkanDeviceFunctions *m_deviceFunctions = nullptr;
+    mutable std::recursive_mutex m_mutex;
+    QVulkanInstance             *m_instance = nullptr;
+    VkPhysicalDevice             m_physicalDevice = VK_NULL_HANDLE;
 
-    // Shared Compute Pipeline
-    VkPipeline            m_computePipeline = VK_NULL_HANDLE;
-    VkPipelineLayout      m_computePipelineLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout m_computeDescriptorSetLayout = VK_NULL_HANDLE;
+    // Utility Device
+    VkDevice                m_utilityDevice = VK_NULL_HANDLE;
+    VkQueue                 m_utilityQueue = VK_NULL_HANDLE;
+    uint32_t                m_utilityQueueFamilyIndex = 0;
+    VkCommandPool           m_utilityCommandPool = VK_NULL_HANDLE;
+    QVulkanDeviceFunctions *m_utilityDeviceFunctions = nullptr;
 
-    // Shared Downsample Pipeline
-    VkPipeline            m_downsamplePipeline = VK_NULL_HANDLE;
-    VkPipelineLayout      m_downsamplePipelineLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout m_downsampleDescriptorSetLayout = VK_NULL_HANDLE;
+    // UI Device
+    VkPhysicalDevice        m_uiPhysicalDevice = VK_NULL_HANDLE;
+    VkDevice                m_uiDevice = VK_NULL_HANDLE;
+    VkQueue                 m_uiQueue = VK_NULL_HANDLE;
+    uint32_t                m_uiQueueFamilyIndex = 0;
+    VkCommandPool           m_uiCommandPool = VK_NULL_HANDLE;
+    QVulkanDeviceFunctions *m_uiDeviceFunctions = nullptr;
+
+    // Compute Resources
+    ComputeResources m_utilityResources;
+    ComputeResources m_uiResources;
 
     // Shared Graphics Pipeline
     VkPipeline            m_graphicsPipeline = VK_NULL_HANDLE;
     VkPipelineLayout      m_graphicsPipelineLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_graphicsDescriptorSetLayout = VK_NULL_HANDLE;
 
-    // Shared Descriptor Pool
-    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-
-    std::unique_ptr<VkSnapshotReconstructor> m_utilityReconstructor;
-
-    bool m_ownsDevice = false;
+    std::shared_ptr<VkSnapshotReconstructor> m_utilityReconstructor;
+    bool                                     m_ownsDevice = false;
 };
 
 #endif // VULKANCONTEXT_H

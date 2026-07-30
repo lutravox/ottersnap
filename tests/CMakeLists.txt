@@ -18,8 +18,8 @@ add_unit_test(imagesession   core/imagesession.cpp Qt6::Core Qt6::Gui Qt6::Concu
 # ── ImageMonitor ──────────────────────────────────────────────────
 add_unit_test(imagemonitor   core/imagemonitor.cpp Qt6::Core)
 
-# ── ImageCache ──────────────────────────────────────────────────────
-add_unit_test(imagecache   core/imagecache.cpp Qt6::Core Qt6::Gui)
+# ── ThumbnailCache ──────────────────────────────────────────────────────
+add_unit_test(thumbnailcache   core/thumbnailcache.cpp Qt6::Core Qt6::Gui)
 
 # ── ViewState ────────────────────────────────────────────────────────
 add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)

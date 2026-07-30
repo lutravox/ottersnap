@@ -31,6 +31,9 @@ class SnapshotTimeline : public QWidget {
     /// @param index Zero-based version index. Clamped to valid range.
     void setSelectedIndex(int index);
 
+    /// @brief Update a single thumbnail without rebuilding the timeline.
+    void updateThumbnail(int index, const QPixmap& pixmap);
+
     /// @brief Returns true when no thumbnails are shown.
     bool isEmpty() const;
 

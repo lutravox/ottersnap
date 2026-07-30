@@ -1,6 +1,4 @@
 #include "ui/vkimageviewer.h"
-#include "core/imagecache.h"
-#include "core/snapshotstore.h"
 #include "core/viewstate.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewerrenderer.h"
@@ -73,7 +71,6 @@ VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
 }
 
 VkImageViewer::~VkImageViewer() {
-    VulkanContext::instance().clearDevice();
 }
 
 void VkImageViewer::setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) {

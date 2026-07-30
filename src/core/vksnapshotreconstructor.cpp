@@ -12,7 +12,18 @@
 #include "core/vulkanutils.h"
 
 VkSnapshotReconstructor::VkSnapshotReconstructor(const VulkanHandles& handles)
-    : m_handles(handles) {
+    : m_handles(handles), m_descriptorSet(VK_NULL_HANDLE), m_stateBuffer(VK_NULL_HANDLE),
+      m_stateMemory(VK_NULL_HANDLE), m_stateBufferSize(0), m_cachedBaseBuffer(VK_NULL_HANDLE),
+      m_cachedBaseMemory(VK_NULL_HANDLE), m_pendingStateBuffer(VK_NULL_HANDLE),
+      m_pendingStateMemory(VK_NULL_HANDLE), m_pendingStateCapacity(0),
+      m_uploadFence(VK_NULL_HANDLE), m_isUploadingBase(false), m_deltaFence(VK_NULL_HANDLE),
+      m_isApplyingDelta(false), m_isDirty(false), m_baseStagingBuffer(VK_NULL_HANDLE),
+      m_baseStagingMemory(VK_NULL_HANDLE), m_baseStagingCapacity(0), m_baseStagingMapped(nullptr),
+      m_deltaStagingBuffer(VK_NULL_HANDLE), m_deltaStagingMemory(VK_NULL_HANDLE),
+      m_deltaStagingBufferSize(0), m_deltaStagingCapacity(0), m_deltaStagingMapped(nullptr),
+      m_tileIndexBuffer(VK_NULL_HANDLE), m_tileIndexMemory(VK_NULL_HANDLE),
+      m_tileIndexBufferSize(0), m_tileIndexCapacity(0), m_tileIndexMapped(nullptr),
+      m_computeCmdBuffer(VK_NULL_HANDLE), m_width(0), m_height(0) {
 }
 
 VkSnapshotReconstructor::~VkSnapshotReconstructor() {
@@ -28,14 +39,7 @@ void VkSnapshotReconstructor::cleanup() {
         return;
     }
 
-    // If the global Vulkan context has already been cleaned up, the device handle
-    // we hold is likely invalid. Avoid calling Vulkan functions to prevent crashing.
-    if (VulkanContext::instance().getDevice() == VK_NULL_HANDLE ||
-        df != VulkanContext::instance().getDeviceFunctions()) {
-        return;
-    }
-
-    // Wait for the GPU to be idle before destroying resources
+    // Wait for the GPU to be idle before destroying resources.
     df->vkDeviceWaitIdle(dev);
 
     VulkanUtils::destroyResource(df, dev, m_stateBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
@@ -84,7 +88,7 @@ void VkSnapshotReconstructor::cleanup() {
 
     if (m_descriptorSet != VK_NULL_HANDLE) {
         auto& ctx = VulkanContext::instance();
-        df->vkFreeDescriptorSets(dev, ctx.getDescriptorPool(), 1, &m_descriptorSet);
+        df->vkFreeDescriptorSets(dev, ctx.getDescriptorPool(dev), 1, &m_descriptorSet);
         m_descriptorSet = VK_NULL_HANDLE;
     }
 }
@@ -98,6 +102,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
     if (!df || !dev || !m_handles.commandPool) {
         qWarning()
             << "[VkSnapshotReconstructor] Cannot reset to base: Vulkan context not initialized";
+        m_isUploadingBase = false;
         return false;
     }
 
@@ -108,18 +113,25 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
     // Pending State Buffer Management
     if (!m_pendingStateBuffer || m_width != width || m_height != height) {
         if (m_isUploadingBase && m_uploadFence) {
-            df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, UINT64_MAX);
+            if (df->vkWaitForFences(
+                    dev, 1, &m_uploadFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+                VK_SUCCESS) {
+                qCritical() << "[VkSnapshotReconstructor] Timeout waiting for base upload fence";
+                cancelBaseUpload();
+                return false;
+            }
         }
 
         if (m_pendingStateBuffer) {
-            df->vkDestroyBuffer(dev, m_pendingStateBuffer, nullptr);
-            df->vkFreeMemory(dev, m_pendingStateMemory, nullptr);
+            VulkanUtils::destroyResource(
+                df, dev, m_pendingStateBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
+            VulkanUtils::freeMemory(df, dev, m_pendingStateMemory);
         }
 
         auto alloc = VulkanUtils::createBuffer(VulkanContext::instance().getInstance(),
                                                df,
                                                dev,
-                                               VulkanContext::instance().getPhysicalDevice(),
+                                               m_handles.physicalDevice,
                                                size,
                                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
@@ -130,7 +142,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
                 VulkanContext::instance().getInstance(),
                 df,
                 dev,
-                VulkanContext::instance().getPhysicalDevice(),
+                m_handles.physicalDevice,
                 size,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -139,6 +151,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
 
         if (alloc.buffer == VK_NULL_HANDLE) {
             qCritical() << "[VkSnapshotReconstructor] Failed to create pending state buffer";
+            m_isUploadingBase = false;
             return false;
         }
         m_pendingStateBuffer = alloc.buffer;
@@ -166,13 +179,14 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
             auto alloc = VulkanUtils::createBuffer(VulkanContext::instance().getInstance(),
                                                    df,
                                                    dev,
-                                                   VulkanContext::instance().getPhysicalDevice(),
+                                                   m_handles.physicalDevice,
                                                    m_baseStagingCapacity,
                                                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             if (alloc.buffer == VK_NULL_HANDLE) {
                 qCritical() << "[VkSnapshotReconstructor] Failed to create base staging buffer";
+                m_isUploadingBase = false;
                 return false;
             }
             m_baseStagingBuffer = alloc.buffer;
@@ -193,6 +207,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
 
         if (!updateCachedBase(size)) {
             qCritical() << "[VkSnapshotReconstructor] Failed to update GPU base cache";
+            m_isUploadingBase = false;
             return false;
         }
     }
@@ -200,14 +215,20 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
     // Record Command Buffer
     if (!m_computeCmdBuffer) {
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocInfo.commandPool = VulkanContext::instance().getCommandPool();
+        allocInfo.commandPool = m_handles.commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
         df->vkAllocateCommandBuffers(dev, &allocInfo, &m_computeCmdBuffer);
     }
 
-    if (m_isApplyingDelta && m_deltaFence)
-        df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, UINT64_MAX);
+    if (m_isApplyingDelta && m_deltaFence) {
+        if (df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+            VK_SUCCESS) {
+            qCritical() << "[VkSnapshotReconstructor] Timeout waiting for delta fence";
+            cancelDeltaApplication();
+            return false;
+        }
+    }
     if (m_uploadFence)
         df->vkResetFences(dev, 1, &m_uploadFence);
 
@@ -251,7 +272,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_computeCmdBuffer;
-    df->vkQueueSubmit(VulkanContext::instance().getQueue(), 1, &submitInfo, m_uploadFence);
+    df->vkQueueSubmit(m_handles.queue, 1, &submitInfo, m_uploadFence);
 
     m_isUploadingBase = true;
     m_width = width;
@@ -276,7 +297,14 @@ bool VkSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
         auto df = m_handles.deviceFunctions;
         auto dev = m_handles.device;
         if (df && dev && m_uploadFence) {
-            df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, UINT64_MAX);
+            if (df->vkWaitForFences(
+                    dev, 1, &m_uploadFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+                VK_SUCCESS) {
+                qCritical() << "[VkSnapshotReconstructor] Timeout waiting for base upload fence in "
+                               "reconstruct";
+                cancelBaseUpload();
+                return false;
+            }
         }
         checkAndSwapBase();
     }
@@ -290,13 +318,8 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
 
     // Initialize resources and descriptor set
     auto& ctx = VulkanContext::instance();
-
-    if (!ctx.getComputePipeline()) {
-        return false;
-    }
-
-    auto df = m_handles.deviceFunctions;
-    auto dev = m_handles.device;
+    auto  df = m_handles.deviceFunctions;
+    auto  dev = m_handles.device;
 
     if (!df || !dev || !m_handles.commandPool) {
         qWarning()
@@ -304,14 +327,18 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
         return false;
     }
 
+    if (!ctx.getComputePipeline(dev)) {
+        return false;
+    }
+
     // Ensure we have a descriptor set allocated for this session
     if (m_descriptorSet == VK_NULL_HANDLE) {
         VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        allocInfo.descriptorPool = ctx.getDescriptorPool();
+        allocInfo.descriptorPool = ctx.getDescriptorPool(dev);
         allocInfo.descriptorSetCount = 1;
 
         // Provide the layout for the descriptor set
-        VkDescriptorSetLayout layouts[] = {ctx.getComputeDescriptorSetLayout()};
+        VkDescriptorSetLayout layouts[] = {ctx.getComputeDescriptorSetLayout(dev)};
         allocInfo.pSetLayouts = layouts;
 
         VkDescriptorSet pSet = nullptr;
@@ -323,14 +350,21 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
     }
 
     if (m_isUploadingBase) {
-        if (m_uploadFence) {
-            df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, UINT64_MAX);
+        if (m_deltaFence) {
+            if (df->vkWaitForFences(
+                    dev, 1, &m_deltaFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+                VK_SUCCESS) {
+                qCritical()
+                    << "[VkSnapshotReconstructor] Timeout waiting for delta fence in waitForDeltas";
+                return false;
+            }
         }
         checkAndSwapBase();
     }
 
-    if (delta.isEmpty())
+    if (!ctx.getComputePipeline(dev)) {
         return false;
+    }
 
     QDataStream stream(delta);
     stream.setByteOrder(QDataStream::LittleEndian);
@@ -384,7 +418,12 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
 
     // Update Staging Buffer
     if (m_deltaFence) {
-        df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, UINT64_MAX);
+        if (df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+            VK_SUCCESS) {
+            qCritical() << "[VkSnapshotReconstructor] Timeout waiting for delta fence during "
+                           "staging update";
+            return false;
+        }
         df->vkResetFences(dev, 1, &m_deltaFence);
     }
 
@@ -475,7 +514,7 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
     // Dispatch Compute Shader
     if (!m_computeCmdBuffer) {
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocInfo.commandPool = VulkanContext::instance().getCommandPool();
+        allocInfo.commandPool = m_handles.commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
         df->vkAllocateCommandBuffers(dev, &allocInfo, &m_computeCmdBuffer);
@@ -483,17 +522,23 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
 
     // Ensure previous operations on this command buffer are complete
     if (m_isUploadingBase && m_uploadFence) {
-        df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, UINT64_MAX);
+        if (df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+            VK_SUCCESS) {
+            qCritical()
+                << "[VkSnapshotReconstructor] Timeout waiting for base upload fence in applyDelta";
+            return false;
+        }
     }
+
     m_isApplyingDelta = false;
 
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     df->vkBeginCommandBuffer(m_computeCmdBuffer, &beginInfo);
     df->vkCmdBindPipeline(
-        m_computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.getComputePipeline());
+        m_computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.getComputePipeline(dev));
     df->vkCmdBindDescriptorSets(m_computeCmdBuffer,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
-                                ctx.getComputePipelineLayout(),
+                                ctx.getComputePipelineLayout(dev),
                                 0,
                                 1,
                                 &m_descriptorSet,
@@ -507,7 +552,7 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
     pcs.imageH = m_height;
     pcs.numTiles = tileIndices.size();
     df->vkCmdPushConstants(m_computeCmdBuffer,
-                           ctx.getComputePipelineLayout(),
+                           ctx.getComputePipelineLayout(dev),
                            VK_SHADER_STAGE_COMPUTE_BIT,
                            0,
                            sizeof(pcs),
@@ -527,7 +572,7 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_computeCmdBuffer;
-    df->vkQueueSubmit(VulkanContext::instance().getQueue(), 1, &submitInfo, m_deltaFence);
+    df->vkQueueSubmit(m_handles.queue, 1, &submitInfo, m_deltaFence);
 
     m_isApplyingDelta = true;
 
@@ -544,7 +589,7 @@ bool VkSnapshotReconstructor::copyToImage(VkCommandBuffer cmd,
         return false;
     }
 
-    auto df = VulkanContext::instance().getDeviceFunctions();
+    auto df = m_handles.deviceFunctions;
 
     VkBufferMemoryBarrier bufBarrier{};
     bufBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -581,30 +626,43 @@ bool VkSnapshotReconstructor::copyToImage(VkCommandBuffer cmd,
     return true;
 }
 
-void VkSnapshotReconstructor::waitForDeltas() {
+bool VkSnapshotReconstructor::waitForDeltas() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    auto                                  df = VulkanContext::instance().getDeviceFunctions();
-    auto                                  dev = VulkanContext::instance().getDevice();
+    auto                                  df = m_handles.deviceFunctions;
+    auto                                  dev = m_handles.device;
 
     if (!df || !dev)
-        return;
+        return false;
 
-    // 1. Wait for base upload (critical for cache MISS path)
+    // Wait for base upload
     if (m_isUploadingBase && m_uploadFence) {
-        df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, UINT64_MAX);
+        if (df->vkWaitForFences(dev, 1, &m_uploadFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+            VK_SUCCESS) {
+            qCritical() << "[VkSnapshotReconstructor] Timeout waiting for base upload fence in "
+                           "waitForDeltas";
+            cancelBaseUpload();
+            return false;
+        }
     }
 
-    // 2. Wait for delta applications
     if (m_isApplyingDelta && m_deltaFence) {
-        df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, UINT64_MAX);
-        m_isApplyingDelta = false;
+        if (df->vkWaitForFences(dev, 1, &m_deltaFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) !=
+            VK_SUCCESS) {
+            qCritical()
+                << "[VkSnapshotReconstructor] Timeout waiting for delta fence in waitForDeltas";
+            cancelDeltaApplication();
+            return false;
+        }
+        cancelDeltaApplication();
     }
+
+    return true;
 }
 
 void VkSnapshotReconstructor::resetState() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    auto                                  df = VulkanContext::instance().getDeviceFunctions();
-    auto                                  dev = VulkanContext::instance().getDevice();
+    auto                                  df = m_handles.deviceFunctions;
+    auto                                  dev = m_handles.device;
     if (!df || !dev)
         return;
 
@@ -648,7 +706,9 @@ bool VkSnapshotReconstructor::checkAndSwapBase() {
 
     if (df->vkGetFenceStatus(dev, m_uploadFence) == VK_SUCCESS) {
         // Ensure any pending delta operations are finished before we swap
-        waitForDeltas();
+        if (!waitForDeltas()) {
+            return false;
+        }
 
         // Swap active state buffer with the pending one
         if (m_stateBuffer) {
@@ -699,7 +759,7 @@ bool VkSnapshotReconstructor::updateCachedBase(VkDeviceSize size) {
     auto alloc = VulkanUtils::createBuffer(VulkanContext::instance().getInstance(),
                                            df,
                                            dev,
-                                           VulkanContext::instance().getPhysicalDevice(),
+                                           m_handles.physicalDevice,
                                            size,
                                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                                                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -711,7 +771,7 @@ bool VkSnapshotReconstructor::updateCachedBase(VkDeviceSize size) {
             VulkanContext::instance().getInstance(),
             df,
             dev,
-            VulkanContext::instance().getPhysicalDevice(),
+            m_handles.physicalDevice,
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -723,6 +783,16 @@ bool VkSnapshotReconstructor::updateCachedBase(VkDeviceSize size) {
     m_cachedBaseBuffer = alloc.buffer;
     m_cachedBaseMemory = alloc.memory;
     return true;
+}
+
+void VkSnapshotReconstructor::cancelBaseUpload() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_isUploadingBase = false;
+}
+
+void VkSnapshotReconstructor::cancelDeltaApplication() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_isApplyingDelta = false;
 }
 
 bool VkSnapshotReconstructor::isUploadingBase() const {
@@ -758,6 +828,7 @@ VkDeviceSize VkSnapshotReconstructor::stateBufferSize() const {
 QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence& seq,
                                                    QSize                         targetSize,
                                                    VkSnapshotReconstructor      *worker) {
+    std::unique_lock<std::recursive_mutex>   lock(m_mutex);
     std::unique_ptr<VkSnapshotReconstructor> localWorker = nullptr;
     VkSnapshotReconstructor                 *activeWorker = worker;
 
@@ -767,6 +838,7 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
     }
 
     if (!activeWorker->reconstruct(seq)) {
+        activeWorker->cancelBaseUpload();
         return QImage();
     }
 
@@ -801,9 +873,9 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
 
         VkDescriptorSet             ds;
         VkDescriptorSetAllocateInfo dsai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        dsai.descriptorPool = ctx.getDescriptorPool();
+        dsai.descriptorPool = ctx.getDescriptorPool(dev);
         dsai.descriptorSetCount = 1;
-        VkDescriptorSetLayout layout = ctx.getDownsampleDescriptorSetLayout();
+        VkDescriptorSetLayout layout = ctx.getDownsampleDescriptorSetLayout(dev);
         dsai.pSetLayouts = &layout;
         df->vkAllocateDescriptorSets(dev, &dsai, &ds);
 
@@ -820,7 +892,7 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
             VulkanContext::instance().getInstance(),
             df,
             dev,
-            VulkanContext::instance().getPhysicalDevice(),
+            m_handles.physicalDevice,
             finalBufferSize,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -865,17 +937,17 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
             uint32_t w, h, tw, th;
         } pcs = {srcW, srcH, finalW, finalH};
 
-        df->vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.getDownsamplePipeline());
+        df->vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.getDownsamplePipeline(dev));
         df->vkCmdBindDescriptorSets(cmd,
                                     VK_PIPELINE_BIND_POINT_COMPUTE,
-                                    ctx.getDownsamplePipelineLayout(),
+                                    ctx.getDownsamplePipelineLayout(dev),
                                     0,
                                     1,
                                     &ds,
                                     0,
                                     nullptr);
         df->vkCmdPushConstants(cmd,
-                               ctx.getDownsamplePipelineLayout(),
+                               ctx.getDownsamplePipelineLayout(dev),
                                VK_SHADER_STAGE_COMPUTE_BIT,
                                0,
                                sizeof(pcs),
@@ -892,19 +964,31 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
         VkFence           fence;
         df->vkCreateFence(dev, &fci, nullptr, &fence);
 
-        df->vkQueueSubmit(VulkanContext::instance().getQueue(), 1, &submit, fence);
-        df->vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+        df->vkQueueSubmit(m_handles.queue, 1, &submit, fence);
+
+        lock.unlock(); // Release lock during blocking GPU wait
+        VkResult res =
+            df->vkWaitForFences(dev, 1, &fence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS);
+        lock.lock(); // Re-acquire lock
+
+        if (res != VK_SUCCESS) {
+            qCritical() << "[VkSnapshotReconstructor] Timeout waiting for compute fence in "
+                           "reconstructToImage";
+            df->vkDestroyFence(dev, fence, nullptr);
+            activeWorker->cancelBaseUpload();
+            return QImage();
+        }
         df->vkDestroyFence(dev, fence, nullptr);
 
         df->vkFreeCommandBuffers(dev, pool, 1, &cmd);
-        df->vkFreeDescriptorSets(dev, ctx.getDescriptorPool(), 1, &ds);
+        df->vkFreeDescriptorSets(dev, ctx.getDescriptorPool(dev), 1, &ds);
     }
 
     // Now copy result
     auto stagingAlloc = VulkanUtils::createBuffer(VulkanContext::instance().getInstance(),
                                                   df,
                                                   dev,
-                                                  VulkanContext::instance().getPhysicalDevice(),
+                                                  m_handles.physicalDevice,
                                                   finalBufferSize,
                                                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -936,8 +1020,19 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
     VkFence           fence;
     df->vkCreateFence(dev, &fci, nullptr, &fence);
 
-    df->vkQueueSubmit(VulkanContext::instance().getQueue(), 1, &submit, fence);
-    df->vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+    df->vkQueueSubmit(m_handles.queue, 1, &submit, fence);
+
+    lock.unlock(); // Release lock during blocking GPU wait
+    VkResult resCopy =
+        df->vkWaitForFences(dev, 1, &fence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS);
+    lock.lock(); // Re-acquire lock
+
+    if (resCopy != VK_SUCCESS) {
+        qCritical()
+            << "[VkSnapshotReconstructor] Timeout waiting for copy fence in reconstructToImage";
+        df->vkDestroyFence(dev, fence, nullptr);
+        return QImage();
+    }
     df->vkDestroyFence(dev, fence, nullptr);
 
     void *data = nullptr;

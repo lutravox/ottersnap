@@ -1,5 +1,6 @@
 #include "ui/dialogs/settingsdialog.h"
 #include "config/appsettings.h"
+#include "core/thumbnailcache.h"
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -22,15 +23,17 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbAutosave->setChecked(AppSettings::autosaveSnapshots());
     layout->addWidget(m_cbAutosave);
 
-    // Snapshot cache size
-    auto *cacheLayout = new QHBoxLayout();
-    auto *cacheLabel = new QLabel(tr("Snapshot cache size (MB):"), this);
-    m_sbCacheSize = new QSpinBox(this);
-    m_sbCacheSize->setRange(64, 8192);
-    m_sbCacheSize->setValue(AppSettings::maxSnapshotCacheSizeMB());
-    cacheLayout->addWidget(cacheLabel);
-    cacheLayout->addWidget(m_sbCacheSize);
-    layout->addLayout(cacheLayout);
+    // Thumbnail cache size
+
+    // Thumbnail cache size
+    auto *thumbLayout = new QHBoxLayout();
+    auto *thumbLabel = new QLabel(tr("Thumbnail cache size (MB):"), this);
+    m_sbThumbCacheSize = new QSpinBox(this);
+    m_sbThumbCacheSize->setRange(16, 2048);
+    m_sbThumbCacheSize->setValue(AppSettings::maxThumbnailCacheSizeMB());
+    thumbLayout->addWidget(thumbLabel);
+    thumbLayout->addWidget(m_sbThumbCacheSize);
+    layout->addLayout(thumbLayout);
 
     layout->addStretch();
 
@@ -41,7 +44,8 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
         AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
-        AppSettings::setMaxSnapshotCacheSizeMB(m_sbCacheSize->value());
+        AppSettings::setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
+        ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
         accept();
     });
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

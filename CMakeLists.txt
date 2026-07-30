@@ -108,7 +108,7 @@ set(OTTERSNAP_CORE_SOURCES
 
     # Core logic
     src/core/diskutils.cpp
-    src/core/imagecache.cpp
+    src/core/thumbnailcache.cpp
     src/core/snapshotstore.cpp
     src/core/vksnapshotreconstructor.cpp
     src/core/vulkancontext.cpp
@@ -116,6 +116,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/viewstate.cpp
     src/core/sessionmanager.cpp
     src/core/imagesession.cpp
+    src/core/thumbnailmanager.cpp
     src/core/imagemonitor.cpp
 
     # Configuration

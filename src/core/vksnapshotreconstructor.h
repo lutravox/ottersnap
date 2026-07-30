@@ -13,6 +13,10 @@ class VkSnapshotReconstructor {
     /// @brief Performs cleanup of all GPU resources managed by the reconstructor.
     void cleanup();
 
+    VulkanHandles getHandles() const {
+        return m_handles;
+    }
+
     // Prevent copying
     VkSnapshotReconstructor(const VkSnapshotReconstructor&) = delete;
     VkSnapshotReconstructor& operator=(const VkSnapshotReconstructor&) = delete;
@@ -55,11 +59,18 @@ class VkSnapshotReconstructor {
     bool checkAndSwapBase();
 
     /// @brief Ensures all pending delta operations are complete on the GPU.
-    void waitForDeltas();
+    /// @return True if all pending operations completed, false if a timeout occurred.
+    bool waitForDeltas();
 
     /// @brief Returns true if the base image is currently being uploaded to
     /// the GPU.
     bool isUploadingBase() const;
+
+    /// @brief Resets the uploading base status.
+    void cancelBaseUpload();
+
+    /// @brief Resets the delta application status.
+    void cancelDeltaApplication();
 
     /// @brief Resets the internal reconstruction state, clearing active and
     /// cached buffers.

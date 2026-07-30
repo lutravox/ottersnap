@@ -58,13 +58,14 @@ bool VulkanContext::initializeInstance() {
         qCritical() << "[VulkanContext] No suitable queue family found";
         return false;
     }
-    m_queueFamilyIndex = foundFamily;
+    m_utilityQueueFamilyIndex = foundFamily;
+    m_utilityQueueFamilyIndex = foundFamily;
 
-    // Create the logical device
+    // Create the utility logical device
     float                   queuePriority = 1.0f;
     VkDeviceQueueCreateInfo queueCreateInfo{};
     queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = m_queueFamilyIndex;
+    queueCreateInfo.queueFamilyIndex = m_utilityQueueFamilyIndex;
     queueCreateInfo.queueCount = 1;
     queueCreateInfo.pQueuePriorities = &queuePriority;
 
@@ -73,90 +74,61 @@ bool VulkanContext::initializeInstance() {
     deviceCreateInfo.queueCreateInfoCount = 1;
     deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 
-    if (vf->vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_device) != VK_SUCCESS) {
-        qCritical() << "[VulkanContext] Failed to create logical device";
+    if (vf->vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_utilityDevice) !=
+        VK_SUCCESS) {
+        qCritical() << "[VulkanContext] Failed to create utility logical device";
         return false;
     }
-    m_ownsDevice = true;
 
-    // Get the queue and device functions
-    m_instance->deviceFunctions(m_device)->vkGetDeviceQueue(
-        m_device, m_queueFamilyIndex, 0, &m_queue);
-    m_deviceFunctions = m_instance->deviceFunctions(m_device);
+    // Get the utility queue and device functions
+    m_utilityDeviceFunctions = m_instance->deviceFunctions(m_utilityDevice);
+    m_utilityDeviceFunctions->vkGetDeviceQueue(
+        m_utilityDevice, m_utilityQueueFamilyIndex, 0, &m_utilityQueue);
 
-    // Prime internal resources and the reconstructor
+    // Create a dedicated command pool for the utility device
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.queueFamilyIndex = m_utilityQueueFamilyIndex;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    if (m_utilityDeviceFunctions->vkCreateCommandPool(
+            m_utilityDevice, &poolInfo, nullptr, &m_utilityCommandPool) != VK_SUCCESS) {
+        qCritical() << "[VulkanContext] Failed to create utility command pool";
+        return false;
+    }
+
+    // Prime internal resources (on the utility device)
     initializeInternalResources();
 
-    qDebug() << "[VulkanContext] Headless device initialized successfully";
+    m_utilityReconstructor = createReconstructor();
+
+    qDebug() << "[VulkanContext] Utility device initialized successfully";
     return true;
 }
 
-void VulkanContext::setDevice(VkPhysicalDevice        physicalDevice,
-                              VkDevice                device,
-                              VkQueue                 queue,
-                              uint32_t                queueFamilyIndex,
-                              QVulkanDeviceFunctions *deviceFunctions) {
-    if (m_device != VK_NULL_HANDLE) {
-        VkDevice                oldDevice = m_device;
-        QVulkanDeviceFunctions *oldDF = m_deviceFunctions;
-
-        // 1. Update handles first so that listeners in notifyDeviceChanged()
-        //    create resources using the NEW device.
-        m_physicalDevice = physicalDevice;
-        m_device = device;
-        m_queue = queue;
-        m_queueFamilyIndex = queueFamilyIndex;
-        m_deviceFunctions = deviceFunctions;
-
-        // 2. Clean up old resources using old handles.
-        cleanupResources(oldDevice, oldDF);
-
-        // 3. Finally, destroy the old device.
-        if (m_ownsDevice) {
-            oldDF->vkDestroyDevice(oldDevice, nullptr);
-            m_ownsDevice = false;
-        }
-    } else {
-        m_physicalDevice = physicalDevice;
-        m_device = device;
-        m_queue = queue;
-        m_queueFamilyIndex = queueFamilyIndex;
-        m_deviceFunctions = deviceFunctions;
-    }
-
-    // 4. Initialize internal resources (e.g., command pool) before notifying listeners.
-    initializeInternalResources();
-
-    // 5. Notify all listeners to recreate their resources using the now-initialized context.
-    // This must happen after initializeInternalResources() because reconstructors need the command
-    // pool.
-    notifyDeviceChanged();
-    emit deviceInitialized();
+void VulkanContext::initializeInternalResources() {
+    initializeComputeResources(m_utilityDevice, m_utilityDeviceFunctions, m_utilityResources);
 }
 
-void VulkanContext::initializeInternalResources() {
-    if (!m_device || !m_deviceFunctions) {
-        qWarning() << "[VulkanContext] Cannot initialize internal resources: device not set";
+std::shared_ptr<VkSnapshotReconstructor> VulkanContext::createReconstructor() {
+    VulkanHandles handles;
+    handles.physicalDevice = getPhysicalDevice();
+    handles.device = getUtilityDevice();
+    handles.queue = getUtilityQueue();
+    handles.queueFamilyIndex = getUtilityQueueFamilyIndex();
+    handles.deviceFunctions = getUtilityDeviceFunctions();
+    handles.commandPool = getUtilityCommandPool();
+
+    return std::make_shared<VkSnapshotReconstructor>(handles);
+}
+
+void VulkanContext::initializeComputeResources(VkDevice                dev,
+                                               QVulkanDeviceFunctions *df,
+                                               ComputeResources&       res) {
+    if (!dev || !df)
         return;
-    }
 
-    auto df = m_deviceFunctions;
-    auto dev = m_device;
-
-    // Global Command Pool
-    if (m_commandPool == VK_NULL_HANDLE) {
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = m_queueFamilyIndex;
-
-        if (df->vkCreateCommandPool(dev, &poolInfo, nullptr, &m_commandPool) != VK_SUCCESS) {
-            qCritical() << "[VulkanContext] Failed to create global command pool";
-        }
-    }
-
-    // Shared Descriptor Pool
-    if (m_descriptorPool == VK_NULL_HANDLE) {
+    // Descriptor Pool
+    if (res.descriptorPool == VK_NULL_HANDLE) {
         VkDescriptorPoolSize poolSizes[2]{};
         poolSizes[0] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 20};
         poolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10};
@@ -168,13 +140,13 @@ void VulkanContext::initializeInternalResources() {
         dpci.poolSizeCount = 2;
         dpci.pPoolSizes = poolSizes;
 
-        if (df->vkCreateDescriptorPool(dev, &dpci, nullptr, &m_descriptorPool) != VK_SUCCESS) {
-            qCritical() << "[VulkanContext] Failed to create shared descriptor pool";
+        if (df->vkCreateDescriptorPool(dev, &dpci, nullptr, &res.descriptorPool) != VK_SUCCESS) {
+            qCritical() << "[VulkanContext] Failed to create compute descriptor pool";
         }
     }
 
     // Compute Pipeline (Reconstruction)
-    if (m_computePipeline == VK_NULL_HANDLE) {
+    if (res.computePipeline == VK_NULL_HANDLE) {
         auto code = VulkanUtils::loadShader(":/shaders/snapshot_reconstruct.comp.spv");
         if (!code.empty()) {
             VkShaderModule shaderModule =
@@ -193,13 +165,13 @@ void VulkanContext::initializeInternalResources() {
                 dslci.bindingCount = 3;
                 dslci.pBindings = bindings;
                 df->vkCreateDescriptorSetLayout(
-                    dev, &dslci, nullptr, &m_computeDescriptorSetLayout);
+                    dev, &dslci, nullptr, &res.computeDescriptorSetLayout);
 
                 VkPipelineLayoutCreateInfo plci{};
                 plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
                 plci.setLayoutCount = 1;
-                plci.pSetLayouts = &m_computeDescriptorSetLayout;
-                df->vkCreatePipelineLayout(dev, &plci, nullptr, &m_computePipelineLayout);
+                plci.pSetLayouts = &res.computeDescriptorSetLayout;
+                df->vkCreatePipelineLayout(dev, &plci, nullptr, &res.computePipelineLayout);
 
                 VkPipelineShaderStageCreateInfo stage{};
                 stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -210,9 +182,9 @@ void VulkanContext::initializeInternalResources() {
                 VkComputePipelineCreateInfo cpci{};
                 cpci.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
                 cpci.stage = stage;
-                cpci.layout = m_computePipelineLayout;
+                cpci.layout = res.computePipelineLayout;
                 df->vkCreateComputePipelines(
-                    dev, VK_NULL_HANDLE, 1, &cpci, nullptr, &m_computePipeline);
+                    dev, VK_NULL_HANDLE, 1, &cpci, nullptr, &res.computePipeline);
 
                 df->vkDestroyShaderModule(dev, shaderModule, nullptr);
             }
@@ -220,7 +192,7 @@ void VulkanContext::initializeInternalResources() {
     }
 
     // Downsample Pipeline
-    if (m_downsamplePipeline == VK_NULL_HANDLE) {
+    if (res.downsamplePipeline == VK_NULL_HANDLE) {
         auto downsampleCode = VulkanUtils::loadShader(":/shaders/snapshot_downsample.comp.spv");
         if (!downsampleCode.empty()) {
             VkShaderModule dsShaderModule =
@@ -236,61 +208,53 @@ void VulkanContext::initializeInternalResources() {
                 dsBindings[1].descriptorCount = 1;
                 dsBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-                VkDescriptorSetLayoutCreateInfo dslciDs{};
-                dslciDs.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-                dslciDs.bindingCount = 2;
-                dslciDs.pBindings = dsBindings;
+                VkDescriptorSetLayoutCreateInfo dslci{};
+                dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                dslci.bindingCount = 2;
+                dslci.pBindings = dsBindings;
                 df->vkCreateDescriptorSetLayout(
-                    dev, &dslciDs, nullptr, &m_downsampleDescriptorSetLayout);
+                    dev, &dslci, nullptr, &res.downsampleDescriptorSetLayout);
 
-                VkPipelineLayoutCreateInfo plciDs{};
-                plciDs.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-                plciDs.setLayoutCount = 1;
-                plciDs.pSetLayouts = &m_downsampleDescriptorSetLayout;
-                df->vkCreatePipelineLayout(dev, &plciDs, nullptr, &m_downsamplePipelineLayout);
+                VkPipelineLayoutCreateInfo plci{};
+                plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+                plci.setLayoutCount = 1;
+                plci.pSetLayouts = &res.downsampleDescriptorSetLayout;
+                df->vkCreatePipelineLayout(dev, &plci, nullptr, &res.downsamplePipelineLayout);
 
-                VkPipelineShaderStageCreateInfo stageDs{};
-                stageDs.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-                stageDs.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-                stageDs.module = dsShaderModule;
-                stageDs.pName = "main";
+                VkPipelineShaderStageCreateInfo stage{};
+                stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+                stage.module = dsShaderModule;
+                stage.pName = "main";
 
-                VkComputePipelineCreateInfo cpciDs{};
-                cpciDs.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-                cpciDs.stage = stageDs;
-                cpciDs.layout = m_downsamplePipelineLayout;
+                VkComputePipelineCreateInfo cpci{};
+                cpci.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+                cpci.stage = stage;
+                cpci.layout = res.downsamplePipelineLayout;
                 df->vkCreateComputePipelines(
-                    dev, VK_NULL_HANDLE, 1, &cpciDs, nullptr, &m_downsamplePipeline);
+                    dev, VK_NULL_HANDLE, 1, &cpci, nullptr, &res.downsamplePipeline);
 
                 df->vkDestroyShaderModule(dev, dsShaderModule, nullptr);
             }
         }
     }
-
-    VulkanHandles handles;
-    handles.physicalDevice = m_physicalDevice;
-    handles.device = m_device;
-    handles.queue = m_queue;
-    handles.queueFamilyIndex = m_queueFamilyIndex;
-    handles.deviceFunctions = m_deviceFunctions;
-    handles.commandPool = m_commandPool;
-
-    m_utilityReconstructor = std::make_unique<VkSnapshotReconstructor>(handles);
 }
 
-void VulkanContext::createGraphicsPipeline(VkRenderPass renderPass) {
-    if (!m_device || !m_deviceFunctions)
+void VulkanContext::createGraphicsPipeline(VkDevice                dev,
+                                           QVulkanDeviceFunctions *df,
+                                           VkRenderPass            renderPass) {
+    if (!dev || !df)
         return;
     if (m_graphicsPipeline != VK_NULL_HANDLE)
         return;
 
-    auto df = m_deviceFunctions;
-    auto dev = m_device;
+    auto df_ = df;
+    auto dev_ = dev;
 
     VkShaderModule vertModule = VulkanUtils::createShaderModule(
-        df, dev, VulkanUtils::loadShader(":/shaders/image_viewer.vert.spv"), "vertex");
+        df_, dev_, VulkanUtils::loadShader(":/shaders/image_viewer.vert.spv"), "vertex");
     VkShaderModule fragModule = VulkanUtils::createShaderModule(
-        df, dev, VulkanUtils::loadShader(":/shaders/image_viewer.frag.spv"), "fragment");
+        df_, dev_, VulkanUtils::loadShader(":/shaders/image_viewer.frag.spv"), "fragment");
 
     VkDescriptorSetLayoutBinding bindings[2] = {};
     bindings[0].binding = 0;
@@ -406,77 +370,119 @@ void VulkanContext::createGraphicsPipeline(VkRenderPass renderPass) {
     df->vkDestroyShaderModule(dev, vertModule, nullptr);
     df->vkDestroyShaderModule(dev, fragModule, nullptr);
 }
-void VulkanContext::cleanupResources(VkDevice dev, QVulkanDeviceFunctions *df) {
-    if (!dev || !df)
-        return;
 
-    auto df_ = df;
-    auto dev_ = dev;
+void VulkanContext::cleanupInstance() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
     if (m_utilityReconstructor) {
         m_utilityReconstructor->cleanup();
         m_utilityReconstructor.reset();
     }
 
-    VulkanUtils::destroyResource(
-        df_, dev_, m_computePipeline, &QVulkanDeviceFunctions::vkDestroyPipeline);
-    VulkanUtils::destroyResource(
-        df_, dev_, m_computePipelineLayout, &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
-    VulkanUtils::destroyResource(df_,
-                                 dev_,
-                                 m_computeDescriptorSetLayout,
-                                 &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
+    // Cleanup Utility device resources
+    if (m_utilityDevice && m_utilityDeviceFunctions) {
+        auto df = m_utilityDeviceFunctions;
+        auto dev = m_utilityDevice;
 
-    VulkanUtils::destroyResource(
-        df_, dev_, m_downsamplePipeline, &QVulkanDeviceFunctions::vkDestroyPipeline);
-    VulkanUtils::destroyResource(
-        df_, dev_, m_downsamplePipelineLayout, &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
-    VulkanUtils::destroyResource(df_,
-                                 dev_,
-                                 m_downsampleDescriptorSetLayout,
-                                 &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.computePipeline,
+                                     &QVulkanDeviceFunctions::vkDestroyPipeline);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.computePipelineLayout,
+                                     &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.computeDescriptorSetLayout,
+                                     &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.downsamplePipeline,
+                                     &QVulkanDeviceFunctions::vkDestroyPipeline);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.downsamplePipelineLayout,
+                                     &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.downsampleDescriptorSetLayout,
+                                     &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
+        VulkanUtils::destroyResource(df,
+                                     dev,
+                                     m_utilityResources.descriptorPool,
+                                     &QVulkanDeviceFunctions::vkDestroyDescriptorPool);
+        VulkanUtils::destroyResource(
+            df, dev, m_utilityCommandPool, &QVulkanDeviceFunctions::vkDestroyCommandPool);
+        df->vkDestroyDevice(dev, nullptr);
+    }
 
-    VulkanUtils::destroyResource(
-        df_, dev_, m_graphicsPipeline, &QVulkanDeviceFunctions::vkDestroyPipeline);
-    VulkanUtils::destroyResource(
-        df_, dev_, m_graphicsPipelineLayout, &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
-    VulkanUtils::destroyResource(df_,
-                                 dev_,
-                                 m_graphicsDescriptorSetLayout,
-                                 &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
-
-    VulkanUtils::destroyResource(
-        df_, dev_, m_descriptorPool, &QVulkanDeviceFunctions::vkDestroyDescriptorPool);
-
-    VulkanUtils::destroyResource(
-        df_, dev_, m_commandPool, &QVulkanDeviceFunctions::vkDestroyCommandPool);
-
-    m_computePipeline = VK_NULL_HANDLE;
-    m_computePipelineLayout = VK_NULL_HANDLE;
-    m_computeDescriptorSetLayout = VK_NULL_HANDLE;
-    m_downsamplePipeline = VK_NULL_HANDLE;
-    m_downsamplePipelineLayout = VK_NULL_HANDLE;
-    m_downsampleDescriptorSetLayout = VK_NULL_HANDLE;
-    m_graphicsPipeline = VK_NULL_HANDLE;
-    m_graphicsPipelineLayout = VK_NULL_HANDLE;
-    m_graphicsDescriptorSetLayout = VK_NULL_HANDLE;
-    m_descriptorPool = VK_NULL_HANDLE;
-    m_commandPool = VK_NULL_HANDLE;
-}
-
-void VulkanContext::cleanupInstance() {
     if (m_instance) {
         delete m_instance;
         m_instance = nullptr;
     }
 }
 
-VulkanContext::~VulkanContext() {
-    cleanupResources();
-    if (m_ownsDevice && m_device != VK_NULL_HANDLE) {
-        if (m_deviceFunctions) {
-            m_deviceFunctions->vkDestroyDevice(m_device, nullptr);
+VulkanHandles VulkanContext::getUIHandles() const {
+    VulkanHandles handles;
+    handles.physicalDevice = m_uiPhysicalDevice;
+    handles.device = m_uiDevice;
+    handles.queue = m_uiQueue;
+    handles.queueFamilyIndex = m_uiQueueFamilyIndex;
+    handles.deviceFunctions = m_uiDeviceFunctions;
+    handles.commandPool = m_uiCommandPool;
+    return handles;
+}
+
+void VulkanContext::setUIDevice(VkDevice         device,
+                                VkPhysicalDevice physicalDevice,
+                                QVulkanInstance *instance) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+    if (m_uiDevice == device)
+        return;
+
+    // Cleanup previous UI resources
+    if (m_uiDeviceFunctions && m_uiCommandPool != VK_NULL_HANDLE) {
+        m_uiDeviceFunctions->vkDestroyCommandPool(m_uiDevice, m_uiCommandPool, nullptr);
+    }
+
+    m_uiDevice = device;
+    m_uiPhysicalDevice = physicalDevice;
+    m_uiDeviceFunctions = instance->deviceFunctions(device);
+
+    initializeComputeResources(m_uiDevice, m_uiDeviceFunctions, m_uiResources);
+
+    // Find a suitable queue family (graphics/compute)
+    auto     vf = instance->functions();
+    uint32_t queueFamilyCount = 0;
+    vf->vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> properties(queueFamilyCount);
+    vf->vkGetPhysicalDeviceQueueFamilyProperties(
+        physicalDevice, &queueFamilyCount, properties.data());
+
+    m_uiQueueFamilyIndex = 0;
+    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
+        if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            m_uiQueueFamilyIndex = i;
+            break;
         }
     }
+
+    m_uiDeviceFunctions->vkGetDeviceQueue(m_uiDevice, m_uiQueueFamilyIndex, 0, &m_uiQueue);
+
+    // Create a command pool for the UI device
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = m_uiQueueFamilyIndex;
+
+    if (m_uiDeviceFunctions->vkCreateCommandPool(
+            m_uiDevice, &poolInfo, nullptr, &m_uiCommandPool) != VK_SUCCESS) {
+        qCritical() << "[VulkanContext] Failed to create UI command pool";
+    }
+}
+
+VulkanContext::~VulkanContext() {
     cleanupInstance();
 }

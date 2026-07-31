@@ -25,7 +25,7 @@ void VkSnapshotReconstructor::cleanup() {
     auto                                  df = m_handles.deviceFunctions;
     auto                                  dev = m_handles.device;
 
-    if (!df || !dev) {
+    if (df == nullptr || dev == VK_NULL_HANDLE) {
         return;
     }
 
@@ -226,14 +226,14 @@ bool VkSnapshotReconstructor::parseAndDecompressDelta(const QByteArray&  delta,
     QDataStream stream(delta);
     stream.setByteOrder(QDataStream::LittleEndian);
 
-    uint32_t version;
+    uint32_t version = 0;
     stream >> version;
     if (version != 1) {
         qWarning() << "[VkSnapshotReconstructor] Unsupported delta format version:" << version;
         return false;
     }
 
-    uint32_t numTiles;
+    uint32_t numTiles = 0;
     stream >> tileW >> tileH >> numTiles;
 
     if (numTiles == 0) {
@@ -259,7 +259,7 @@ bool VkSnapshotReconstructor::parseAndDecompressDelta(const QByteArray&  delta,
     QVector<TileData> tiles;
     tiles.reserve(numTiles);
     for (uint32_t i = 0; i < numTiles; ++i) {
-        uint32_t   idx;
+        uint32_t   idx = 0;
         QByteArray compressed;
         stream >> idx >> compressed;
         tiles.append({idx, compressed});
@@ -297,7 +297,8 @@ bool VkSnapshotReconstructor::updateStagingResources(const QByteArray&        pa
     auto dev = m_handles.device;
 
     // Update Delta Staging Buffer
-    if (!m_deltaStagingBuffer || packedPixels.size() > m_deltaStagingCapacity) {
+    if (!m_deltaStagingBuffer ||
+        static_cast<VkDeviceSize>(packedPixels.size()) > m_deltaStagingCapacity) {
         if (m_deltaStagingBuffer) {
             if (m_deltaStagingMapped)
                 df->vkUnmapMemory(dev, m_deltaStagingMemory);
@@ -372,9 +373,9 @@ bool VkSnapshotReconstructor::updateStagingResources(const QByteArray&        pa
         df->vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
     }
     uint32_t *ptr = static_cast<uint32_t *>(m_tileIndexMapped);
-    for (size_t i = 0; i < tileIndices.size(); ++i) {
-        ptr[i * 2] = tileIndices[i];
-        ptr[i * 2 + 1] = tileOffsets[i];
+    for (size_t i = 0; i < static_cast<size_t>(tileIndices.size()); ++i) {
+        ptr[static_cast<uint32_t>(i * 2)] = tileIndices[i];
+        ptr[static_cast<uint32_t>(i * 2 + 1)] = tileOffsets[i];
     }
     m_tileIndexBufferSize = indexBufferSize;
 
@@ -409,7 +410,7 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
                                 0,
                                 nullptr);
 
-    PushConstants pcs;
+    PushConstants pcs{};
     pcs.tileW = tileW;
     pcs.tileH = tileH;
     pcs.imageW = m_width;
@@ -476,7 +477,7 @@ bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
         checkAndSwapBase();
     }
 
-    uint32_t          tileW, tileH;
+    uint32_t          tileW = 0, tileH = 0;
     QByteArray        packedPixels;
     QVector<uint32_t> tileIndices, tileOffsets;
 
@@ -830,13 +831,13 @@ bool VkSnapshotReconstructor::prepareBaseStaging(const QImage& base,
             dev, m_baseStagingMemory, 0, m_baseStagingCapacity, 0, &m_baseStagingMapped);
     }
 
-    if (baseRGBA.bytesPerLine() == (int)width * 4) {
+    if (baseRGBA.bytesPerLine() == static_cast<int>(width) * 4) {
         memcpy(m_baseStagingMapped, baseRGBA.bits(), size);
     } else {
-        for (int y = 0; y < (int)height; ++y) {
-            memcpy(static_cast<uchar *>(m_baseStagingMapped) + y * width * 4,
+        for (int y = 0; y < static_cast<int>(height); ++y) {
+            memcpy(static_cast<uchar *>(m_baseStagingMapped) + static_cast<size_t>(y) * width * 4,
                    baseRGBA.constScanLine(y),
-                   width * 4);
+                   static_cast<size_t>(width) * 4);
         }
     }
 
@@ -1119,7 +1120,7 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
     allocInfo.commandPool = pool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = 1;
-    VkCommandBuffer copyCmd;
+    VkCommandBuffer copyCmd = VK_NULL_HANDLE;
     df->vkAllocateCommandBuffers(dev, &allocInfo, &copyCmd);
     if (copyCmd == VK_NULL_HANDLE) {
         qCritical()
@@ -1143,7 +1144,7 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
     submit.pCommandBuffers = &copyCmd;
 
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence           fence;
+    VkFence           fence = VK_NULL_HANDLE;
     df->vkCreateFence(dev, &fci, nullptr, &fence);
 
     df->vkQueueSubmit(m_handles.queue, 1, &submit, fence);
@@ -1162,7 +1163,8 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
     void *data = nullptr;
     df->vkMapMemory(dev, stagingAlloc.memory, 0, size, 0, &data);
     QImage result =
-        QImage((const uchar *)data, width, height, width * 4, QImage::Format_ARGB32).copy();
+        QImage(static_cast<const uchar *>(data), width, height, width * 4, QImage::Format_ARGB32)
+            .copy();
     df->vkUnmapMemory(dev, stagingAlloc.memory);
 
     VulkanUtils::destroyResource(

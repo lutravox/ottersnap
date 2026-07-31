@@ -129,8 +129,9 @@ void ThumbnailManager::saveThumbnail(const QString& filePath,
     if (!DiskUtils::ensureDir(sd))
         return;
 
-    QString path = sd + '/' + QString::asprintf("v%04d.webp", snapshotIndex);
-    image.save(path, "WEBP");
+    QString path =
+        sd + '/' + QString::asprintf("v%04d", snapshotIndex) + ThumbnailConstants::Extension;
+    image.save(path, ThumbnailConstants::Format.toUtf8().constData());
 }
 
 std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path) {

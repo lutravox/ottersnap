@@ -3,11 +3,14 @@
 #include <QCache>
 #include <QImage>
 #include <QMutex>
+#include <QString>
 #include <QThreadPool>
 
 namespace ThumbnailConstants {
 constexpr int StorageSize = 256;
 constexpr int StandardSize = 48;
+const QString Extension = ".webp";
+const QString Format = "WEBP";
 } // namespace ThumbnailConstants
 
 /// @brief Single-threaded pool for thumbnail reconstructions to prevent GPU memory exhaustion.

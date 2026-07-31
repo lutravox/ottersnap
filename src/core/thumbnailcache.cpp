@@ -65,8 +65,8 @@ void ThumbnailCache::invalidate(const QString& imageKey, int version) {
 
     QString baseThumbDir =
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
-    QString thumbPath =
-        baseThumbDir + '/' + imageKey + '/' + QString::asprintf("v%04d.webp", version);
+    QString thumbPath = baseThumbDir + '/' + imageKey + '/' + QString::asprintf("v%04d", version) +
+                        ThumbnailConstants::Extension;
 
     QFile::remove(thumbPath);
 }
@@ -98,7 +98,8 @@ QImage ThumbnailCache::loadThumbnail(const QString& imageKey, int version, const
 
     QDir().mkpath(cacheDir);
 
-    QString thumbPath = cacheDir + '/' + QString::asprintf("v%04d.webp", version);
+    QString thumbPath =
+        cacheDir + '/' + QString::asprintf("v%04d", version) + ThumbnailConstants::Extension;
 
     if (QFile::exists(thumbPath)) {
         QImage thumb(thumbPath);

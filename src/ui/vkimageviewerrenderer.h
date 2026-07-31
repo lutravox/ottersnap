@@ -68,7 +68,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     void clear();
 
     /// @brief Sets the active reconstructor to use for rendering.
-    void setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor);
+    void setReconstructor(const std::shared_ptr<VkSnapshotReconstructor>& reconstructor);
     /// @brief Associates the renderer with an image session.
     void setSession(ImageSession *session);
 
@@ -86,8 +86,8 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
   private:
     /// @brief Handles uploading image data to the GPU.
-    void performUploads(VkCommandBuffer                          cmd,
-                        std::shared_ptr<VkSnapshotReconstructor> reconstructor);
+    void performUploads(VkCommandBuffer                                 cmd,
+                        const std::shared_ptr<VkSnapshotReconstructor>& reconstructor);
     /// @brief Uploads a QImage to the GPU as a Vulkan texture.
     /// @param cmd The command buffer to record the upload into.
     /// @param image The source image to upload.

@@ -8,7 +8,6 @@
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
-#include <functional>
 #include "core/effects_interfaces.h"
 #include "core/effectsstate.h"
 #include "core/imagemonitor.h"

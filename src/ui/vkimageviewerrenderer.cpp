@@ -9,7 +9,7 @@
 #include <cstring>
 
 void VkImageViewerRenderer::setReconstructor(
-    std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
+    const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
     std::lock_guard<std::mutex> lock(m_reconstructorMutex);
 
     if (m_activeReconstructor == reconstructor)
@@ -230,7 +230,7 @@ bool VkImageViewerRenderer::createVertexBuffer() {
         return false;
     }
 
-    void *vbData;
+    void *vbData = nullptr;
     result = df->vkMapMemory(dev, m_vertexMemory, 0, vbSize, 0, &vbData);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkMapMemory (vertex) failed:" << result;
@@ -276,7 +276,6 @@ void VkImageViewerRenderer::recordMipChainGeneration(VkCommandBuffer cmd,
                                                      int             mipLevels,
                                                      int             width,
                                                      int             height) {
-    VkDevice                dev = m_vkWindow->device();
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     VkImageMemoryBarrier barrier{};
@@ -591,7 +590,7 @@ bool VkImageViewerRenderer::createAndUploadTexture(VkCommandBuffer cmd, const QI
     }
 
     // Copy image pixels into staging buffer
-    void *data;
+    void *data = nullptr;
     result = df->vkMapMemory(dev, m_stagingMemory, 0, imageSize, 0, &data);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkMapMemory failed:" << result;
@@ -746,8 +745,8 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq) {
              << seq.deltas.size() << "deltas)";
 }
 
-void VkImageViewerRenderer::performUploads(VkCommandBuffer                          cmd,
-                                           std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
+void VkImageViewerRenderer::performUploads(
+    VkCommandBuffer cmd, const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
     if (!m_uploadPending)
         return;
 

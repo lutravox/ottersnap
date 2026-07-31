@@ -113,18 +113,17 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
             int xEnd = std::min(xStart + c_tileWidth, width);
             int yEnd = std::min(yStart + c_tileHeight, height);
             int tileW = xEnd - xStart;
-            int tileH = yEnd - yStart;
 
             bool       changed = false;
             QByteArray tileDelta;
-            tileDelta.resize(c_tileWidth * c_tileHeight * 4);
+            tileDelta.resize(static_cast<int>(c_tileWidth) * static_cast<int>(c_tileHeight) * 4);
             tileDelta.fill(0);
             uchar *dBits = reinterpret_cast<uchar *>(tileDelta.data());
 
             for (int y = yStart; y < yEnd; ++y) {
-                const uchar *curRow = cur.scanLine(y) + xStart * 4;
-                const uchar *prevRow = prev.scanLine(y) + xStart * 4;
-                uchar       *destRow = dBits + (y - yStart) * c_tileWidth * 4;
+                const uchar *curRow = cur.scanLine(y) + static_cast<int>(xStart) * 4;
+                const uchar *prevRow = prev.scanLine(y) + static_cast<int>(xStart) * 4;
+                uchar       *destRow = dBits + static_cast<int>((y - yStart) * c_tileWidth * 4);
 
                 for (int x = 0; x < tileW * 4; ++x) {
                     uchar xorVal = curRow[x] ^ prevRow[x];
@@ -156,7 +155,7 @@ void SnapshotStore::applyDelta(QImage& img, const QByteArray& compressedDelta) {
     QDataStream stream(compressedDelta);
     stream.setByteOrder(QDataStream::LittleEndian);
 
-    uint32_t version;
+    uint32_t version = 0;
     stream >> version;
 
     if (version != c_sparseFormatVersion) {
@@ -164,11 +163,11 @@ void SnapshotStore::applyDelta(QImage& img, const QByteArray& compressedDelta) {
         return;
     }
 
-    uint32_t tileW, tileH, numTiles;
+    uint32_t tileW = 0, tileH = 0, numTiles = 0;
     stream >> tileW >> tileH >> numTiles;
 
     for (uint32_t i = 0; i < numTiles; ++i) {
-        uint32_t   tileIdx;
+        uint32_t   tileIdx = 0;
         QByteArray compressedData;
         stream >> tileIdx >> compressedData;
 
@@ -180,15 +179,15 @@ void SnapshotStore::applyDelta(QImage& img, const QByteArray& compressedDelta) {
 
         int xStart = tx * c_tileWidth;
         int yStart = ty * c_tileHeight;
-        int xEnd = std::min(xStart + (int)tileW, img.width());
-        int yEnd = std::min(yStart + (int)tileH, img.height());
+        int xEnd = std::min(xStart + static_cast<int>(tileW), img.width());
+        int yEnd = std::min(yStart + static_cast<int>(tileH), img.height());
         int actualTileW = xEnd - xStart;
         int actualTileH = yEnd - yStart;
 
         const uchar *dBits = reinterpret_cast<const uchar *>(data.data());
         for (int y = yStart; y < yEnd; ++y) {
             uchar       *imgRow = img.scanLine(y) + xStart * 4;
-            const uchar *deltaRow = dBits + (y - yStart) * tileW * 4;
+            const uchar *deltaRow = dBits + static_cast<int>((y - yStart) * tileW * 4);
             for (int x = 0; x < actualTileW * 4; ++x) {
                 imgRow[x] ^= deltaRow[x];
             }
@@ -305,14 +304,14 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
     s.isBase = shouldBeBase;
 
     if (s.isBase) {
-        s.fileName = QString::asprintf("s%04d.png", s.snapshotIndex);
+        s.fileName = QString("s%1.png").arg(s.snapshotIndex, 4, 10, QChar('0'));
         QString imgPath = sd + '/' + s.fileName;
         if (!saveImageFile(imgPath, image.convertToFormat(QImage::Format_ARGB32))) {
             qWarning() << "[SnapshotStore] Failed to create snapshot file:" << imgPath;
             return std::nullopt;
         }
     } else {
-        s.fileName = QString::asprintf("s%04d.delta", s.snapshotIndex);
+        s.fileName = QString("s%1.delta").arg(s.snapshotIndex, 4, 10, QChar('0'));
 
         auto prevImg = reconstruct(filePath, snapshots.last().snapshotIndex);
         if (!prevImg) {
@@ -490,7 +489,8 @@ bool SnapshotStore::deleteSnapshot(const QString& filePath, int snapshotIndex) {
         if (targetIdx == 0) {
             // Deleting the first snapshot; the next one must now become the base
             snapshots[nextIdxInList].isBase = true;
-            snapshots[nextIdxInList].fileName = QString::asprintf("s%04d.png", nextSnapshotId);
+            snapshots[nextIdxInList].fileName =
+                QString("s%1.png").arg(nextSnapshotId, 4, 10, QChar('0'));
             if (!saveImageFile(sd + '/' + snapshots[nextIdxInList].fileName, *optImgNext)) {
                 qWarning() << "[SnapshotStore] Failed to save new base image during chain repair:"
                            << snapshots[nextIdxInList].fileName;
@@ -513,7 +513,8 @@ bool SnapshotStore::deleteSnapshot(const QString& filePath, int snapshotIndex) {
             }
 
             snapshots[nextIdxInList].isBase = false;
-            snapshots[nextIdxInList].fileName = QString::asprintf("s%04d.delta", nextSnapshotId);
+            snapshots[nextIdxInList].fileName =
+                QString("s%1.delta").arg(nextSnapshotId, 4, 10, QChar('0'));
             if (!saveFile(sd + '/' + snapshots[nextIdxInList].fileName, delta)) {
                 qWarning() << "[SnapshotStore] Failed to save rebase delta file:"
                            << snapshots[nextIdxInList].fileName;

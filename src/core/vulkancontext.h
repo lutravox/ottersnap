@@ -10,10 +10,7 @@
 
 static constexpr uint64_t FENCE_TIMEOUT_NS = 5000000000; // 5 seconds
 
-/// @brief VulkanContext manages the lifecycle of the Vulkan instance and device.
-///
-/// It provides a centralized point of access for core Vulkan handles, enabling
-/// components like VkSnapshotReconstructor to operate independently of the UI.
+/// @brief Group of Vulkan compute resources used for snapshot reconstruction.
 struct ComputeResources {
     VkPipeline            computePipeline = VK_NULL_HANDLE;
     VkPipelineLayout      computePipelineLayout = VK_NULL_HANDLE;
@@ -26,97 +23,154 @@ struct ComputeResources {
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 };
 
+/// @brief Manages the lifecycle of the Vulkan instance, devices, and shared compute resources.
+/// @details This class acts as a central hub for Vulkan handles and pipelines, supporting
+/// both a background utility device for reconstruction and a UI device for rendering.
 class VulkanContext : public QObject {
     Q_OBJECT
   public:
+    /// @brief Default timeout for Vulkan fence waiting operations.
     static constexpr uint64_t FENCE_TIMEOUT_NS = 5000000000; // 5 seconds
 
+    /// @brief Returns the singleton instance of the VulkanContext.
     static VulkanContext& instance();
 
-    bool          initializeInstance();
+    /// @brief Initializes the Vulkan instance and selects the physical device.
+    /// @return True if initialization succeeded, false otherwise.
+    bool initializeInstance();
+
+    /// @brief Retrieves the handles associated with the UI device.
     VulkanHandles getUIHandles() const;
+
+    /// @brief Configures the UI device and physical device used for rendering.
+    /// @param device The Vulkan device handle.
+    /// @param physicalDevice The physical device handle.
+    /// @param instance The QVulkanInstance pointer.
     void setUIDevice(VkDevice device, VkPhysicalDevice physicalDevice, QVulkanInstance *instance);
 
+    /// @brief Returns the device handle for the background utility device.
     VkDevice getUtilityDevice() const {
         return m_utilityDevice;
     }
+
+    /// @brief Returns the device functions for the background utility device.
     QVulkanDeviceFunctions *getUtilityDeviceFunctions() const {
         return m_utilityDeviceFunctions;
     }
+
+    /// @brief Returns the queue handle for the background utility device.
     VkQueue getUtilityQueue() const {
         return m_utilityQueue;
     }
+
+    /// @brief Returns the command pool for the background utility device.
     VkCommandPool getUtilityCommandPool() const {
         return m_utilityCommandPool;
     }
+
+    /// @brief Returns the queue family index for the background utility device.
     uint32_t getUtilityQueueFamilyIndex() const {
         return m_utilityQueueFamilyIndex;
     }
 
+    /// @brief Notifies listeners that the Vulkan device has changed.
     void notifyDeviceChanged() {
         emit deviceChanged();
     }
+
+    /// @brief Initializes internal Vulkan resources such as command pools and queues.
     void initializeInternalResources();
+
+    /// @brief Creates the graphics pipeline used by the image viewer.
+    /// @param dev The device to use for pipeline creation.
+    /// @param df The device functions.
+    /// @param renderPass The render pass associated with the graphics pipeline.
     void createGraphicsPipeline(VkDevice dev, QVulkanDeviceFunctions *df, VkRenderPass renderPass);
+
+    /// @brief Cleans up all Vulkan resources managed by this context.
     void cleanupInstance();
 
+    /// @brief Returns the underlying QVulkanInstance.
     QVulkanInstance *getInstance() const {
         return m_instance;
     }
+
+    /// @brief Returns the selected physical device.
     VkPhysicalDevice getPhysicalDevice() const {
         return m_physicalDevice;
     }
 
+    /// @brief Returns the descriptor pool for the specified device.
+    /// @param dev The device for which the pool is requested.
+    /// @return The corresponding VkDescriptorPool handle.
     VkDescriptorPool getDescriptorPool(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.descriptorPool
                                    : m_utilityResources.descriptorPool;
     }
 
+    /// @brief Creates a new snapshot reconstructor instance.
     std::shared_ptr<VkSnapshotReconstructor> createReconstructor();
+
+    /// @brief Returns the shared reconstructor used for background utility tasks.
     std::shared_ptr<VkSnapshotReconstructor> getUtilityReconstructor() const {
         return m_utilityReconstructor;
     }
 
+    /// @brief Returns the compute pipeline for the specified device.
     VkPipeline getComputePipeline(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.computePipeline
                                    : m_utilityResources.computePipeline;
     }
 
+    /// @brief Returns the compute pipeline layout for the specified device.
     VkPipelineLayout getComputePipelineLayout(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.computePipelineLayout
                                    : m_utilityResources.computePipelineLayout;
     }
 
+    /// @brief Returns the compute descriptor set layout for the specified device.
     VkDescriptorSetLayout getComputeDescriptorSetLayout(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.computeDescriptorSetLayout
                                    : m_utilityResources.computeDescriptorSetLayout;
     }
 
+    /// @brief Returns the downsample compute pipeline for the specified device.
     VkPipeline getDownsamplePipeline(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.downsamplePipeline
                                    : m_utilityResources.downsamplePipeline;
     }
 
+    /// @brief Returns the downsample compute pipeline layout for the specified device.
     VkPipelineLayout getDownsamplePipelineLayout(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.downsamplePipelineLayout
                                    : m_utilityResources.downsamplePipelineLayout;
     }
 
+    /// @brief Returns the downsample descriptor set layout for the specified device.
     VkDescriptorSetLayout getDownsampleDescriptorSetLayout(VkDevice dev) const {
         return (dev == m_uiDevice) ? m_uiResources.downsampleDescriptorSetLayout
                                    : m_utilityResources.downsampleDescriptorSetLayout;
     }
 
+    /// @brief Returns the active graphics pipeline handle.
     VkPipeline getGraphicsPipeline() const {
         return m_graphicsPipeline;
     }
+
+    /// @brief Returns the active graphics pipeline layout handle.
     VkPipelineLayout getGraphicsPipelineLayout() const {
         return m_graphicsPipelineLayout;
     }
+
+    /// @brief Returns the active graphics descriptor set layout handle.
     VkDescriptorSetLayout getGraphicsDescriptorSetLayout() const {
         return m_graphicsDescriptorSetLayout;
     }
 
+    /// @brief Initializes the compute resources for a specific device.
+    /// @param dev The device to initialize.
+    /// @param df The device functions.
+    /// @param res The resource struct to populate.
     void
     initializeComputeResources(VkDevice dev, QVulkanDeviceFunctions *df, ComputeResources& res);
 
@@ -159,7 +213,7 @@ class VulkanContext : public QObject {
     VkDescriptorSetLayout m_graphicsDescriptorSetLayout = VK_NULL_HANDLE;
 
     std::shared_ptr<VkSnapshotReconstructor> m_utilityReconstructor;
-    bool                                     m_ownsDevice = false;
+    bool                                     m_ownsnDevice = false;
 };
 
 #endif // VULKANCONTEXT_H

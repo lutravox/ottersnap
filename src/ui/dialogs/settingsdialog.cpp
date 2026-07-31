@@ -24,8 +24,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     layout->addWidget(m_cbAutosave);
 
     // Thumbnail cache size
-
-    // Thumbnail cache size
     auto *thumbLayout = new QHBoxLayout();
     auto *thumbLabel = new QLabel(tr("Thumbnail cache size (MB):"), this);
     m_sbThumbCacheSize = new QSpinBox(this);

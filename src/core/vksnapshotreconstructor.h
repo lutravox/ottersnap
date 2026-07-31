@@ -4,10 +4,12 @@
 #include <vulkan/vulkan.h>
 #include "core/vulkan_types.h"
 
+class VulkanContext;
+
 /// @brief Handles GPU-accelerated reconstruction of images from a base image and deltas.
 class VkSnapshotReconstructor {
   public:
-    explicit VkSnapshotReconstructor(const VulkanHandles& handles);
+    explicit VkSnapshotReconstructor(const VulkanHandles& handles, VulkanContext *context);
     ~VkSnapshotReconstructor();
 
     /// @brief Performs cleanup of all GPU resources managed by the reconstructor.
@@ -43,7 +45,8 @@ class VkSnapshotReconstructor {
     /// @param width Image width.
     /// @param height Image height.
     /// @return True if the copy was successfully recorded, false otherwise.
-    bool copyToImage(VkCommandBuffer cmd, VkImage targetImage, uint32_t width, uint32_t height);
+    bool
+    copyToVulkanImage(VkCommandBuffer cmd, VkImage targetImage, uint32_t width, uint32_t height);
 
     /// @brief Reconstructs a snapshot and returns the result as a QImage.
     /// @param seq The reconstruction sequence containing the base and deltas.
@@ -76,6 +79,8 @@ class VkSnapshotReconstructor {
     /// cached buffers.
     void resetState();
 
+    void updateStateBufferBinding();
+
     /// @brief Returns the current state buffer handle.
     /// @return The VkBuffer handle of the current state.
     VkBuffer stateBuffer() const;
@@ -94,9 +99,38 @@ class VkSnapshotReconstructor {
     VkDeviceSize stateBufferSize() const;
 
   private:
+    struct DownsampledBuffer {
+        VkBuffer       buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        uint32_t       width = 0;
+        uint32_t       height = 0;
+    };
+
+    struct UncompressedTile {
+        uint32_t   index;
+        QByteArray pixels;
+    };
+
     bool updateCachedBase(VkDeviceSize size);
+    bool ensurePendingStateBuffer(uint32_t width, uint32_t height, VkDeviceSize size);
+    bool prepareBaseStaging(const QImage& base, uint32_t width, uint32_t height, VkDeviceSize size);
+    bool recordBaseUploadCommands(bool isCached, VkDeviceSize size);
+    bool parseAndDecompressDelta(const QByteArray&  delta,
+                                 uint32_t&          tileW,
+                                 uint32_t&          tileH,
+                                 QByteArray&        packedPixels,
+                                 QVector<uint32_t>& tileIndices,
+                                 QVector<uint32_t>& tileOffsets);
+    bool updateStagingResources(const QByteArray&        packedPixels,
+                                const QVector<uint32_t>& tileIndices,
+                                const QVector<uint32_t>& tileOffsets);
+    bool recordDeltaCommands(uint32_t tileW, uint32_t tileH, uint32_t numTiles);
+    DownsampledBuffer performDownsample(
+        VkBuffer srcBuffer, VkDeviceSize srcSize, uint32_t srcW, uint32_t srcH, QSize targetSize);
+    QImage copyToQImage(VkBuffer buffer, VkDeviceSize size, uint32_t width, uint32_t height);
 
     VulkanHandles                m_handles;
+    VulkanContext               *m_context = nullptr;
     mutable std::recursive_mutex m_mutex;
 
     // Descriptor Set (Session-specific)
@@ -123,7 +157,7 @@ class VkSnapshotReconstructor {
     VkFence m_deltaFence = VK_NULL_HANDLE;
     bool    m_isApplyingDelta = false;
 
-    bool m_isDirty = false; // Set true when state changes, false after copyToImage
+    bool m_isDirty = false; // Set true when state changes, false after copyToVulkanImage
 
     // Base Staging Buffer
     VkBuffer       m_baseStagingBuffer = VK_NULL_HANDLE;
@@ -154,6 +188,14 @@ class VkSnapshotReconstructor {
     };
 
     VkCommandBuffer m_computeCmdBuffer = VK_NULL_HANDLE;
+
+    // Downsample Resources
+    VkBuffer        m_downsampleBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory  m_downsampleMemory = VK_NULL_HANDLE;
+    VkDeviceSize    m_downsampleBufferSize = 0;
+    VkCommandBuffer m_downsampleCmdBuffer = VK_NULL_HANDLE;
+    VkFence         m_downsampleFence = VK_NULL_HANDLE;
+    VkDescriptorSet m_downsampleDescriptorSet = VK_NULL_HANDLE;
 
     uint32_t m_width = 0;
     uint32_t m_height = 0;

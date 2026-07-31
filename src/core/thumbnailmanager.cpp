@@ -53,7 +53,6 @@ void ThumbnailManager::enqueueRequest(const ThumbnailRequest& request) {
 
     // Prioritize current image thumbnails (snapshotIndex == -1)
     if (request.snapshotIndex == -1) {
-        // We use QList::prepend via QQueue's inheritance to put current images at the front
         static_cast<QList<ThumbnailRequest>&>(m_queue).prepend(request);
     } else {
         m_queue.enqueue(request);
@@ -99,7 +98,7 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
         const QImage& img = *res;
         saveThumbnail(request.filePath, request.snapshotIndex, img);
 
-        // Always cache in memory, regardless of whether it's a snapshot or current
+        // Cache in memory
         QString cacheKey = (request.snapshotIndex == -1)
                                ? QString("%1:current:%2x%3")
                                      .arg(SnapshotStore::imageKey(request.filePath))

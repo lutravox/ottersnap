@@ -82,7 +82,7 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
     QImage prev = previous.convertToFormat(QImage::Format_ARGB32);
 
     if (cur.size() != prev.size()) {
-        qDebug() << "[SnapshotStore] Current and previous images size mismatch";
+        qDebug() << "[SnapshotStore] computeDelta: Current and previous images size mismatch";
         return {};
     }
 
@@ -173,8 +173,6 @@ void SnapshotStore::applyDelta(QImage& img, const QByteArray& compressedDelta) {
         stream >> tileIdx >> compressedData;
 
         QByteArray data = qUncompress(compressedData);
-        if (data.isEmpty())
-            continue;
 
         int tilesX = (img.width() + c_tileWidth - 1) / c_tileWidth;
         int tx = tileIdx % tilesX;
@@ -190,7 +188,7 @@ void SnapshotStore::applyDelta(QImage& img, const QByteArray& compressedDelta) {
         const uchar *dBits = reinterpret_cast<const uchar *>(data.data());
         for (int y = yStart; y < yEnd; ++y) {
             uchar       *imgRow = img.scanLine(y) + xStart * 4;
-            const uchar *deltaRow = dBits + (y - yStart) * actualTileW * 4;
+            const uchar *deltaRow = dBits + (y - yStart) * tileW * 4;
             for (int x = 0; x < actualTileW * 4; ++x) {
                 imgRow[x] ^= deltaRow[x];
             }
@@ -309,7 +307,7 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
     if (s.isBase) {
         s.fileName = QString::asprintf("s%04d.png", s.snapshotIndex);
         QString imgPath = sd + '/' + s.fileName;
-        if (!saveImageFile(imgPath, image)) {
+        if (!saveImageFile(imgPath, image.convertToFormat(QImage::Format_ARGB32))) {
             qWarning() << "[SnapshotStore] Failed to create snapshot file:" << imgPath;
             return std::nullopt;
         }
@@ -408,6 +406,8 @@ std::optional<QImage> SnapshotStore::reconstruct(const QString& filePath, int sn
         return std::nullopt;
 
     QImage result = base->image;
+    result = result.convertToFormat(QImage::Format_ARGB32);
+
     for (int i = baseIdx + 1; i <= targetIdx; ++i) {
         auto delta = loadDelta(filePath, snapshots[i].snapshotIndex);
         if (!delta)

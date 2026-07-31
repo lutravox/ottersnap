@@ -118,7 +118,7 @@ std::shared_ptr<VkSnapshotReconstructor> VulkanContext::createReconstructor() {
     handles.deviceFunctions = getUtilityDeviceFunctions();
     handles.commandPool = getUtilityCommandPool();
 
-    return std::make_shared<VkSnapshotReconstructor>(handles);
+    return std::make_shared<VkSnapshotReconstructor>(handles, this);
 }
 
 void VulkanContext::initializeComputeResources(VkDevice                dev,

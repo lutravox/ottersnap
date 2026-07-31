@@ -365,6 +365,12 @@ void VkImageViewerRenderer::releaseResources() {
         m_devFuncs, dev, m_samplerLinear, &QVulkanDeviceFunctions::vkDestroySampler);
     VulkanUtils::destroyResource(
         m_devFuncs, dev, m_samplerNearest, &QVulkanDeviceFunctions::vkDestroySampler);
+
+    // Cleanup reconstructor resources
+    std::lock_guard<std::mutex> lock(m_reconstructorMutex);
+    if (m_activeReconstructor) {
+        m_activeReconstructor->cleanup();
+    }
 }
 
 void VkImageViewerRenderer::setSession(ImageSession *session) {
@@ -810,10 +816,10 @@ void VkImageViewerRenderer::performUploads(VkCommandBuffer                      
                                          &imgBarrier);
 
         // Copy reconstructed buffer to image
-        reconstructor->copyToImage(cmd,
-                                   m_textureImage,
-                                   m_session ? m_session->viewState().imageWidth() : 0,
-                                   m_session ? m_session->viewState().imageHeight() : 0);
+        reconstructor->copyToVulkanImage(cmd,
+                                         m_textureImage,
+                                         m_session ? m_session->viewState().imageWidth() : 0,
+                                         m_session ? m_session->viewState().imageHeight() : 0);
 
         // Regenerate mip chain from the updated level 0
         int maxDim = std::max(m_session ? m_session->viewState().imageWidth() : 0,

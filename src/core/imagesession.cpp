@@ -346,10 +346,10 @@ void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {
             return;
         }
     }
-    m_uiReconstructor = std::make_shared<VkSnapshotReconstructor>(handles);
+    m_uiReconstructor =
+        std::make_shared<VkSnapshotReconstructor>(handles, &VulkanContext::instance());
 }
 
 std::shared_ptr<VkSnapshotReconstructor> ImageSession::utilityReconstructor() const {
-    // VulkanContext owns the utility reconstructor.
     return VulkanContext::instance().getUtilityReconstructor();
 }

@@ -145,9 +145,10 @@ void ImageSession::saveSnapshot() {
                     emit statusMessage("Snapshot saved.");
                 } else if (res && res->status == SnapshotStore::SaveStatus::Existing) {
                     int  pos = getRelativeVersion(res->snapshotIndex);
-                    emit statusMessage(QString("Current already saved as snapshot %1.")
-                                           .arg(pos != -1 ? QString::number(pos)
-                                                          : QString::number(res->snapshotIndex)));
+                    emit statusMessage(
+                        QString("Current iamge lalalal  lalalla already saved as snapshot %1.")
+                            .arg(pos != -1 ? QString::number(pos)
+                                           : QString::number(res->snapshotIndex)));
                 } else {
                     emit statusMessage("Save failed.");
                 }

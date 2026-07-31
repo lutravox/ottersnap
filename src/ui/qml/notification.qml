@@ -4,7 +4,7 @@ import QtQuick.Controls 2.15
 Item {
     id: root
     width: 320
-    height: 80
+    height: pill.height + 4
 
     property string message: ""
     property bool fadeOut: false
@@ -18,10 +18,10 @@ Item {
     Rectangle {
         id: pill
         width: 300
-        height: 40
+        height: messageText.implicitHeight + 20
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: 10
+        anchors.margins: 2
 
         // Initial opacity for fade-in
         opacity: 0

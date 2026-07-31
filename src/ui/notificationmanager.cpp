@@ -1,3 +1,5 @@
+#include <QCoreApplication>
+#include <QQuickItem>
 #include <QTimer>
 #include <QWidget>
 #include "ui/notificationmanager.h"
@@ -52,21 +54,30 @@ void NotificationManager::updatePositions() {
 
     int marginX = 20;
     int marginY = 60;
-    int spacing = 10;
+    int spacing = 5;
 
     QPoint globalPos = mainWindow->mapToGlobal(QPoint(mainWindow->width(), mainWindow->height()));
     int    base_x = globalPos.x() - marginX;
     int    base_y = globalPos.y() - marginY;
 
-    for (int i = 0; i < m_notifications.size(); ++i) {
+    int current_y = base_y;
+    for (int i = m_notifications.size() - 1; i >= 0; --i) {
         Notification *n = m_notifications[i];
         if (!n)
             continue;
 
-        int x = base_x - n->width();
-        int offset = (m_notifications.size() - 1 - i) * (n->height() + spacing);
-        int y = base_y - n->height() - offset;
+        // Use root object dimensions for precise positioning
+        int w = n->width();
+        int h = n->height();
+        if (n->rootObject()) {
+            w = n->rootObject()->width();
+            h = n->rootObject()->height();
+        }
+
+        int x = base_x - w;
+        int y = current_y - h;
 
         n->setPosition(QPoint(x, y));
+        current_y -= (h + spacing);
     }
 }

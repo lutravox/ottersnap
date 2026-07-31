@@ -41,11 +41,12 @@ void Notification::notify(const QString& message, int timeoutMs) {
     if (rootObject()) {
         rootObject()->setProperty("message", message);
         rootObject()->setProperty("fadeOut", false);
+
+        this->resize(rootObject()->width(), rootObject()->height());
     }
 
     show();
     raise();
-    updatePosition();
     m_hideTimer->start(timeoutMs);
 }
 
@@ -77,8 +78,5 @@ void Notification::onFadeOutFinished() {
 }
 
 bool Notification::eventFilter(QObject *watched, QEvent *event) {
-    if (watched == m_parent && (event->type() == QEvent::Resize || event->type() == QEvent::Move)) {
-        updatePosition();
-    }
     return QQuickView::eventFilter(watched, event);
 }

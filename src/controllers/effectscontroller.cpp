@@ -1,6 +1,4 @@
 #include "controllers/effectscontroller.h"
-#include "ui/imagetab.h"
-#include "ui/vkimageviewer.h"
 
 EffectsController::EffectsController(QObject *parent) : QObject(parent) {
 }
@@ -8,11 +6,6 @@ EffectsController::EffectsController(QObject *parent) : QObject(parent) {
 void EffectsController::setup(IEffectsRenderer *renderer, IEffectsUI *ui) {
     m_renderer = renderer;
     m_ui = ui;
-
-    if (m_renderer) {
-        m_renderer->setNotificationCallback(
-            [this](bool grayscale, bool mirror) { this->onEffectsChanged(grayscale, mirror); });
-    }
 }
 
 void EffectsController::onEffectsChanged(bool grayscale, bool mirror) {
@@ -52,9 +45,6 @@ void EffectsController::setGrayscale(bool enabled) {
     if (m_ui) {
         m_ui->setGrayscaleChecked(enabled);
     }
-    if (m_renderer) {
-        m_renderer->setGrayscale(enabled);
-    }
 }
 
 void EffectsController::setMirror(bool enabled) {
@@ -63,9 +53,6 @@ void EffectsController::setMirror(bool enabled) {
     }
     if (m_ui) {
         m_ui->setMirrorChecked(enabled);
-    }
-    if (m_renderer) {
-        m_renderer->setMirror(enabled);
     }
 }
 
@@ -84,9 +71,5 @@ void EffectsController::syncFromState() {
     if (m_ui) {
         m_ui->setGrayscaleChecked(grayscale);
         m_ui->setMirrorChecked(mirror);
-    }
-    if (m_renderer) {
-        m_renderer->setGrayscale(grayscale);
-        m_renderer->setMirror(mirror);
     }
 }

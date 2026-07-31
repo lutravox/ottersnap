@@ -24,8 +24,8 @@ add_unit_test(thumbnailcache   core/thumbnailcache.cpp Qt6::Core Qt6::Gui)
 # ── ViewState ────────────────────────────────────────────────────────
 add_unit_test(viewstate     core/viewstate.cpp   Qt6::Gui)
 
-# ── ViewController ────────────────────────────────────────────────────
-add_unit_test(viewcontroller controllers/viewcontroller.cpp Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent)
+# ── ViewerController ────────────────────────────────────────────────────
+add_unit_test(viewercontroller controllers/viewercontroller.cpp Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent)
 
 # ── SnapshotStore ─────────────────────────────────────────────────────
 add_unit_test(snapshotstore  core/snapshotstore.cpp  Qt6::Core Qt6::Gui)

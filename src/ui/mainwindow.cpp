@@ -40,7 +40,16 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_tabBar(nullptr), m_viewerState(nullptr), m_emptyState(nullptr),
       m_session(m_settings) {
     m_effectsController = new EffectsController(this);
-    m_viewController = new ViewController(this);
+    m_viewerController = new ViewerController(this);
+
+    connect(m_viewerController,
+            &ViewerController::grayscaleToggled,
+            m_effectsController,
+            &EffectsController::setGrayscale);
+    connect(m_viewerController,
+            &ViewerController::mirrorToggled,
+            m_effectsController,
+            &EffectsController::setMirror);
 
     setupMenu();
     setupUi();
@@ -116,14 +125,14 @@ void MainWindow::setupUi() {
             &MainWindow::onSnapshotSelected);
 
     connect(m_viewerState, &ViewerState::zoomRequested, this, [this](double pct) {
-        if (m_viewController) {
-            m_viewController->setZoomPercentage(pct);
+        if (m_viewerController) {
+            m_viewerController->setZoomPercentage(pct);
         }
     });
 
     connect(m_viewerState, &ViewerState::fitRequested, this, [this]() {
-        if (m_viewController) {
-            m_viewController->fitToWindow();
+        if (m_viewerController) {
+            m_viewerController->fitToWindow();
         }
     });
 
@@ -140,7 +149,7 @@ void MainWindow::setupUi() {
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
     m_effectsController->setup(m_viewerState->viewer(), uiAdapter);
-    m_viewController->setViewer(m_viewerState->viewer());
+    m_viewerController->setViewer(m_viewerState->viewer());
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
@@ -152,8 +161,8 @@ void MainWindow::setupUi() {
     // Connect viewer resizes to controller
     connect(m_viewerState->viewer(),
             &VkImageViewer::viewportResized,
-            m_viewController,
-            &ViewController::handleViewportResize);
+            m_viewerController,
+            &ViewerController::handleViewportResize);
 
     // Connect image drop and drop on viewer
     connect(m_viewerState->viewer(),
@@ -308,7 +317,7 @@ void MainWindow::updateMenuBar() {
             m_actionCloseTab->setVisible(true);
             m_actionCloseAllTabs->setVisible(true);
             m_actionScaleWithWindow->setVisible(true);
-            m_actionScaleWithWindow->setChecked(m_viewController->isScaleWithWindowEnabled());
+            m_actionScaleWithWindow->setChecked(m_viewerController->isScaleWithWindowEnabled());
             m_actionResetView->setVisible(true);
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
@@ -331,13 +340,13 @@ void MainWindow::onCloseAllTabs() {
 }
 
 void MainWindow::onToggleScaleWithWindow() {
-    bool enabled = !m_viewController->isScaleWithWindowEnabled();
-    m_viewController->setScaleWithWindowEnabled(enabled);
+    bool enabled = !m_viewerController->isScaleWithWindowEnabled();
+    m_viewerController->setScaleWithWindowEnabled(enabled);
     m_actionScaleWithWindow->setChecked(enabled);
 }
 
 void MainWindow::onResetView() {
-    m_viewController->fitToWindow();
+    m_viewerController->fitToWindow();
 }
 
 void MainWindow::onFileOpen() {
@@ -374,21 +383,21 @@ void MainWindow::onResetEffects() {
 }
 
 void MainWindow::onZoomIn() {
-    if (!m_viewController)
+    if (!m_viewerController)
         return;
-    m_viewController->handleZoomRequested(true, false);
+    m_viewerController->handleZoomRequested(true, false);
 }
 
 void MainWindow::onZoomOut() {
-    if (!m_viewController)
+    if (!m_viewerController)
         return;
-    m_viewController->handleZoomRequested(false, false);
+    m_viewerController->handleZoomRequested(false, false);
 }
 
 void MainWindow::onActualSize() {
-    if (!m_viewController)
+    if (!m_viewerController)
         return;
-    m_viewController->setZoomPercentage(100.0);
+    m_viewerController->setZoomPercentage(100.0);
 }
 
 void MainWindow::onToggleFullScreen() {
@@ -567,7 +576,7 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
             m_tabBar->setCurrentWidget(tab);
         }
         updateViewer(tab);
-        m_viewController->fitToWindow();
+        m_viewerController->fitToWindow();
     }
 }
 
@@ -752,7 +761,7 @@ void MainWindow::updateViewer(ImageTab *tab) {
 
     // Save state of the current tab
     if (m_currentTabInView) {
-        m_viewController->syncViewerToSession();
+        m_viewerController->syncViewerToSession();
     }
 
     if (m_currentTabInView != tab) {
@@ -760,8 +769,8 @@ void MainWindow::updateViewer(ImageTab *tab) {
     }
 
     // Restore state for the new tab
-    m_viewController->setActiveSession(tab->session());
-    m_viewController->syncSessionToViewer();
+    m_viewerController->setActiveSession(tab->session());
+    m_viewerController->syncSessionToViewer();
 
     bool isSnapshot = false;
     if (!tab->session()->isCurrentImageSelected()) {

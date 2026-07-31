@@ -1,15 +1,32 @@
 #include <QDebug>
-#include "controllers/viewcontroller.h"
+#include "controllers/viewercontroller.h"
 #include "config/appsettings.h"
 #include "ui/vkimageviewer.h"
 
-ViewController::ViewController(QObject *parent) : QObject(parent) {
+ViewerController::ViewerController(QObject *parent) : QObject(parent) {
 }
 
-void ViewController::setActiveSession(ImageSession *session) {
+void ViewerController::setActiveSession(ImageSession *session) {
+    if (m_session) {
+        if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
+            disconnect(m_session,
+                       &ImageSession::effectsChanged,
+                       vkViewer,
+                       &VkImageViewer::onEffectsChanged);
+        }
+    }
+
     m_session = session;
+
     if (m_session && m_viewer) {
         m_viewer->setSession(m_session);
+
+        if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
+            connect(m_session,
+                    &ImageSession::effectsChanged,
+                    vkViewer,
+                    &VkImageViewer::onEffectsChanged);
+        }
 
         if (m_session->isCurrentImageSelected()) {
             // It's the disk image - use regular upload
@@ -21,16 +38,20 @@ void ViewController::setActiveSession(ImageSession *session) {
     }
 }
 
-void ViewController::setViewer(IViewer *viewer) {
+void ViewerController::setViewer(IViewer *viewer) {
     m_viewer = viewer;
     if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
         connect(
-            vkViewer, &VkImageViewer::zoomRequested, this, &ViewController::handleZoomRequested);
-        connect(vkViewer, &VkImageViewer::panRequested, this, &ViewController::handlePanRequested);
+            vkViewer, &VkImageViewer::zoomRequested, this, &ViewerController::handleZoomRequested);
+        connect(
+            vkViewer, &VkImageViewer::panRequested, this, &ViewerController::handlePanRequested);
+        connect(
+            vkViewer, &VkImageViewer::grayscaleToggled, this, &ViewerController::grayscaleToggled);
+        connect(vkViewer, &VkImageViewer::mirrorToggled, this, &ViewerController::mirrorToggled);
     }
 }
 
-void ViewController::syncSessionToViewer() {
+void ViewerController::syncSessionToViewer() {
     if (!m_session || !m_viewer)
         return;
 
@@ -38,13 +59,13 @@ void ViewController::syncSessionToViewer() {
     m_viewer->update();
 }
 
-void ViewController::syncViewerToSession() {
+void ViewerController::syncViewerToSession() {
     if (!m_session || !m_viewer)
         return;
     m_session->viewState() = m_viewer->getViewState();
 }
 
-void ViewController::fitToWindow() {
+void ViewerController::fitToWindow() {
     if (!m_session || !m_viewer)
         return;
 
@@ -59,7 +80,7 @@ void ViewController::fitToWindow() {
     m_viewer->update();
 }
 
-void ViewController::setZoomPercentage(double pct) {
+void ViewerController::setZoomPercentage(double pct) {
     if (!m_session || !m_viewer)
         return;
 
@@ -70,15 +91,15 @@ void ViewController::setZoomPercentage(double pct) {
     m_viewer->update();
 }
 
-void ViewController::setScaleWithWindowEnabled(bool enabled) {
+void ViewerController::setScaleWithWindowEnabled(bool enabled) {
     AppSettings::setScaleWithWindow(enabled);
 }
 
-bool ViewController::isScaleWithWindowEnabled() const {
+bool ViewerController::isScaleWithWindowEnabled() const {
     return AppSettings::scaleWithWindow();
 }
 
-void ViewController::handleViewportResize(int width, int height) {
+void ViewerController::handleViewportResize(int width, int height) {
     if (!m_session || !m_viewer)
         return;
 
@@ -97,7 +118,7 @@ void ViewController::handleViewportResize(int width, int height) {
     m_viewer->update();
 }
 
-void ViewController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
+void ViewerController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
     if (!m_session || !m_viewer)
         return;
 
@@ -108,7 +129,7 @@ void ViewController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
     m_viewer->update();
 }
 
-void ViewController::handlePanRequested(int dx, int dy) {
+void ViewerController::handlePanRequested(int dx, int dy) {
     if (!m_session || !m_viewer)
         return;
 

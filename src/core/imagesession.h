@@ -110,9 +110,6 @@ class ImageSession : public QObject, public IEffectsState {
         return m_uiReconstructor;
     }
 
-    /// @brief Returns the shared utility reconstructor for background tasks.
-    std::shared_ptr<VkSnapshotReconstructor> utilityReconstructor() const;
-
     /// @brief Initializes the UI reconstructor with the provided device handles.
     void setUIReconstructorHandles(const VulkanHandles& handles);
 

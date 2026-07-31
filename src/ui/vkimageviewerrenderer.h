@@ -11,6 +11,9 @@
 #include "core/imagesession.h"
 #include "core/vksnapshotreconstructor.h"
 
+/// @brief The background color used to clear the viewport.
+static constexpr float kClearColor = 0.12f;
+
 /// @struct UniformBufferObject
 /// @brief Layout of the uniform buffer used for image display.
 struct alignas(4) UniformBufferObject {
@@ -35,8 +38,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     /// @brief Sets the source image to be displayed.
     /// @param img The image to display.
-    /// @param preserveView If true, maintains the current zoom and pan levels.
-    void setImage(const QImage& img, bool preserveView = false);
+    void setImage(const QImage& img);
 
     /// @brief Triggers a reconstruction of the image from a snapshot sequence.
     void reconstruct(const ReconstructionSequence& seq);
@@ -50,6 +52,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
         return m_session ? m_session->grayscaleEnabled() : false;
     }
 
+    /// @brief Returns whether horizontal mirroring is enabled.
     bool mirrorEnabled() const {
         return m_session ? m_session->mirrorEnabled() : false;
     }
@@ -66,16 +69,23 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     /// @brief Sets the active reconstructor to use for rendering.
     void setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor);
+    /// @brief Associates the renderer with an image session.
     void setSession(ImageSession *session);
 
   protected:
+    /// @brief Initializes Vulkan resources (samplers, buffers, etc.).
     void initResources() override;
+    /// @brief Prepares resources specifically tied to the swapchain.
     void initSwapChainResources() override;
+    /// @brief Releases swapchain-specific resources.
     void releaseSwapChainResources() override;
+    /// @brief Releases all allocated Vulkan resources.
     void releaseResources() override;
+    /// @brief Renders the next frame to the swapchain.
     void startNextFrame() override;
 
   private:
+    /// @brief Handles uploading image data to the GPU.
     void performUploads(VkCommandBuffer                          cmd,
                         std::shared_ptr<VkSnapshotReconstructor> reconstructor);
     /// @brief Uploads a QImage to the GPU as a Vulkan texture.
@@ -83,7 +93,9 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     /// @param image The source image to upload.
     /// @return True if upload succeeded, false if it failed (e.g. OOM).
     bool createAndUploadTexture(VkCommandBuffer cmd, const QImage& image);
-    int  createTexture(int width, int height);
+    /// @brief Creates a Vulkan image and allocates memory for it.
+    /// @return The number of mip levels created, or 0 if failed.
+    int createTexture(int width, int height);
 
     /// @brief Records commands to generate a mipmap chain for the texture.
     /// @param cmd The command buffer to record into.
@@ -108,14 +120,18 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     updateDescriptors(VkDescriptorSet dstSet, VkBuffer ubo, VkSampler samp, VkImageView texView);
 
     // Resource creation helpers
-    void createSamplers();
-    void createShaderModules();
-    void createDescriptorLayout();
-    void createPipelineLayout();
-    void createPipeline();
-    void createDescriptorPoolAndSet();
-    void createUniformBuffer();
-    void createVertexBuffer();
+    /// @brief Creates the linear and nearest-neighbor samplers.
+    /// @return True if success, false otherwise.
+    bool createSamplers();
+    /// @brief Creates the descriptor pool and allocates the descriptor set.
+    /// @return True if success, false otherwise.
+    bool createDescriptorPoolAndSet();
+    /// @brief Creates and maps the uniform buffer.
+    /// @return True if success, false otherwise.
+    bool createUniformBuffer();
+    /// @brief Creates and populates the vertex buffer for the fullscreen quad.
+    /// @return True if success, false otherwise.
+    bool createVertexBuffer();
 
     /// @brief Cleans up the old texture and its associated memory.
     void cleanupOldTexture();

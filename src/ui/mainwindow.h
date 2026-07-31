@@ -6,7 +6,7 @@
 #include <QStackedWidget>
 #include <QStringList>
 #include "controllers/effectscontroller.h"
-#include "controllers/viewcontroller.h"
+#include "controllers/viewercontroller.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
 #include "ui/notificationmanager.h"
@@ -99,7 +99,7 @@ class MainWindow : public QMainWindow {
     QSettings            m_settings;
     SessionManager       m_session;
     EffectsController   *m_effectsController;
-    ViewController      *m_viewController;
+    ViewerController    *m_viewerController;
     QMenu               *m_fileMenu;
     QMenu               *m_recentFilesMenu;
     QMenu               *m_editMenu;

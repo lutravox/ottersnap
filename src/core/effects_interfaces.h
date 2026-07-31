@@ -19,11 +19,6 @@ class IEffectsRenderer {
     using EffectChangedCallback = std::function<void(bool grayscale, bool mirror)>;
 
     virtual ~IEffectsRenderer() = default;
-    virtual void setGrayscale(bool enabled) = 0;
-    virtual void setMirror(bool enabled) = 0;
-
-    /// @brief Set the callback to be notified when effects are changed.
-    virtual void setNotificationCallback(EffectChangedCallback callback) = 0;
 };
 
 /// @brief Interface for the UI elements related to effects (e.g., menu actions).

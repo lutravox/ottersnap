@@ -73,10 +73,6 @@ VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
 VkImageViewer::~VkImageViewer() {
 }
 
-void VkImageViewer::setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) {
-    m_notificationCallback = callback;
-}
-
 bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
     if (obj != m_vulkanWindow && obj != m_container)
         return QObject::eventFilter(obj, event);
@@ -136,16 +132,10 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                     if (selectedAction == grayscaleAction) {
                         bool enabled = grayscaleAction->isChecked();
                         emit grayscaleToggled(enabled);
-                        if (m_notificationCallback) {
-                            m_notificationCallback(enabled, m_renderer->mirrorEnabled());
-                        }
                         return true;
                     } else if (selectedAction == mirrorAction) {
                         bool enabled = mirrorAction->isChecked();
                         emit mirrorToggled(enabled);
-                        if (m_notificationCallback) {
-                            m_notificationCallback(m_renderer->grayscaleEnabled(), enabled);
-                        }
                         return true;
                     }
                 }
@@ -214,9 +204,7 @@ void VkImageViewer::setImage(const QImage& image, bool preserveView) {
     if (!m_hasImage)
         return;
 
-    // Initial state is now managed by the ViewController.
-    // We only forward the image to the renderer.
-    m_renderer->setImage(image, preserveView);
+    m_renderer->setImage(image);
 }
 
 void VkImageViewer::reconstruct(const ReconstructionSequence& seq) {
@@ -244,12 +232,10 @@ void VkImageViewer::setSession(ImageSession *session) {
     }
 }
 
-void VkImageViewer::setGrayscale(bool enabled) {
-    m_renderer->markUboDirty();
-}
-
-void VkImageViewer::setMirror(bool enabled) {
-    m_renderer->markUboDirty();
+void VkImageViewer::onEffectsChanged() {
+    if (m_renderer) {
+        m_renderer->markUboDirty();
+    }
 }
 
 void VkImageViewer::setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor) {

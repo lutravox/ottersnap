@@ -1,6 +1,6 @@
 #include <QCoreApplication>
 #include <QtTest>
-#include "controllers/viewcontroller.h"
+#include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
 #include "core/viewstate.h"
@@ -60,14 +60,14 @@ class MockViewer : public IViewer {
     bool      m_setViewStateCalled = false;
 };
 
-class TestViewController : public QObject {
+class TestViewerController : public QObject {
     Q_OBJECT
 
   private slots:
     void testSyncSessionToViewer() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -88,9 +88,9 @@ class TestViewController : public QObject {
     }
 
     void testSyncViewerToSession() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -110,9 +110,9 @@ class TestViewController : public QObject {
     }
 
     void testFitToWindow() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -127,9 +127,9 @@ class TestViewController : public QObject {
     }
 
     void testHandleViewportResize() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -145,7 +145,7 @@ class TestViewController : public QObject {
     }
 
     void testNullPointers() {
-        ViewController controller;
+        ViewerController controller;
         // No session or viewer set.
         // These should not crash.
         controller.syncSessionToViewer();
@@ -157,8 +157,8 @@ class TestViewController : public QObject {
     }
 
     void testScaleWithWindowToggle() {
-        ViewController controller;
-        bool           initial = controller.isScaleWithWindowEnabled();
+        ViewerController controller;
+        bool             initial = controller.isScaleWithWindowEnabled();
 
         controller.setScaleWithWindowEnabled(!initial);
         QVERIFY(controller.isScaleWithWindowEnabled() != initial);
@@ -168,9 +168,9 @@ class TestViewController : public QObject {
     }
 
     void testHandleZoomRequested() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -183,9 +183,9 @@ class TestViewController : public QObject {
     }
 
     void testHandlePanRequested() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -198,9 +198,9 @@ class TestViewController : public QObject {
     }
 
     void testSetZoomPercentage() {
-        ViewController controller;
-        ImageSession   session;
-        MockViewer     viewer;
+        ViewerController controller;
+        ImageSession     session;
+        MockViewer       viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -212,5 +212,5 @@ class TestViewController : public QObject {
     }
 };
 
-QTEST_MAIN(TestViewController)
-#include "test_viewcontroller.moc"
+QTEST_MAIN(TestViewerController)
+#include "test_viewercontroller.moc"

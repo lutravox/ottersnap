@@ -5,10 +5,10 @@
 #include "core/viewer_interfaces.h"
 
 /// @brief Coordinates the viewport state between an ImageSession and a Viewer.
-class ViewController : public QObject {
+class ViewerController : public QObject {
     Q_OBJECT
   public:
-    explicit ViewController(QObject *parent = nullptr);
+    explicit ViewerController(QObject *parent = nullptr);
 
     /// @brief Set the active session to track.
     void setActiveSession(ImageSession *session);
@@ -38,6 +38,10 @@ class ViewController : public QObject {
     void handleZoomRequested(bool zoomIn, bool ctrlHeld);
     void handlePanRequested(int dx, int dy);
     void setZoomPercentage(double pct);
+
+  signals:
+    void grayscaleToggled(bool enabled);
+    void mirrorToggled(bool enabled);
 
   private:
     ImageSession *m_session = nullptr;

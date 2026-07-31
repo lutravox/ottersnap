@@ -17,7 +17,6 @@ void VkImageViewerRenderer::setReconstructor(
 
     m_activeReconstructor = reconstructor;
 
-    // Sync dimensions from the new reconstructor if available
     if (reconstructor) {
         // Force an upload for the new session
         m_uploadPending = true;
@@ -44,12 +43,16 @@ void VkImageViewerRenderer::clear() {
 void VkImageViewerRenderer::initResources() {
     m_devFuncs = m_vkWindow->vulkanInstance()->deviceFunctions(m_vkWindow->device());
 
-    createSamplers();
+    if (!createSamplers())
+        return;
     VulkanContext::instance().createGraphicsPipeline(
         m_vkWindow->device(), m_devFuncs, m_vkWindow->defaultRenderPass());
-    createDescriptorPoolAndSet();
-    createUniformBuffer();
-    createVertexBuffer();
+    if (!createDescriptorPoolAndSet())
+        return;
+    if (!createUniformBuffer())
+        return;
+    if (!createVertexBuffer())
+        return;
 
     // Update descriptor set now if a texture view already exists
     if (m_textureView != VK_NULL_HANDLE)
@@ -60,7 +63,7 @@ void VkImageViewerRenderer::initResources() {
     m_uboDirty = true;
 }
 
-void VkImageViewerRenderer::createSamplers() {
+bool VkImageViewerRenderer::createSamplers() {
     VkDevice                dev = m_vkWindow->device();
     QVulkanDeviceFunctions *df = m_devFuncs;
 
@@ -79,7 +82,7 @@ void VkImageViewerRenderer::createSamplers() {
     VkResult result = df->vkCreateSampler(dev, &si, nullptr, &m_samplerLinear);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkCreateSampler (linear) failed:" << result;
-        return;
+        return false;
     }
 
     // Nearest-neighbor sampler (sharp pixels when zoomed in)
@@ -92,14 +95,15 @@ void VkImageViewerRenderer::createSamplers() {
         qCritical() << "[VkImageViewer] vkCreateSampler (nearest) failed:" << result;
         VulkanUtils::destroyResource(
             df, dev, m_samplerLinear, &QVulkanDeviceFunctions::vkDestroySampler);
-        return;
+        return false;
     }
+    return true;
 }
 
 // Removed helper methods: createShaderModules, createDescriptorLayout, createPipelineLayout,
 // createPipeline as they are now managed by VulkanContext.
 
-void VkImageViewerRenderer::createDescriptorPoolAndSet() {
+bool VkImageViewerRenderer::createDescriptorPoolAndSet() {
     VkDevice                dev = m_vkWindow->device();
     QVulkanDeviceFunctions *df = m_devFuncs;
 
@@ -121,11 +125,16 @@ void VkImageViewerRenderer::createDescriptorPoolAndSet() {
     VkDescriptorSetLayout layout = VulkanContext::instance().getGraphicsDescriptorSetLayout();
     dsa.pSetLayouts = &layout;
     VkResult result = df->vkAllocateDescriptorSets(dev, &dsa, &m_descriptorSet);
-    if (result != VK_SUCCESS)
+    if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkAllocateDescriptorSets failed:" << result;
+        VulkanUtils::destroyResource(
+            df, dev, m_descriptorPool, &QVulkanDeviceFunctions::vkDestroyDescriptorPool);
+        return false;
+    }
+    return true;
 }
 
-void VkImageViewerRenderer::createUniformBuffer() {
+bool VkImageViewerRenderer::createUniformBuffer() {
     VkDevice                dev = m_vkWindow->device();
     QVulkanDeviceFunctions *df = m_devFuncs;
 
@@ -151,7 +160,7 @@ void VkImageViewerRenderer::createUniformBuffer() {
                                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     if (alloc.buffer == VK_NULL_HANDLE) {
         qCritical() << "[VkImageViewer] Failed to create uniform buffer";
-        return;
+        return false;
     }
     m_uniformBuffer = alloc.buffer;
     m_uniformMemory = alloc.memory;
@@ -160,11 +169,12 @@ void VkImageViewerRenderer::createUniformBuffer() {
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkMapMemory (UBO) failed:" << result;
         cleanupOnError();
-        return;
+        return false;
     }
+    return true;
 }
 
-void VkImageViewerRenderer::createVertexBuffer() {
+bool VkImageViewerRenderer::createVertexBuffer() {
     VkDevice                dev = m_vkWindow->device();
     QVulkanDeviceFunctions *df = m_devFuncs;
 
@@ -193,7 +203,7 @@ void VkImageViewerRenderer::createVertexBuffer() {
     VkResult result = df->vkCreateBuffer(dev, &vbci, nullptr, &m_vertexBuffer);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkCreateBuffer (vertex) failed:" << result;
-        return;
+        return false;
     }
 
     VkMemoryRequirements vbMemReq;
@@ -211,13 +221,13 @@ void VkImageViewerRenderer::createVertexBuffer() {
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkAllocateMemory (vertex) failed:" << result;
         cleanupOnError();
-        return;
+        return false;
     }
     result = df->vkBindBufferMemory(dev, m_vertexBuffer, m_vertexMemory, 0);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkBindBufferMemory (vertex) failed:" << result;
         cleanupOnError();
-        return;
+        return false;
     }
 
     void *vbData;
@@ -225,10 +235,11 @@ void VkImageViewerRenderer::createVertexBuffer() {
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkMapMemory (vertex) failed:" << result;
         cleanupOnError();
-        return;
+        return false;
     }
     std::memcpy(vbData, quadVertices, vbSize);
     df->vkUnmapMemory(dev, m_vertexMemory);
+    return true;
 }
 
 void VkImageViewerRenderer::initSwapChainResources() {
@@ -687,7 +698,7 @@ bool VkImageViewerRenderer::createAndUploadTexture(VkCommandBuffer cmd, const QI
     return true;
 }
 
-void VkImageViewerRenderer::setImage(const QImage& img, bool preserveView) {
+void VkImageViewerRenderer::setImage(const QImage& img) {
     if (img.isNull())
         return;
 
@@ -753,12 +764,12 @@ void VkImageViewerRenderer::performUploads(VkCommandBuffer                      
         reconstructor->checkAndSwapBase();
 
         if (reconstructor->isUploadingBase()) {
-            qDebug() << "[VkImageViewerRenderer] startNextFrame: Base image uploading, deferring";
+            qDebug() << "[VkImageViewerRenderer] performUploads: Base image uploading, deferring";
             return;
         }
 
         if (reconstructor->stateBuffer() == VK_NULL_HANDLE) {
-            qDebug() << "[VkImageViewerRenderer] startNextFrame: State buffer not yet allocated, "
+            qDebug() << "[VkImageViewerRenderer] performUploads: State buffer not yet allocated, "
                         "deferring";
             return;
         }
@@ -960,9 +971,9 @@ void VkImageViewerRenderer::startNextFrame() {
 
     // Begin render pass
     VkClearValue cv[2]{};
-    cv[0].color.float32[0] = 0.12f;
-    cv[0].color.float32[1] = 0.12f;
-    cv[0].color.float32[2] = 0.12f;
+    cv[0].color.float32[0] = kClearColor;
+    cv[0].color.float32[1] = kClearColor;
+    cv[0].color.float32[2] = kClearColor;
     cv[0].color.float32[3] = 1.0f;
     cv[1].depthStencil.depth = 1.0f;
 

@@ -33,15 +33,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Reconstructs a snapshot from a base image and a series of deltas.
     void reconstruct(const ReconstructionSequence& seq) override;
 
-    /// @brief Enable or disable grayscale rendering in the fragment shader.
-    void setGrayscale(bool enabled) override;
-
-    /// @brief Enable or disable horizontal mirroring in the fragment shader.
-    void setMirror(bool enabled) override;
-
-    /// @brief Set the callback to be notified when effects are changed.
-    void setNotificationCallback(IEffectsRenderer::EffectChangedCallback callback) override;
-
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
     double zoomPercentage() const override {
@@ -99,14 +90,15 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
 
     /// @brief Emitted when mirroring mode is toggled.
     void mirrorToggled(bool enabled);
-
-    /// @brief Emitted when an image drop is requested.
     void imageOpenRequested(const QString& path);
 
   protected:
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;
+
+  public slots:
+    void onEffectsChanged();
 
   private:
     QVulkanWindow         *m_vulkanWindow = nullptr;
@@ -117,8 +109,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     ViewState m_currentViewState;
     bool      m_isDragging = false;
     QPoint    m_lastMousePos;
-
-    IEffectsRenderer::EffectChangedCallback m_notificationCallback = nullptr;
 };
 
 using ImageViewer = VkImageViewer;

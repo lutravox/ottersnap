@@ -145,10 +145,9 @@ void ImageSession::saveSnapshot() {
                     emit statusMessage("Snapshot saved.");
                 } else if (res && res->status == SnapshotStore::SaveStatus::Existing) {
                     int  pos = getRelativeVersion(res->snapshotIndex);
-                    emit statusMessage(
-                        QString("Current iamge lalalal  lalalla already saved as snapshot %1.")
-                            .arg(pos != -1 ? QString::number(pos)
-                                           : QString::number(res->snapshotIndex)));
+                    emit statusMessage(QString("Current image already saved as snapshot %1.")
+                                           .arg(pos != -1 ? QString::number(pos)
+                                                          : QString::number(res->snapshotIndex)));
                 } else {
                     emit statusMessage("Save failed.");
                 }
@@ -349,8 +348,4 @@ void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {
     }
     m_uiReconstructor =
         std::make_shared<VkSnapshotReconstructor>(handles, &VulkanContext::instance());
-}
-
-std::shared_ptr<VkSnapshotReconstructor> ImageSession::utilityReconstructor() const {
-    return VulkanContext::instance().getUtilityReconstructor();
 }

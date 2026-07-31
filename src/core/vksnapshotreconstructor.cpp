@@ -1110,8 +1110,10 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
                                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    if (stagingAlloc.buffer == VK_NULL_HANDLE)
+    if (stagingAlloc.buffer == VK_NULL_HANDLE) {
+        qCritical() << "[VkSnapshotReconstructor] copyToQImage: Failed to create staging buffer";
         return QImage();
+    }
 
     VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     allocInfo.commandPool = pool;
@@ -1121,7 +1123,7 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
     df->vkAllocateCommandBuffers(dev, &allocInfo, &copyCmd);
     if (copyCmd == VK_NULL_HANDLE) {
         qCritical()
-            << "[VkSnapshotReconstructor] Failed to allocate copy command buffer in copyToQImage";
+            << "[VkSnapshotReconstructor] copyToQImage: Failed to allocate copy command buffer";
         VulkanUtils::destroyResource(
             df, dev, stagingAlloc.buffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
         VulkanUtils::freeMemory(df, dev, stagingAlloc.memory);

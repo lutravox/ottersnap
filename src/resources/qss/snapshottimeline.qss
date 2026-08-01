@@ -1,11 +1,14 @@
-QScrollArea {
+SnapshotTimeline {
     background: palette(Window);
-    border: none;
+}
+
+QListView {
+    background: palette(Window);
 }
 
 QScrollBar:horizontal {
     height: 5px;
-    background: palette(Window);
+    background: palette(Base);
     padding: 0 0 0 6px;
 }
 
@@ -21,23 +24,11 @@ QScrollBar::add-line:horizontal {
 
 QScrollBar::sub-line:horizontal {
     width: 4px;
-    background: palette(Window);
+    background: palette(Base);
 }
 
 QScrollBar::sub-page:horizontal {
     background: transparent;
-}
-
-QLabel#snapshotLabel {
-    font-weight: bold;
-    font-size: 10px;
-    background: transparent;
-    margin: 0px;
-    padding: 0px;
-}
-
-QLabel#snapshotLabel[selected="true"] {
-    color: palette(Highlight);
 }
 
 QPushButton#createSnapshotButton {

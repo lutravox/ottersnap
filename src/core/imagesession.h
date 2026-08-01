@@ -80,12 +80,12 @@ class ImageSession : public QObject, public IEffectsState {
     QImage generateThumbnail(int index, int size);
 
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
-    std::pair<QVector<QImage>, QVector<QString>> snapshotTimelineThumbnails(int size);
+    std::tuple<QVector<QImage>, QVector<QString>, QVector<int>>
+    snapshotTimelineThumbnails(int size);
 
     /// @brief Generate and cache a thumbnail for the currently selected image.
     QImage thumbnail(int size);
 
-    // Getters
     QString filePath() const {
         return m_filePath;
     }
@@ -117,6 +117,8 @@ class ImageSession : public QObject, public IEffectsState {
     void imageChanged();
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
+    /// @brief Emitted when a new snapshot is created.
+    void snapshotCreated(int snapshotIndex);
     /// @brief Emitted when a specific thumbnail has been updated.
     void thumbnailChanged(int index);
     void effectsChanged();
@@ -131,6 +133,7 @@ class ImageSession : public QObject, public IEffectsState {
   private:
     void   rebuildSnapshotList();
     void   autosaveSnapshot(const QImage& img);
+    void   performSave(const QImage& img, bool isAutosave);
     int    getRelativeVersion(int snapshotIndex) const;
     QImage getPlaceholder(int size);
 

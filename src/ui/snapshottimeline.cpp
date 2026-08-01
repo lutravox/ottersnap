@@ -1,49 +1,67 @@
 #include "ui/snapshottimeline.h"
 
+#include <QAbstractItemView>
 #include <QAction>
-#include <QContextMenuEvent>
+#include <QEvent>
 #include <QFile>
+#include <QFont>
 #include <QHBoxLayout>
-#include <QLabel>
+#include <QHoverEvent>
+#include <QListView>
 #include <QMenu>
-#include <QPainter>
+#include <QModelIndex>
+#include <QMouseEvent>
 #include <QPushButton>
-#include <QScrollArea>
-#include <QScrollBar>
-#include <QStyle>
-#include <QTimer>
-#include <QVBoxLayout>
 #include <QWheelEvent>
 
 constexpr int c_thumbnailSize = 48;
-constexpr int c_thumbnailSpacing = 3;
 
 SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
-    m_scrollArea = new QScrollArea(this);
-    m_scrollArea->setWidgetResizable(true);
-    m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    m_scrollArea->setFrameShape(QFrame::NoFrame);
-    m_scrollArea->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    m_scrollArea->viewport()->installEventFilter(this);
+    m_model = new SnapshotModel(this);
+    m_delegate = new SnapshotTimelineDelegate(this);
 
-    m_contentWidget = new QWidget(m_scrollArea);
+    m_listView = new QListView(this);
+    m_listView->setModel(m_model);
+    m_listView->setItemDelegate(m_delegate);
 
-    m_contentLayout = new QHBoxLayout(m_contentWidget);
-    m_contentLayout->setContentsMargins(6, 3, 6, 3);
-    m_contentLayout->setSpacing(c_thumbnailSpacing);
-    m_contentLayout->setAlignment(Qt::AlignLeft);
+    // Configure for horizontal strip look
+    m_listView->setFlow(QListView::LeftToRight);
+    m_listView->setWrapping(false);
+    m_listView->setMovement(QListView::Static);
+    m_listView->setSpacing(3);
+    m_listView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_listView->setSelectionMode(QAbstractItemView::NoSelection);
+    m_listView->setSelectionBehavior(QAbstractItemView::SelectRows);
 
-    m_scrollArea->setWidget(m_contentWidget);
+    m_listView->setAttribute(Qt::WA_Hover);
+    m_listView->setMouseTracking(true);
 
-    m_createButtonWrapper = new QWidget(this);
-    m_createButtonWrapper->setFixedWidth(22);
-    m_createButtonWrapper->setFixedHeight(c_thumbnailSize + 12);
+    auto *viewport = m_listView->viewport();
+    viewport->setAttribute(Qt::WA_Hover);
+    viewport->setMouseTracking(true);
+    viewport->setAutoFillBackground(true);
+    viewport->installEventFilter(this);
 
-    m_createButton = new QPushButton(tr("+"), m_createButtonWrapper);
+    m_listView->installEventFilter(this);
+    m_listView->setAutoFillBackground(true);
+
+    connect(m_listView, &QListView::clicked, this, [this](const QModelIndex& index) {
+        int row = index.row();
+        if (row == m_currentIndex)
+            return;
+        int oldIndex = m_currentIndex;
+        m_currentIndex = row;
+        updateSelection(oldIndex, row);
+        emit snapshotSelected(row);
+    });
+
+    m_createButton = new QPushButton(tr("+"), this);
     m_createButton->setObjectName("createSnapshotButton");
-    m_createButton->setFixedSize(27, c_thumbnailSize + 12);
+    m_createButton->setFixedHeight(c_thumbnailSize + 16);
+    m_createButton->setFixedWidth(28);
+    QFont font = m_createButton->font();
+    font.setBold(true);
+    m_createButton->setFont(font);
     m_createButton->setToolTip(tr("Create a new snapshot"));
     connect(
         m_createButton, &QPushButton::clicked, this, &SnapshotTimeline::createSnapshotRequested);
@@ -51,213 +69,156 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     auto *root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
-    root->addWidget(m_scrollArea, 1);
-    root->addWidget(m_createButtonWrapper);
+    root->addWidget(m_listView, 1);
+    // m_createButton is positioned manually in resizeEvent for edge clipping
 
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(c_thumbnailSize + 24);
+    setFixedHeight(m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height());
 
+    // Load timeline stylesheet
     QFile qss(":/qss/snapshottimeline.qss");
-    if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
-        setStyleSheet(QString::fromUtf8(qss.readAll()));
-
-    m_scrollTimer.setSingleShot(true);
-    connect(&m_scrollTimer, &QTimer::timeout, this, &SnapshotTimeline::doScrollToCurrent);
+    if (qss.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString styleSheet = QString::fromUtf8(qss.readAll());
+        setStyleSheet(styleSheet);
+        m_listView->setStyleSheet(styleSheet);
+        m_listView->viewport()->setStyleSheet(styleSheet);
+    }
 }
 
 bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
-    if (obj == m_scrollArea->viewport()) {
-        if (event->type() == QEvent::Wheel) {
-            wheelEvent(static_cast<QWheelEvent *>(event));
-            return true;
-        }
-    } else if (QWidget *widget = qobject_cast<QWidget *>(obj)) {
-        if (event->type() == QEvent::MouseButtonPress) {
+    if (obj == m_listView->viewport() || obj == m_listView) {
+        if (event->type() == QEvent::MouseMove) {
             QMouseEvent *me = static_cast<QMouseEvent *>(event);
-            if (me->button() == Qt::RightButton) {
-                // Identify the container that owns this widget
-                QWidget *container = widget;
-                if (container->parentWidget() &&
-                    std::find(m_containers.begin(),
-                              m_containers.end(),
-                              container->parentWidget()) != m_containers.end()) {
-                    container = container->parentWidget();
-                }
+            QModelIndex  index = m_listView->indexAt(me->pos());
+            int          newHoverIndex = index.isValid() ? index.row() : -1;
+            m_delegate->setHoverIndex(newHoverIndex);
+            m_listView->viewport()->update();
+        } else if (event->type() == QEvent::HoverMove) {
+            QHoverEvent *he = static_cast<QHoverEvent *>(event);
+            QModelIndex  index = m_listView->indexAt(he->position().toPoint());
+            int          newHoverIndex = index.isValid() ? index.row() : -1;
+            m_delegate->setHoverIndex(newHoverIndex);
+            m_listView->viewport()->update();
+        } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
+            m_delegate->setHoverIndex(-1);
+            m_listView->viewport()->update();
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *me = static_cast<QMouseEvent *>(event);
 
-                // Identify which container was clicked
-                for (int i = 0; i < static_cast<int>(m_containers.size()); ++i) {
-                    if (m_containers[i] == container) {
-                        // Don't allow deleting the current disk image (the last tab)
-                        if (i < static_cast<int>(m_snapshottabs.size()) - 1) {
-                            QMenu    menu(this);
-                            QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
-                            connect(deleteAct, &QAction::triggered, this, [this, i]() {
-                                emit snapshotDeletionRequested(i);
-                            });
-                            menu.exec(me->globalPosition().toPoint());
-                        }
-                        return true; // Consume the event
+            // 1. Clear "new" status immediately on any left-click press to remove the highlight
+            // border
+            if (me->button() == Qt::LeftButton) {
+                QModelIndex index = m_listView->indexAt(me->pos());
+                if (index.isValid()) {
+                    int snapshotIdx = m_model->data(index, SnapshotModel::IndexRole).toInt();
+                    m_model->clearNewStatus(snapshotIdx);
+                    m_listView->viewport()->update();
+                }
+            }
+
+            if (me->button() == Qt::RightButton) {
+                QModelIndex index = m_listView->indexAt(me->pos());
+                if (index.isValid()) {
+                    int row = index.row();
+                    // Don't allow deleting the current disk image (the last tab)
+                    if (row < m_model->rowCount() - 1) {
+                        QMenu    menu(this);
+                        QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
+                        connect(deleteAct, &QAction::triggered, this, [this, row]() {
+                            emit snapshotDeletionRequested(row);
+                        });
+                        menu.exec(me->globalPosition().toPoint());
+                        return true;
                     }
                 }
             }
+        } else if (event->type() == QEvent::Wheel) {
+            QWheelEvent *we = static_cast<QWheelEvent *>(event);
+            if (m_model->rowCount() == 0) {
+                return QWidget::eventFilter(obj, event);
+            }
+
+            int delta = we->angleDelta().y();
+            if (delta == 0) {
+                return QWidget::eventFilter(obj, event);
+            }
+
+            int step = delta > 0 ? -1 : 1;
+            int next = qBound(0, m_currentIndex + step, m_model->rowCount() - 1);
+            if (next != m_currentIndex) {
+                int oldIndex = m_currentIndex;
+                m_currentIndex = next;
+                updateSelection(oldIndex, next);
+                emit snapshotSelected(next);
+            }
+            return true;
         }
     }
     return QWidget::eventFilter(obj, event);
 }
 
-void SnapshotTimeline::wheelEvent(QWheelEvent *event) {
-    if (m_snapshottabs.isEmpty())
-        return;
-
-    int step = event->angleDelta().y() > 0 ? -1 : 1;
-    int next = qBound(0, m_currentIndex + step, static_cast<int>(m_snapshottabs.size() - 1));
-    if (next != m_currentIndex) {
-        int oldIndex = m_currentIndex;
-        m_currentIndex = next;
-        updateSelection(oldIndex, next);
-        emit snapshotSelected(next);
-    }
-
-    event->accept();
-}
-
 void SnapshotTimeline::setThumbnails(const QVector<QPixmap>& thumbnails,
-                                     const QVector<QString>& labels) {
-    m_labels = labels;
-
-    buildStrip(thumbnails);
+                                     const QVector<QString>& labels,
+                                     const QVector<int>&     indices) {
+    m_model->setThumbnails(thumbnails, labels, indices);
 }
 
-void SnapshotTimeline::updateThumbnail(int index, const QPixmap& pixmap) {
-    if (index < 0 || index >= static_cast<int>(m_snapshottabs.size())) {
-        return;
-    }
-
-    m_snapshottabs[index]->setPixmap(pixmap);
+void SnapshotTimeline::markSnapshotAsNew(int snapshotIndex) {
+    m_model->markSnapshotAsNew(snapshotIndex);
 }
 
 void SnapshotTimeline::setSelectedIndex(int index) {
-    if (m_snapshottabs.isEmpty())
+    if (m_model->rowCount() == 0)
         return;
 
-    int clamped = qBound(0, index, static_cast<int>(m_snapshottabs.size() - 1));
+    int clamped = qBound(0, index, m_model->rowCount() - 1);
     if (clamped == m_currentIndex)
         return;
 
     int oldIndex = m_currentIndex;
     m_currentIndex = clamped;
     updateSelection(oldIndex, clamped);
+    m_listView->setCurrentIndex(m_model->index(clamped));
 }
 
 bool SnapshotTimeline::isEmpty() const {
-    return m_snapshottabs.isEmpty();
+    return m_model->rowCount() == 0;
 }
 
 void SnapshotTimeline::updateSelection(int oldIndex, int newIndex) {
-    updateTabState(oldIndex, false);
-    updateTabState(newIndex, true);
-
-    if (newIndex >= 0 && newIndex < static_cast<int>(m_containers.size())) {
-        QWidget *container = m_containers[newIndex];
-        m_scrollArea->horizontalScrollBar()->setValue(
-            container->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2));
+    // We can use the model to clear the "new" status
+    if (newIndex >= 0 && newIndex < m_model->rowCount()) {
+        int snapshotIdx = m_model->data(m_model->index(newIndex), SnapshotModel::IndexRole).toInt();
+        m_model->clearNewStatus(snapshotIdx);
     }
+
+    // Update the delegate's current index for custom rendering
+    if (m_delegate) {
+        m_delegate->setCurrentIndex(newIndex);
+    }
+
+    // Scroll to center the current thumbnail
+    if (newIndex >= 0 && newIndex < m_model->rowCount()) {
+        m_listView->setCurrentIndex(m_model->index(newIndex));
+    }
+
+    // Force a viewport update to clear any painting artifacts (e.g., the "new" highlight
+    // border)
+    m_listView->viewport()->update();
 }
 
-void SnapshotTimeline::updateTabState(int index, bool selected) {
-    if (index < 0 || index >= static_cast<int>(m_snapshottabs.size()))
+void SnapshotTimeline::updateThumbnail(int index, const QPixmap& pixmap) {
+    if (index < 0 || index >= m_model->rowCount())
         return;
-
-    m_snapshottabs[index]->setSelected(selected);
-
-    if (index < static_cast<int>(m_snapshotLabels.size())) {
-        QLabel *label = m_snapshotLabels[index];
-        label->setText(index == static_cast<int>(m_snapshottabs.size()) - 1
-                           ? tr("C")
-                           : QString::number(index + 1));
-        label->setProperty("selected", selected ? "true" : "false");
-        label->setEnabled(selected);
-        label->style()->unpolish(label);
-        label->style()->polish(label);
-    }
+    m_model->updateThumbnail(index, pixmap);
 }
 
-void SnapshotTimeline::buildStrip(const QVector<QPixmap>& thumbnails) {
-    // Cancel pending scroll timer — widgets below will be deleted
-    m_scrollTimer.stop();
+void SnapshotTimeline::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    // Position button so part of it extends past the right edge (clipped)
 
-    // Remove old widgets
-    QLayoutItem *item;
-    while ((item = m_contentLayout->takeAt(0)) != nullptr) {
-        if (QWidget *widget = item->widget()) {
-            delete widget; // Deletes SnapshotTab
-        }
-        delete item; // Deletes layout/stretch spacers
-    }
-    m_snapshottabs.clear();
-    m_snapshotLabels.clear();
-    m_containers.clear();
-
-    for (int i = 0; i < thumbnails.size(); ++i) {
-        QWidget *container = new QWidget(m_contentWidget);
-        container->setFixedWidth(c_thumbnailSize);
-        container->setFixedHeight(c_thumbnailSize + 20);
-
-        QLabel *snapshotLabel = new QLabel(container);
-        snapshotLabel->setObjectName("snapshotLabel");
-        snapshotLabel->setAlignment(Qt::AlignCenter);
-        snapshotLabel->setText(i == thumbnails.size() - 1 ? tr("C") : QString::number(i + 1));
-        snapshotLabel->setGeometry(0, 0, c_thumbnailSize, 16);
-        snapshotLabel->setContextMenuPolicy(Qt::NoContextMenu);
-
-        bool isSelected = (i == m_currentIndex);
-        snapshotLabel->setProperty("selected", isSelected ? "true" : "false");
-        snapshotLabel->setEnabled(isSelected);
-
-        SnapshotTab *lbl = new SnapshotTab(container);
-        lbl->setFixedSize(c_thumbnailSize, c_thumbnailSize);
-        lbl->setAlignment(Qt::AlignCenter);
-        lbl->setPixmap(thumbnails[i]);
-        lbl->setGeometry(0, 16, c_thumbnailSize, c_thumbnailSize);
-        lbl->setContentsMargins(0, 0, 0, 0);
-        lbl->setContextMenuPolicy(Qt::NoContextMenu);
-
-        // Select the current thumbnail
-        lbl->setSelected(isSelected);
-
-        lbl->setToolTip(m_labels.isEmpty() ? QString("v%1").arg(i + 1) : m_labels[i]);
-
-        int idx = i;
-        connect(lbl, &SnapshotTab::clicked, this, [this, idx]() { emit snapshotSelected(idx); });
-
-        m_snapshottabs.append(lbl);
-        m_snapshotLabels.append(snapshotLabel);
-        m_containers.append(container);
-        m_contentLayout->addWidget(container);
-
-        snapshotLabel->installEventFilter(this);
-        lbl->installEventFilter(this);
-        container->installEventFilter(this);
-    }
-
-    // adjust to fit container
-    m_contentLayout->addStretch(1);
-    m_contentWidget->adjustSize();
-
-    // Scroll to center the current thumbnail (deferred so layout is settled)
-    if (m_currentIndex >= 0 && m_currentIndex < static_cast<int>(m_snapshottabs.size())) {
-        m_scrollTimer.start(0);
-    }
-}
-
-void SnapshotTimeline::doScrollToCurrent() {
-    if (m_currentIndex < 0 || m_currentIndex >= static_cast<int>(m_snapshottabs.size()))
-        return;
-    if (m_currentIndex >= static_cast<int>(m_containers.size()))
-        return;
-    QWidget *container = m_containers[m_currentIndex];
-    if (!container)
-        return;
-    int targetX = container->x() - (m_scrollArea->viewport()->width() / 2) + (c_thumbnailSize / 2);
-    m_scrollArea->horizontalScrollBar()->setValue(targetX);
+    int btnH = m_createButton->height();
+    int x = width() - 23; // crop ~27px of the right edge
+    int y = (height() - btnH) / 2;
+    m_createButton->move(x, y);
 }

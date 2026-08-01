@@ -5,73 +5,89 @@
 #include <QVector>
 #include <QWidget>
 
-#include "snapshottab.h"
+#include "ui/snapshotmodel.h"
+#include "ui/snapshottimelinedelagate.h"
 
 #include <QHBoxLayout>
-#include <QScrollArea>
-#include <QTimer>
-#include <QWheelEvent>
+#include <QListView>
 
-/// @brief Horizontal scrollable strip of snapshot tabs.
+/**
+ * @class SnapshotTimeline
+ * @brief A widget providing a horizontal timeline of image snapshots.
+ *
+ * This component allows users to browse through historical versions of an image,
+ * select a snapshot to restore it, or create new snapshots.
+ */
 class SnapshotTimeline : public QWidget {
     Q_OBJECT
 
   public:
-    /// @brief Construct the snapshot timeline.
-    /// @param parent Optional parent widget.
     explicit SnapshotTimeline(QWidget *parent = nullptr);
 
-    /// @brief Update the full list of snapshot thumbnails.
-    /// @param thumbnails Pre-scaled thumbnail pixmaps.
-    /// @param labels     Human-readable labels for each thumbnail. Must match
-    ///                   thumbnails in size (or be empty).
-    void setThumbnails(const QVector<QPixmap>& thumbnails, const QVector<QString>& labels);
+    /**
+     * @brief Updates the timeline with a new set of thumbnails and labels.
+     * @param thumbnails List of thumbnail images to display.
+     * @param labels List of labels for each thumbnail.
+     * @param indices The internal indices mapping thumbnails to snapshots.
+     */
+    void setThumbnails(const QVector<QPixmap>& thumbnails,
+                       const QVector<QString>& labels,
+                       const QVector<int>&     indices);
 
-    /// @brief Set the active index.
-    /// @param index Zero-based version index. Clamped to valid range.
+    /**
+     * @brief Marks a snapshot as new to highlight it in the timeline.
+     * @param snapshotIndex The index of the snapshot to mark.
+     */
+    void markSnapshotAsNew(int snapshotIndex);
+
+    /**
+     * @brief Sets the currently selected snapshot index.
+     * @param index The index to select.
+     */
     void setSelectedIndex(int index);
 
-    /// @brief Update a single thumbnail without rebuilding the timeline.
+    /**
+     * @brief Updates a single thumbnail in the timeline.
+     * @param index The row index in the model.
+     * @param pixmap The new thumbnail image.
+     */
     void updateThumbnail(int index, const QPixmap& pixmap);
 
-    /// @brief Returns true when no thumbnails are shown.
+    /**
+     * @brief Checks if the timeline is currently empty.
+     */
     bool isEmpty() const;
 
-    /// @brief Handle events from child widgets.
     bool eventFilter(QObject *obj, QEvent *event) override;
 
   protected:
-    void wheelEvent(QWheelEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
   signals:
-    /// @brief Emitted when a snapshot is selected (by click or wheel).
-    /// @param index Zero-based index of the selected snapshot.
+    /**
+     * @brief Emitted when a snapshot is selected from the timeline.
+     * @param index The index of the selected snapshot.
+     */
     void snapshotSelected(int index);
 
-    /// @brief Emitted when the create snapshot button is clicked.
+    /**
+     * @brief Emitted when the user clicks the "+" button to create a snapshot.
+     */
     void createSnapshotRequested();
 
-    /// @brief Emitted when a snapshot deletion is requested via context menu.
-    /// @param index Zero-based index of the snapshot to delete.
+    /**
+     * @brief Emitted when a request is made to delete a snapshot.
+     * @param index The index of the snapshot to delete.
+     */
     void snapshotDeletionRequested(int index);
 
   private:
-    void buildStrip(const QVector<QPixmap>& thumbnails);
     void updateSelection(int oldIndex, int newIndex);
-    void updateTabState(int index, bool selected);
-    void setThumbnailState(QLabel *lbl, const char *state);
-    void doScrollToCurrent();
 
-    int              m_currentIndex = -1;
-    QVector<QString> m_labels;
+    int                       m_currentIndex = -1;
+    SnapshotModel            *m_model = nullptr;
+    QListView                *m_listView = nullptr;
+    SnapshotTimelineDelegate *m_delegate = nullptr;
 
-    QScrollArea           *m_scrollArea = nullptr;
-    QWidget               *m_contentWidget = nullptr;
-    QHBoxLayout           *m_contentLayout = nullptr;
-    QVector<SnapshotTab *> m_snapshottabs;
-    QVector<QLabel *>      m_snapshotLabels;
-    QVector<QWidget *>     m_containers;
-    QTimer                 m_scrollTimer;
-    QWidget               *m_createButtonWrapper = nullptr;
-    QPushButton           *m_createButton = nullptr;
+    QPushButton *m_createButton = nullptr;
 };

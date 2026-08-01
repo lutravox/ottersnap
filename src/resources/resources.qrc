@@ -1,7 +1,6 @@
 <RCC>
     <qresource prefix="/">
         <file alias="qss/snapshottimeline.qss">qss/snapshottimeline.qss</file>
-        <file alias="qss/snapshottab.qss">qss/snapshottab.qss</file>
         <file alias="qss/notification.qss">qss/notification.qss</file>
         <file alias="qss/vkimageviewer.qss">qss/vkimageviewer.qss</file>
         <file alias="qss/messagebox.qss">qss/messagebox.qss</file>

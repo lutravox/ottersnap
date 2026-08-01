@@ -15,6 +15,9 @@ ImageTab::ImageTab(QWidget *parent) : QWidget(parent), m_session(new ImageSessio
     connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
     connect(m_session, &ImageSession::thumbnailChanged, this, &ImageTab::onThumbnailChanged);
+    connect(m_session, &ImageSession::snapshotCreated, this, [this](int idx) {
+        emit snapshotCreated(idx);
+    });
     connect(&m_thumbnailUpdateTimer, &QTimer::timeout, this, &ImageTab::onThumbnailTimerTimeout);
 
     setupUi();

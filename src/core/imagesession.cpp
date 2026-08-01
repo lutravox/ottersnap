@@ -80,8 +80,7 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         return std::nullopt;
     }
 
-    const ImageSnapshot& target = m_snapshots[index];
-    int                  baseIdx = -1;
+    int baseIdx = -1;
     for (int i = index; i >= 0; --i) {
         if (m_snapshots[i].isBase) {
             baseIdx = i;
@@ -132,29 +131,7 @@ void ImageSession::saveSnapshot() {
     if (m_diskImage.isNull())
         return;
 
-    QString path = m_filePath;
-    QImage  img = m_diskImage;
-
-    auto watcher = new QFutureWatcher<std::optional<SnapshotStore::SaveResult>>(this);
-    connect(watcher,
-            &QFutureWatcher<std::optional<SnapshotStore::SaveResult>>::finished,
-            [this, watcher]() {
-                auto res = watcher->result();
-                if (res && res->status == SnapshotStore::SaveStatus::Created) {
-                    rebuildSnapshotList();
-                    emit statusMessage("Snapshot saved.");
-                } else if (res && res->status == SnapshotStore::SaveStatus::Existing) {
-                    int  pos = getRelativeVersion(res->snapshotIndex);
-                    emit statusMessage(QString("Current image already saved as snapshot %1.")
-                                           .arg(pos != -1 ? QString::number(pos)
-                                                          : QString::number(res->snapshotIndex)));
-                } else {
-                    emit statusMessage("Save failed.");
-                }
-                watcher->deleteLater();
-            });
-    watcher->setFuture(
-        QtConcurrent::run([path, img]() { return SnapshotStore::saveSnapshot(path, img); }));
+    performSave(m_diskImage, false);
 }
 
 void ImageSession::deleteSnapshot(int index) {
@@ -187,7 +164,7 @@ void ImageSession::deleteSnapshot(int index) {
         m_selectedIndex = qBound(0, m_selectedIndex, static_cast<int>(m_snapshots.size()));
 
         emit imageChanged();
-        emit statusMessage(QString("Snapshot %1 deleted.").arg(relativeVersion));
+        emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
     } else {
         emit statusMessage("Failed to delete snapshot.");
     }
@@ -228,27 +205,47 @@ void ImageSession::reloadImage() {
 }
 
 void ImageSession::autosaveSnapshot(const QImage& img) {
+    performSave(img, true);
+}
+
+void ImageSession::performSave(const QImage& img, bool isAutosave) {
     QString path = m_filePath;
-    QImage  image = img;
 
     auto watcher = new QFutureWatcher<std::optional<SnapshotStore::SaveResult>>(this);
     connect(watcher,
             &QFutureWatcher<std::optional<SnapshotStore::SaveResult>>::finished,
-            [this, watcher]() {
+            [this, watcher, isAutosave]() {
                 auto res = watcher->result();
                 if (res && res->status == SnapshotStore::SaveStatus::Created) {
                     bool wasViewingCurrent = isCurrentImage(m_selectedIndex);
-                    rebuildSnapshotList();
                     if (wasViewingCurrent) {
-                        m_selectedIndex = static_cast<int>(m_snapshots.size());
+                        m_selectedIndex++;
+                    }
+
+                    rebuildSnapshotList();
+
+                    if (wasViewingCurrent) {
                         emit imageChanged();
                     }
-                    emit statusMessage("Snapshot autosaved.");
+
+                    QString msg =
+                        isAutosave ? "Autosave successful." : "New snapshot created successfully.";
+                    emit statusMessage(msg);
+                    emit snapshotCreated(res->snapshotIndex);
+                } else if (res && res->status == SnapshotStore::SaveStatus::Existing &&
+                           !isAutosave) {
+                    int  pos = getRelativeVersion(res->snapshotIndex);
+                    emit statusMessage(QString("Current image already saved as snapshot %1.")
+                                           .arg(pos != -1 ? QString::number(pos)
+                                                          : QString::number(res->snapshotIndex)));
+                } else if (!res || (res && res->status != SnapshotStore::SaveStatus::Existing &&
+                                    res->status != SnapshotStore::SaveStatus::Created)) {
+                    emit statusMessage("Save failed.");
                 }
                 watcher->deleteLater();
             });
     watcher->setFuture(
-        QtConcurrent::run([path, image]() { return SnapshotStore::saveSnapshot(path, image); }));
+        QtConcurrent::run([path, img]() { return SnapshotStore::saveSnapshot(path, img); }));
 }
 
 int ImageSession::getRelativeVersion(int snapshotIndex) const {
@@ -280,17 +277,22 @@ void ImageSession::rebuildSnapshotList() {
     emit snapshotsChanged();
 }
 
-std::pair<QVector<QImage>, QVector<QString>> ImageSession::snapshotTimelineThumbnails(int size) {
+std::tuple<QVector<QImage>, QVector<QString>, QVector<int>>
+ImageSession::snapshotTimelineThumbnails(int size) {
     QVector<QImage> thumbs;
+    QVector<int>    indices;
     thumbs.reserve(m_snapshots.size() + 1);
+    indices.reserve(m_snapshots.size() + 1);
 
     for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
         thumbs.append(generateThumbnail(i, size));
+        indices.append(m_snapshots[i].snapshotIndex);
     }
 
     thumbs.append(generateThumbnail(static_cast<int>(m_snapshots.size()), size));
+    indices.append(-1); // Current image is not a snapshot in the store
 
-    return {thumbs, m_labels};
+    return {thumbs, m_labels, indices};
 }
 
 QImage ImageSession::thumbnail(int size) {

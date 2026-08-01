@@ -58,6 +58,10 @@ class ImageTab : public QWidget {
     /// @param index New snapshot index.
     void snapshotChanged(int index);
 
+    /// @brief Emitted when a new snapshot is created.
+    /// @param snapshotIndex The unique index of the new snapshot.
+    void snapshotCreated(int snapshotIndex);
+
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
 

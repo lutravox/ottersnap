@@ -350,8 +350,8 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
         return std::nullopt;
     }
 
-    qDebug() << "[SnapshotStore] saved snapshot" << s.snapshotIndex
-             << (s.isBase ? "(base)" : " (delta)") << "for" << filePath;
+    qDebug() << "[SnapshotStore] Saved snapshot" << s.snapshotIndex
+             << (s.isBase ? "(base)" : "(delta)") << "for" << filePath;
     s_snapshotsCache[key] = snapshots;
 
     return SaveResult{SaveStatus::Created, s.snapshotIndex};

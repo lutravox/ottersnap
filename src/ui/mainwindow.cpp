@@ -23,7 +23,6 @@
 
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
-#include "core/diskutils.h"
 #include "core/vulkancontext.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/emptystate.h"
@@ -564,6 +563,11 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     });
     connect(tab, &ImageTab::snapshotsChanged, this, &MainWindow::syncTimelineSelection);
     connect(tab, &ImageTab::snapshotChanged, this, &MainWindow::onSnapshotChanged);
+    connect(tab, &ImageTab::snapshotCreated, this, [this, tab](int snapshotIdx) {
+        if (tab == currentTab()) {
+            m_viewerState->snapshotTimeline()->markSnapshotAsNew(snapshotIdx);
+        }
+    });
 
     QString displayName = QFileInfo(path).fileName();
     int     index = m_tabBar->addTab(tab, displayName);
@@ -656,6 +660,7 @@ void MainWindow::syncTimelineSelection() {
     auto *tab = currentTab();
     if (!tab)
         return;
+    updateSnapshotTimeline();
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
 
@@ -677,7 +682,7 @@ void MainWindow::updateSnapshotTimeline() {
         return;
     }
 
-    auto [images, labels] =
+    auto [images, labels, indices] =
         tab->session()->snapshotTimelineThumbnails(ThumbnailConstants::StandardSize);
     QVector<QPixmap> thumbs;
     thumbs.reserve(images.size());
@@ -690,7 +695,7 @@ void MainWindow::updateSnapshotTimeline() {
         }
     }
 
-    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels);
+    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels, indices);
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
 

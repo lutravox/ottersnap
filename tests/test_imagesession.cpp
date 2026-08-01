@@ -107,7 +107,7 @@ void TestImageSession::testSnapshotThumbnails() {
     ImageSession session;
     session.openImage(m_testFilePath);
 
-    auto [thumbs, labels] = session.snapshotTimelineThumbnails(32);
+    auto [thumbs, labels, indices] = session.snapshotTimelineThumbnails(32);
 
     // Should at least contain the current image thumbnail
     QVERIFY(!thumbs.isEmpty());

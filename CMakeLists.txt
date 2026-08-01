@@ -99,7 +99,8 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/notification.cpp
     src/ui/notificationmanager.cpp
     src/ui/snapshottimeline.cpp
-    src/ui/snapshottab.cpp
+    src/ui/snapshotmodel.cpp
+    src/ui/snapshottimelinedelagate.cpp
     src/ui/tabbar.cpp
     src/ui/emptystate.cpp
     src/ui/statusbar.cpp

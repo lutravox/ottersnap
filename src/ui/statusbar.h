@@ -32,6 +32,9 @@ class StatusBar : public QWidget {
     /// @param timestamp The formatted timestamp string.
     void setTimestamp(const QString& timestamp);
 
+    /// @brief Handle the custom context menu request for the zoom spinbox.
+    void onZoomSpinboxContextMenuRequested(const QPoint& pos);
+
   signals:
     /// @brief Emitted when the user changes the zoom via the spinbox.
     /// @param pct The new zoom percentage.

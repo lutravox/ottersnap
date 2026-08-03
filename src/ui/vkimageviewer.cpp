@@ -119,6 +119,22 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                     //  Context Menu
                     QMenu menu(this);
 
+                    // View options
+                    auto *scaleWithWindowAction = menu.addAction(tr("Scale with Window"));
+                    scaleWithWindowAction->setCheckable(true);
+                    scaleWithWindowAction->setChecked(m_scaleWithWindow);
+
+                    auto *resetViewAction = menu.addAction(tr("Reset View"));
+                    auto *actualSizeAction = menu.addAction(tr("Actual Size (100%)"));
+
+                    menu.addSeparator();
+
+                    auto *zoomInAction = menu.addAction(tr("Zoom In"));
+                    auto *zoomOutAction = menu.addAction(tr("Zoom Out"));
+
+                    menu.addSeparator();
+
+                    // Effects options
                     auto *grayscaleAction = menu.addAction(tr("Grayscale"));
                     grayscaleAction->setCheckable(true);
                     grayscaleAction->setChecked(m_renderer->grayscaleEnabled());
@@ -127,15 +143,35 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                     mirrorAction->setCheckable(true);
                     mirrorAction->setChecked(m_renderer->mirrorEnabled());
 
+                    menu.addSeparator();
+
+                    auto *resetEffectsAction = menu.addAction(tr("Reset All Effects"));
+
                     QAction *selectedAction = menu.exec(me->globalPosition().toPoint());
 
-                    if (selectedAction == grayscaleAction) {
-                        bool enabled = grayscaleAction->isChecked();
-                        emit grayscaleToggled(enabled);
+                    if (selectedAction == scaleWithWindowAction) {
+                        emit scaleWithWindowToggled(scaleWithWindowAction->isChecked());
+                        return true;
+                    } else if (selectedAction == resetViewAction) {
+                        emit resetViewRequested();
+                        return true;
+                    } else if (selectedAction == actualSizeAction) {
+                        emit actualSizeRequested();
+                        return true;
+                    } else if (selectedAction == zoomInAction) {
+                        emit zoomInRequested();
+                        return true;
+                    } else if (selectedAction == zoomOutAction) {
+                        emit zoomOutRequested();
+                        return true;
+                    } else if (selectedAction == grayscaleAction) {
+                        emit grayscaleToggled(grayscaleAction->isChecked());
                         return true;
                     } else if (selectedAction == mirrorAction) {
-                        bool enabled = mirrorAction->isChecked();
-                        emit mirrorToggled(enabled);
+                        emit mirrorToggled(mirrorAction->isChecked());
+                        return true;
+                    } else if (selectedAction == resetEffectsAction) {
+                        emit resetEffectsRequested();
                         return true;
                     }
                 }
@@ -230,6 +266,10 @@ void VkImageViewer::setSession(ImageSession *session) {
     if (m_renderer) {
         m_renderer->setSession(session);
     }
+}
+
+void VkImageViewer::setScaleWithWindowChecked(bool checked) {
+    m_scaleWithWindow = checked;
 }
 
 void VkImageViewer::onEffectsChanged() {

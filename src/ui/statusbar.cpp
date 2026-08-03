@@ -1,10 +1,12 @@
 #include "ui/statusbar.h"
 
+#include <QAction>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QHBoxLayout>
 #include <QIODevice>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QWidget>
 
@@ -22,8 +24,16 @@ StatusBar::StatusBar(QWidget *parent)
     zoomSpinbox->setDecimals(1);
     zoomSpinbox->setSuffix("%");
     zoomSpinbox->setMinimumWidth(90);
+    zoomSpinbox->setToolTip(tr("Zoom level"));
+
+    zoomSpinbox->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(zoomSpinbox,
+            &QWidget::customContextMenuRequested,
+            this,
+            &StatusBar::onZoomSpinboxContextMenuRequested);
 
     resetButton->setFixedWidth(60);
+    resetButton->setToolTip(tr("Reset view to fit window"));
 
     m_timestampLabel->setText("");
     m_timestampLabel->setObjectName("timestampLabel");
@@ -71,4 +81,34 @@ void StatusBar::setDimensions(int width, int height) {
 
 void StatusBar::setTimestamp(const QString& timestamp) {
     m_timestampLabel->setText(timestamp);
+}
+
+void StatusBar::onZoomSpinboxContextMenuRequested(const QPoint& pos) {
+    QMenu menu(this);
+
+    struct ZoomOption {
+        QString label;
+        double  value;
+    };
+
+    const QVector<ZoomOption> options = {
+        {tr("5%"), 5.0},
+        {tr("10%"), 10.0},
+        {tr("25%"), 25.0},
+        {tr("50%"), 50.0},
+        {tr("100%"), 100.0},
+        {tr("200%"), 200.0},
+        {tr("400%"), 400.0},
+        {tr("800%"), 800.0},
+        {tr("1600%"), 1600.0},
+    };
+
+    for (const auto& opt : options) {
+        auto *action = menu.addAction(opt.label);
+        connect(action, &QAction::triggered, this, [this, val = opt.value]() {
+            zoomSpinbox->setValue(val);
+        });
+    }
+
+    menu.exec(zoomSpinbox->mapToGlobal(pos));
 }

@@ -43,6 +43,9 @@ class EffectsController : public QObject {
     /// @brief Set the current state being managed. Syncs UI and renderer to state.
     void setTargetState(IEffectsState *state);
 
+    /// @brief Reset all effects.
+    void reset();
+
     /// @brief Toggle grayscale mode.
     void toggleGrayscale();
 

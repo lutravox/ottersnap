@@ -157,7 +157,32 @@ void MainWindow::setupUi() {
     // Notifications
     m_notificationManager = new NotificationManager(this);
 
-    // Connect viewer resizes to controller
+    // Connections
+    connect(m_viewerState->viewer(),
+            &VkImageViewer::resetViewRequested,
+            this,
+            &MainWindow::onResetView);
+
+    connect(m_viewerState->viewer(),
+            &VkImageViewer::actualSizeRequested,
+            this,
+            &MainWindow::onActualSize);
+
+    connect(m_viewerState->viewer(), &VkImageViewer::zoomInRequested, this, &MainWindow::onZoomIn);
+
+    connect(
+        m_viewerState->viewer(), &VkImageViewer::zoomOutRequested, this, &MainWindow::onZoomOut);
+
+    connect(m_viewerState->viewer(),
+            &VkImageViewer::scaleWithWindowToggled,
+            this,
+            &MainWindow::onToggleScaleWithWindow);
+
+    connect(m_viewerState->viewer(),
+            &VkImageViewer::resetEffectsRequested,
+            this,
+            &MainWindow::onResetEffects);
+
     connect(m_viewerState->viewer(),
             &VkImageViewer::viewportResized,
             m_viewerController,
@@ -226,7 +251,8 @@ void MainWindow::setupMenu() {
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
     m_actionResetView->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-    connect(m_actionResetView, &QAction::triggered, this, &MainWindow::onResetView);
+    connect(
+        m_actionResetView, &QAction::triggered, m_viewerController, &ViewerController::fitToWindow);
 
     m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
     m_actionActualSize->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
@@ -265,7 +291,8 @@ void MainWindow::setupMenu() {
 
     m_effectsMenu->addSeparator();
     m_actionResetEffects = m_effectsMenu->addAction(tr("Reset All &Effects"));
-    connect(m_actionResetEffects, &QAction::triggered, this, &MainWindow::onResetEffects);
+    connect(
+        m_actionResetEffects, &QAction::triggered, m_effectsController, &EffectsController::reset);
 
     updateMenuBar();
     updateRecentFilesMenu();

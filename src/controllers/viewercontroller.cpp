@@ -48,6 +48,9 @@ void ViewerController::setViewer(IViewer *viewer) {
         connect(
             vkViewer, &VkImageViewer::grayscaleToggled, this, &ViewerController::grayscaleToggled);
         connect(vkViewer, &VkImageViewer::mirrorToggled, this, &ViewerController::mirrorToggled);
+
+        // Sync initial state
+        vkViewer->setScaleWithWindowChecked(isScaleWithWindowEnabled());
     }
 }
 
@@ -93,6 +96,10 @@ void ViewerController::setZoomPercentage(double pct) {
 
 void ViewerController::setScaleWithWindowEnabled(bool enabled) {
     AppSettings::setScaleWithWindow(enabled);
+
+    if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
+        vkViewer->setScaleWithWindowChecked(enabled);
+    }
 }
 
 bool ViewerController::isScaleWithWindowEnabled() const {

@@ -56,6 +56,11 @@ void EffectsController::setMirror(bool enabled) {
     }
 }
 
+void EffectsController::reset() {
+    setGrayscale(false);
+    setMirror(false);
+}
+
 void EffectsController::syncFromState() {
     if (!m_state) {
         if (m_ui) {

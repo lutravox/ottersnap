@@ -17,9 +17,11 @@ class SettingsDialog : public QDialog {
     explicit SettingsDialog(QWidget *parent = nullptr);
 
   private:
-    QCheckBox *m_cbRestoreSession;
-    QCheckBox *m_cbAutosave;
-    QCheckBox *m_cbAutoreload;
-    QSpinBox  *m_sbThumbCacheSize;
-    QSpinBox  *m_sbDeltaCacheSize;
+    QCheckBox   *m_cbRestoreSession;
+    QCheckBox   *m_cbAutosave;
+    QCheckBox   *m_cbAutoreload;
+    QSpinBox    *m_sbThumbCacheSize;
+    QSpinBox    *m_sbDeltaCacheSize;
+    QPushButton *m_btnBackgroundColor;
+    QColor       m_bgColor;
 };

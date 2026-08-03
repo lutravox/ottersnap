@@ -16,6 +16,7 @@ class TestAppSettings : public QObject {
     void testMaxDeltaCacheSize();
     void testBaseInterval();
     void testScaleWithWindow();
+    void testBackgroundColor();
     void testIdentity();
 };
 
@@ -76,6 +77,15 @@ void TestAppSettings::testScaleWithWindow() {
     QCOMPARE(AppSettings::scaleWithWindow(), true);
     AppSettings::setScaleWithWindow(false);
     QCOMPARE(AppSettings::scaleWithWindow(), false);
+}
+
+void TestAppSettings::testBackgroundColor() {
+    QColor testColor = QColor("#ff0000");
+    AppSettings::setBackgroundColor(testColor);
+    QCOMPARE(AppSettings::backgroundColor(), testColor);
+
+    AppSettings::resetBackgroundColor();
+    QCOMPARE(AppSettings::backgroundColor(), QColor(c_defaultBackgroundColor));
 }
 
 void TestAppSettings::testIdentity() {

@@ -1,7 +1,7 @@
 #pragma once
 
+#include <QColor>
 #include <QElapsedTimer>
-#include <QImage>
 #include <QPointF>
 #include <QSize>
 #include <QVulkanDeviceFunctions>
@@ -10,9 +10,6 @@
 #include <vulkan/vulkan.h>
 #include "core/imagesession.h"
 #include "core/vksnapshotreconstructor.h"
-
-/// @brief The background color used to clear the viewport.
-static constexpr float kClearColor = 0.12f;
 
 /// @struct UniformBufferObject
 /// @brief Layout of the uniform buffer used for image display.

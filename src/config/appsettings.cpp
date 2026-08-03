@@ -1,3 +1,4 @@
+#include <QColor>
 #include "config/appsettings.h"
 
 constexpr char c_applicationName[] = "Ottersnap";
@@ -75,6 +76,20 @@ int AppSettings::baseInterval() {
 
 void AppSettings::setBaseInterval(int value) {
     settings().setValue(c_keyBaseInterval, value);
+}
+
+QColor AppSettings::backgroundColor() {
+    return settings()
+        .value(c_keyBackgroundColor, QString(c_defaultBackgroundColor))
+        .value<QColor>();
+}
+
+void AppSettings::setBackgroundColor(const QColor& value) {
+    settings().setValue(c_keyBackgroundColor, value);
+}
+
+void AppSettings::resetBackgroundColor() {
+    settings().remove(c_keyBackgroundColor);
 }
 
 const char *AppSettings::applicationName() {

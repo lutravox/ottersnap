@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QSettings>
+#include <string_view>
 
 // Defaults
 constexpr int  c_defaultSnapshotCacheMB = 256;
@@ -12,14 +13,16 @@ constexpr bool c_defaultAutoreloadImages = true;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
-constexpr char c_keyResizeToFit[] = "General/resizeToFit";
-constexpr char c_keyRestoreSession[] = "General/restoreSession";
-constexpr char c_keyAutosaveSnapshots[] = "General/autosaveSnapshots";
-constexpr char c_keyAutoreloadImages[] = "General/autoreloadImages";
-constexpr char c_keyBaseInterval[] = "General/baseInterval";
-constexpr char c_keySnapshotCacheSizeMB[] = "General/maxSnapshotCacheSizeMB";
-constexpr char c_keyThumbnailCacheSizeMB[] = "General/maxThumbnailCacheSizeMB";
-constexpr char c_keyDeltaCacheSizeMB[] = "General/maxDeltaCacheSizeMB";
+constexpr std::string_view c_keyResizeToFit = "General/resizeToFit";
+constexpr std::string_view c_keyRestoreSession = "General/restoreSession";
+constexpr std::string_view c_keyAutosaveSnapshots = "General/autosaveSnapshots";
+constexpr std::string_view c_keyAutoreloadImages = "General/autoreloadImages";
+constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
+constexpr std::string_view c_keySnapshotCacheSizeMB = "General/maxSnapshotCacheSizeMB";
+constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
+constexpr std::string_view c_keyDeltaCacheSizeMB = "General/maxDeltaCacheSizeMB";
+constexpr std::string_view c_keyBackgroundColor = "General/backgroundColor";
+constexpr const char      *c_defaultBackgroundColor = "#1f1f1f";
 
 /// @brief Global application settings persisted via QSettings.
 class AppSettings {
@@ -79,11 +82,19 @@ class AppSettings {
     static void setMaxThumbnailCacheSizeMB(int value);
 
     /// @brief Return the maximum memory allowed for the delta cache in MB.
-    /// @return The cache size in MB.
     static int maxDeltaCacheSizeMB();
     /// @brief Set the maximum memory allowed for the delta cache.
     /// @param value The size in MB.
     static void setMaxDeltaCacheSizeMB(int value);
+
+    /// @brief Return the background color of the image viewer.
+    static QColor backgroundColor();
+    /// @brief Set the background color of the image viewer.
+    static void setBackgroundColor(const QColor& color);
+    /// @brief Reset the background color to the default.
+    static void resetBackgroundColor();
+
+    /// @brief Return whether snapshots should be automatically saved when the file changes.
 
   private:
     AppSettings() = delete;

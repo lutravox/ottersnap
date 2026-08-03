@@ -1,4 +1,5 @@
 #include "ui/vkimageviewerrenderer.h"
+#include "config/appsettings.h"
 #include "core/vulkancontext.h"
 #include "core/vulkanutils.h"
 
@@ -968,9 +969,10 @@ void VkImageViewerRenderer::startNextFrame() {
 
     // Begin render pass
     VkClearValue cv[2]{};
-    cv[0].color.float32[0] = kClearColor;
-    cv[0].color.float32[1] = kClearColor;
-    cv[0].color.float32[2] = kClearColor;
+    QColor       bgColor = AppSettings::backgroundColor();
+    cv[0].color.float32[0] = bgColor.redF();
+    cv[0].color.float32[1] = bgColor.greenF();
+    cv[0].color.float32[2] = bgColor.blueF();
     cv[0].color.float32[3] = 1.0f;
     cv[1].depthStencil.depth = 1.0f;
 

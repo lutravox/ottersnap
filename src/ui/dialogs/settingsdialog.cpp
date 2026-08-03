@@ -4,9 +4,11 @@
 #include "core/thumbnailcache.h"
 
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -29,9 +31,36 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbAutoreload = new QCheckBox(tr("Autoreload images"), this);
     m_cbAutoreload->setChecked(AppSettings::autoreloadImages());
     layout->addWidget(m_cbAutoreload);
-
     m_cbAutosave->setEnabled(m_cbAutoreload->isChecked());
     connect(m_cbAutoreload, &QCheckBox::toggled, m_cbAutosave, &QCheckBox::setEnabled);
+
+    // Background color
+    auto *bgLayout = new QHBoxLayout();
+    auto *bgLabel = new QLabel(tr("Background color:"), this);
+    m_btnBackgroundColor = new QPushButton(this);
+    m_bgColor = AppSettings::backgroundColor();
+    m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+
+    connect(m_btnBackgroundColor, &QPushButton::clicked, this, [this]() {
+        QColor color = QColorDialog::getColor(m_bgColor, this, tr("Select Background Color"));
+        if (color.isValid()) {
+            m_bgColor = color;
+            m_btnBackgroundColor->setStyleSheet(
+                QString("background-color: %1;").arg(m_bgColor.name()));
+        }
+    });
+
+    auto *btnResetBg = new QPushButton(tr("Reset"), this);
+    btnResetBg->setFixedWidth(60);
+    connect(btnResetBg, &QPushButton::clicked, this, [this]() {
+        m_bgColor = QColor(c_defaultBackgroundColor);
+        m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+    });
+
+    bgLayout->addWidget(bgLabel);
+    bgLayout->addWidget(m_btnBackgroundColor);
+    bgLayout->addWidget(btnResetBg);
+    layout->addLayout(bgLayout);
 
     // Cap the spinbox max at total system RAM
     struct sysinfo si;
@@ -69,6 +98,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
         AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
         AppSettings::setAutoreloadImages(m_cbAutoreload->isChecked());
+        AppSettings::setBackgroundColor(m_bgColor);
         AppSettings::setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
         ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
         AppSettings::setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());

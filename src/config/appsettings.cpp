@@ -70,6 +70,14 @@ void AppSettings::setAutoreloadImages(bool value) {
     settings().setValue(c_keyAutoreloadImages, value);
 }
 
+bool AppSettings::snapshotOnReopen() {
+    return settings().value(c_keySnapshotOnReopen, c_defaultSnapshotOnReopen).toBool();
+}
+
+void AppSettings::setSnapshotOnReopen(bool value) {
+    settings().setValue(c_keySnapshotOnReopen, value);
+}
+
 int AppSettings::baseInterval() {
     return settings().value(c_keyBaseInterval, c_defaultBaseInterval).toInt();
 }

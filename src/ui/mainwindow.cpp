@@ -1,4 +1,5 @@
 #include "ui/mainwindow.h"
+#include "core/diskutils.h"
 #include "core/imagesession.h"
 #include "core/snapshotstore.h"
 #include "core/thumbnailcache.h"
@@ -522,6 +523,14 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
 void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     // Check if already open
     if (auto *existing = m_tabPaths.value(path)) {
+        // If the image on disk has changed, save a snapshot and reload
+        if (DiskUtils::loadImage(path) != existing->diskImage()) {
+            if (!AppSettings::autosaveSnapshots() && AppSettings::snapshotOnReopen()) {
+                existing->saveSnapshot();
+            }
+            existing->session()->reloadImage();
+        }
+
         if (setAsCurrent) {
             m_tabBar->setCurrentWidget(existing);
         }

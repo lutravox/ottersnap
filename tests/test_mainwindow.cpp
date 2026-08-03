@@ -3,8 +3,11 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QPainter>
+#include <QSignalSpy>
 #include <QtTest>
+#include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
+#include "core/vulkancontext.h"
 #include "ui/imagetab.h"
 #include "ui/mainwindow.h"
 #include "ui/tabbar.h"
@@ -28,6 +31,10 @@ class MainWindowTestWrapper : public MainWindow {
         openImageFile(path);
     }
 
+    void testOpenImageFileReopen(const QString& path) {
+        openImageFile(path);
+    }
+
     void testOnCloseTab(int index) {
         onCloseTab(index);
     }
@@ -43,6 +50,9 @@ class TestMainWindow : public QObject {
   private slots:
     void init() {
         m_window = new MainWindowTestWrapper();
+
+        // Initialize Vulkan for snapshot reconstruction
+        VulkanContext::instance().initializeInstance();
 
         // Create some dummy images for testing
         m_testFiles = {"test_image_1.png", "test_image_2.png", "test_image_3.png"};
@@ -74,6 +84,49 @@ class TestMainWindow : public QObject {
         QVERIFY(m_window->tabPaths().contains(m_testFiles[0]));
         QVERIFY(m_window->tabPaths().contains(m_testFiles[1]));
         QVERIFY(m_window->tabPaths().contains(m_testFiles[2]));
+    }
+
+    void testSnapshotOnReopen() {
+        const QString& path = m_testFiles[0];
+
+        // Open the image for the first time (State A)
+        m_window->testOpenImageFile(path);
+        auto *tab = m_window->tabPaths().value(path);
+        QVERIFY(tab != nullptr);
+
+        // Change disk image and reload to move session to State B
+        QImage imgB(100, 100, QImage::Format_ARGB32);
+        imgB.fill(Qt::red);
+        imgB.save(path);
+        tab->session()->reloadImage();
+
+        // Wait for reload to finish so session is actually State B
+        QSignalSpy reloadSpy(tab->session(), &ImageSession::imageChanged);
+        reloadSpy.wait(2000);
+
+        // Change disk image again to State C
+        QImage imgC(100, 100, QImage::Format_ARGB32);
+        imgC.fill(Qt::green);
+        imgC.save(path);
+
+        // Enable snapshot on reopen and open again
+        AppSettings::setSnapshotOnReopen(true);
+        QSignalSpy snapshotSpy(tab, &ImageTab::snapshotCreated);
+        m_window->testOpenImageFile(path);
+
+        // Verify that a snapshot of State B was created
+        QVERIFY(snapshotSpy.wait(2000));
+
+        // Disable snapshot on reopen and open again
+        snapshotSpy.clear();
+        AppSettings::setSnapshotOnReopen(false);
+        m_window->testOpenImageFile(path);
+
+        // Verify no new snapshot was created
+        QVERIFY(!snapshotSpy.wait(500));
+
+        // Cleanup
+        AppSettings::setSnapshotOnReopen(true);
     }
 
     void testTabSwitching() {

@@ -11,6 +11,7 @@ class TestAppSettings : public QObject {
     void testRestoreSession();
     void testAutosaveSnapshots();
     void testAutoreloadImages();
+    void testSnapshotOnReopen();
     void testMaxSnapshotCacheSize();
     void testMaxThumbnailCacheSize();
     void testMaxDeltaCacheSize();
@@ -46,6 +47,13 @@ void TestAppSettings::testAutoreloadImages() {
     QCOMPARE(AppSettings::autoreloadImages(), true);
     AppSettings::setAutoreloadImages(false);
     QCOMPARE(AppSettings::autoreloadImages(), false);
+}
+
+void TestAppSettings::testSnapshotOnReopen() {
+    AppSettings::setSnapshotOnReopen(true);
+    QCOMPARE(AppSettings::snapshotOnReopen(), true);
+    AppSettings::setSnapshotOnReopen(false);
+    QCOMPARE(AppSettings::snapshotOnReopen(), false);
 }
 
 void TestAppSettings::testMaxSnapshotCacheSize() {

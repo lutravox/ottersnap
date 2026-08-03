@@ -10,6 +10,7 @@ constexpr int  c_defaultDeltaCacheMB = 1024;
 constexpr int  c_defaultBaseInterval = 100;
 constexpr bool c_defaultAutosaveSnapshots = true;
 constexpr bool c_defaultAutoreloadImages = true;
+constexpr bool c_defaultSnapshotOnReopen = true;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
@@ -17,6 +18,7 @@ constexpr std::string_view c_keyResizeToFit = "General/resizeToFit";
 constexpr std::string_view c_keyRestoreSession = "General/restoreSession";
 constexpr std::string_view c_keyAutosaveSnapshots = "General/autosaveSnapshots";
 constexpr std::string_view c_keyAutoreloadImages = "General/autoreloadImages";
+constexpr std::string_view c_keySnapshotOnReopen = "General/snapshotOnReopen";
 constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
 constexpr std::string_view c_keySnapshotCacheSizeMB = "General/maxSnapshotCacheSizeMB";
 constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
@@ -61,6 +63,11 @@ class AppSettings {
     static bool autoreloadImages();
     /// @brief Set the autoreload images preference.
     static void setAutoreloadImages(bool value);
+
+    /// @brief Return whether a snapshot should be saved when opening an image that is already open.
+    static bool snapshotOnReopen();
+    /// @brief Set the snapshot-on-reopen preference.
+    static void setSnapshotOnReopen(bool value);
 
     /// @brief Return the interval between base snapshots.
     static int baseInterval();

@@ -20,6 +20,7 @@ class SettingsDialog : public QDialog {
     QCheckBox   *m_cbRestoreSession;
     QCheckBox   *m_cbAutosave;
     QCheckBox   *m_cbAutoreload;
+    QCheckBox   *m_cbSnapshotOnReopen;
     QSpinBox    *m_sbThumbCacheSize;
     QSpinBox    *m_sbDeltaCacheSize;
     QPushButton *m_btnBackgroundColor;

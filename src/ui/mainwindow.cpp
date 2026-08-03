@@ -1,5 +1,7 @@
 #include "ui/mainwindow.h"
-#include "core/diskutils.h"
+#include "controllers/effectscontroller.h"
+#include "controllers/imagesessioncontroller.h"
+#include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
 #include "core/snapshotstore.h"
 #include "core/thumbnailcache.h"
@@ -39,8 +41,10 @@ static const int c_defaultHeight = 700;
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_tabBar(nullptr), m_viewerState(nullptr), m_emptyState(nullptr),
       m_session(m_settings) {
+    m_settingsController = new AppSettingsController(this);
+    m_sessionController = new ImageSessionController(m_settingsController, this);
     m_effectsController = new EffectsController(this);
-    m_viewerController = new ViewerController(this);
+    m_viewerController = new ViewerController(m_settingsController, this);
 
     connect(m_viewerController,
             &ViewerController::grayscaleToggled,
@@ -59,14 +63,14 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    m_session.save(collectOpenPaths());
+    m_session.save(m_sessionController->openPaths());
 
     //  Cleanup tab session resources
     if (m_tabBar) {
         for (int i = 0; i < m_tabBar->count(); ++i) {
             auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(i));
             if (tab) {
-                tab->closeImage();
+                m_sessionController->closeSession(tab->filePath());
             }
         }
     }
@@ -74,19 +78,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     QMainWindow::closeEvent(event);
 }
 
-QStringList MainWindow::collectOpenPaths() const {
-    QStringList paths;
-    if (!m_tabBar)
-        return paths;
-
-    for (int i = 0; i < m_tabBar->count(); ++i) {
-        auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(i));
-        if (tab && !tab->filePath().isEmpty())
-            paths << tab->filePath();
-    }
-    return paths;
-}
-
+// Remove the now-redundant collectOpenPaths method
 void MainWindow::setupUi() {
     setWindowTitle(AppSettings::applicationName());
     resize(c_defaultWidth, c_defaultHeight);
@@ -521,23 +513,19 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
 }
 
 void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
-    // Check if already open
-    if (auto *existing = m_tabPaths.value(path)) {
-        // If the image on disk has changed, save a snapshot and reload
-        if (DiskUtils::loadImage(path) != existing->diskImage()) {
-            if (!AppSettings::autosaveSnapshots() && AppSettings::snapshotOnReopen()) {
-                existing->saveSnapshot();
-            }
-            existing->session()->reloadImage();
-        }
+    ImageSession *session = m_sessionController->openImage(path);
+    if (!session)
+        return;
 
+    // Check if already open in a tab
+    if (auto *existing = m_tabPaths.value(path)) {
         if (setAsCurrent) {
             m_tabBar->setCurrentWidget(existing);
         }
         return;
     }
 
-    auto *tab = new ImageTab(this);
+    auto *tab = new ImageTab(this, session);
     connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg, int timeout) {
         notify(msg, timeout);
     });
@@ -582,8 +570,9 @@ void MainWindow::onCloseTab(int index) {
 
     auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
     if (tab) {
-        m_tabPaths.remove(tab->filePath());
-        tab->closeImage();
+        QString path = tab->filePath();
+        m_tabPaths.remove(path);
+        m_sessionController->closeSession(path);
         disconnect(tab, &ImageTab::statusMessage, this, nullptr);
         disconnect(tab, &ImageTab::effectsChanged, this, nullptr);
         disconnect(tab, &ImageTab::snapshotChanged, this, nullptr);

@@ -105,8 +105,10 @@ class SnapshotStore {
     /// @brief Clear the in-memory snapshot cache.
     static void clearCache();
 
-    /// @brief Global lock for snapshot store operations to ensure thread safety.
-    static QMutex s_mutex;
+    /// @brief Global recursive lock for snapshot store operations to ensure
+    /// thread safety. Recursive so loadSnapshots() can safely acquire it
+    /// both directly and from within saveSnapshot().
+    static QRecursiveMutex s_mutex;
 
     /// @brief In-memory cache of all snapshot records, keyed by image key (hash of filePath).
     static QHash<QString, QVector<ImageSnapshot>> s_snapshotsCache;

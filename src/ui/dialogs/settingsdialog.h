@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QSpinBox>
+#include "controllers/appsettingscontroller.h"
 
 class QCheckBox;
 class QSpinBox;
@@ -17,12 +18,13 @@ class SettingsDialog : public QDialog {
     explicit SettingsDialog(QWidget *parent = nullptr);
 
   private:
-    QCheckBox   *m_cbRestoreSession;
-    QCheckBox   *m_cbAutosave;
-    QCheckBox   *m_cbAutoreload;
-    QCheckBox   *m_cbSnapshotOnReopen;
-    QSpinBox    *m_sbThumbCacheSize;
-    QSpinBox    *m_sbDeltaCacheSize;
-    QPushButton *m_btnBackgroundColor;
-    QColor       m_bgColor;
+    QCheckBox            *m_cbRestoreSession;
+    QCheckBox            *m_cbAutosave;
+    QCheckBox            *m_cbAutoreload;
+    QCheckBox            *m_cbSnapshotOnReopen;
+    QSpinBox             *m_sbThumbCacheSize;
+    QSpinBox             *m_sbDeltaCacheSize;
+    QPushButton          *m_btnBackgroundColor;
+    QColor                m_bgColor;
+    AppSettingsController m_settings;
 };

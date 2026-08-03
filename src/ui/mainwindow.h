@@ -5,7 +5,9 @@
 #include <QMap>
 #include <QStackedWidget>
 #include <QStringList>
+#include "controllers/appsettingscontroller.h"
 #include "controllers/effectscontroller.h"
+#include "controllers/imagesessioncontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
@@ -90,20 +92,21 @@ class MainWindow : public QMainWindow {
     enum class ContentState { Empty, Viewer };
     void switchContentState(ContentState state);
 
-    TabBar              *m_tabBar;
-    QStackedWidget      *m_contentStack;
-    NotificationManager *m_notificationManager;
-    ViewerState         *m_viewerState;
-    EmptyState          *m_emptyState;
-    QSettings            m_settings;
-    SessionManager       m_session;
-    EffectsController   *m_effectsController;
-    ViewerController    *m_viewerController;
-    QMenu               *m_fileMenu;
-    QMenu               *m_recentFilesMenu;
-    QMenu               *m_editMenu;
-    QMenu               *m_viewMenu;
-    QMenu               *m_effectsMenu;
+    TabBar                *m_tabBar;
+    QStackedWidget        *m_contentStack;
+    NotificationManager   *m_notificationManager;
+    ViewerState           *m_viewerState;
+    EmptyState            *m_emptyState;
+    QSettings              m_settings;
+    SessionManager         m_session;
+    EffectsController     *m_effectsController;
+    ViewerController      *m_viewerController;
+    AppSettingsController *m_settingsController;
+    QMenu                 *m_fileMenu;
+    QMenu                 *m_recentFilesMenu;
+    QMenu                 *m_editMenu;
+    QMenu                 *m_viewMenu;
+    QMenu                 *m_effectsMenu;
 
     ContentState m_currentState = ContentState::Empty;
     bool         m_isRestoringSession = false;
@@ -131,4 +134,5 @@ class MainWindow : public QMainWindow {
     int       m_lastBaseIdx = -1;
 
     QMap<QString, ImageTab *> m_tabPaths;
+    ImageSessionController   *m_sessionController;
 };

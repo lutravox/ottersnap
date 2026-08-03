@@ -95,6 +95,8 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/vkimageviewer.cpp
     src/ui/vkimageviewerrenderer.cpp
     src/controllers/effectscontroller.cpp
+    src/controllers/imagesessioncontroller.cpp
+    src/controllers/appsettingscontroller.cpp
     src/controllers/viewercontroller.cpp
     src/ui/notification.cpp
     src/ui/notificationmanager.cpp

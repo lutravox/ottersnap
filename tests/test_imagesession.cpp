@@ -15,6 +15,7 @@ class TestImageSession : public QObject {
   private slots:
     void initTestCase();
     void cleanupTestCase();
+    void cleanup();
 
     void testOpenClose();
     void testSelectSnapshot();
@@ -54,6 +55,13 @@ void TestImageSession::cleanupTestCase() {
     if (m_tempFile) {
         delete m_tempFile;
     }
+}
+
+void TestImageSession::cleanup() {
+    // Reset AppSettings to prevent test pollution between alphabetically-ordered tests.
+    // testSaveSnapshot sets autosaveSnapshots(true) which affects subsequent tests.
+    AppSettings::setAutosaveSnapshots(false);
+    SnapshotStore::clearCache();
 }
 
 void TestImageSession::createTestImage(const QString& path, const QColor& color) {
@@ -163,8 +171,11 @@ void TestImageSession::testSnapshotNavigation() {
     // Modify image to a unique color to ensure the snapshot is not a duplicate
     createTestImage(m_testFilePath, Qt::green);
 
-    // Manually trigger reload
+    // Manually trigger reload and wait for it to complete so that saveSnapshot()
+    // captures the updated green image rather than the stale red one.
     session.reloadImage();
+    QSignalSpy reloadSpy(&session, &ImageSession::imageChanged);
+    QVERIFY(reloadSpy.wait(2000));
 
     // Create a snapshot of the updated image
     session.saveSnapshot();

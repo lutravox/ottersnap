@@ -7,6 +7,7 @@
 #include <QtTest>
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
+#include "core/snapshotstore.h"
 #include "core/vulkancontext.h"
 #include "ui/imagetab.h"
 #include "ui/mainwindow.h"
@@ -66,8 +67,13 @@ class TestMainWindow : public QObject {
     void cleanup() {
         delete m_window;
         for (const auto& path : m_testFiles) {
+            SnapshotStore::deleteAllSnapshots(path);
             QFile::remove(path);
         }
+        // Reset AppSettings
+        AppSettings::setSnapshotOnReopen(true);
+        AppSettings::setAutosaveSnapshots(false);
+        SnapshotStore::clearCache();
     }
 
     void testOpenFiles() {
@@ -98,6 +104,9 @@ class TestMainWindow : public QObject {
         QImage imgB(100, 100, QImage::Format_ARGB32);
         imgB.fill(Qt::red);
         imgB.save(path);
+
+        // Disable autosave before reload to prevent reloadImage() from auto-saving
+        AppSettings::setAutosaveSnapshots(false);
         tab->session()->reloadImage();
 
         // Wait for reload to finish so session is actually State B
@@ -110,12 +119,16 @@ class TestMainWindow : public QObject {
         imgC.save(path);
 
         // Enable snapshot on reopen and open again
+        AppSettings::setAutosaveSnapshots(false);
         AppSettings::setSnapshotOnReopen(true);
         QSignalSpy snapshotSpy(tab, &ImageTab::snapshotCreated);
         m_window->testOpenImageFile(path);
 
         // Verify that a snapshot of State B was created
         QVERIFY(snapshotSpy.wait(2000));
+
+        // Ensure the save operation is fully complete before proceeding
+        QTest::qWait(100);
 
         // Disable snapshot on reopen and open again
         snapshotSpy.clear();

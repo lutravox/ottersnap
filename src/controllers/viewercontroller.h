@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include "controllers/appsettingscontroller.h"
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
 
@@ -8,7 +9,7 @@
 class ViewerController : public QObject {
     Q_OBJECT
   public:
-    explicit ViewerController(QObject *parent = nullptr);
+    explicit ViewerController(AppSettingsController *settings, QObject *parent = nullptr);
 
     /// @brief Set the active session to track.
     void setActiveSession(ImageSession *session);
@@ -44,7 +45,8 @@ class ViewerController : public QObject {
     void mirrorToggled(bool enabled);
 
   private:
-    ImageSession *m_session = nullptr;
-    IViewer      *m_viewer = nullptr;
-    QSize         m_lastViewportSize;
+    AppSettingsController *m_settings;
+    ImageSession          *m_session = nullptr;
+    IViewer               *m_viewer = nullptr;
+    QSize                  m_lastViewportSize;
 };

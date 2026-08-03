@@ -18,7 +18,7 @@
 #include <functional>
 
 QHash<QString, QVector<ImageSnapshot>> SnapshotStore::s_snapshotsCache;
-QMutex                                 SnapshotStore::s_mutex;
+QRecursiveMutex                        SnapshotStore::s_mutex;
 
 static const QString  c_baseSubDir = QLatin1String("snapshots");
 static const int      c_tileWidth = 256;
@@ -234,7 +234,8 @@ QString SnapshotStore::computeChecksum(const QImage& image) {
 }
 
 QVector<ImageSnapshot> SnapshotStore::loadSnapshots(const QString& filePath) {
-    QString key = imageKey(filePath);
+    QMutexLocker locker(&s_mutex);
+    QString      key = imageKey(filePath);
     if (s_snapshotsCache.contains(key)) {
         return s_snapshotsCache.value(key);
     }

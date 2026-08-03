@@ -10,7 +10,8 @@ class ImageTab : public QWidget {
   public:
     /// @brief Construct an empty tab.
     /// @param parent Optional parent widget.
-    explicit ImageTab(QWidget *parent = nullptr);
+    /// @param session The session to associate with this tab.
+    explicit ImageTab(QWidget *parent, ImageSession *session);
     ~ImageTab();
 
     /// @brief Open an image file and populate the tab.

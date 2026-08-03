@@ -1,5 +1,6 @@
 #include "ui/dialogs/settingsdialog.h"
 #include "config/appsettings.h"
+#include "controllers/appsettingscontroller.h"
 #include "core/deltacache.h"
 #include "core/thumbnailcache.h"
 
@@ -14,7 +15,7 @@
 
 #include <sys/sysinfo.h>
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
+SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(this) {
     setWindowTitle(tr("Settings"));
     setMinimumWidth(400);
 
@@ -24,23 +25,36 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbRestoreSession->setChecked(AppSettings::restoreSession());
     layout->addWidget(m_cbRestoreSession);
 
-    m_cbAutosave = new QCheckBox(tr("Autosave snapshots"), this);
-    m_cbAutosave->setChecked(AppSettings::autosaveSnapshots());
-    layout->addWidget(m_cbAutosave);
-
     m_cbAutoreload = new QCheckBox(tr("Autoreload images"), this);
-    m_cbAutoreload->setChecked(AppSettings::autoreloadImages());
+    m_cbAutoreload->setChecked(m_settings.shouldAutoreloadImages());
     layout->addWidget(m_cbAutoreload);
+
+    m_cbAutosave = new QCheckBox(tr("Autosave snapshots"), this);
+    m_cbAutosave->setChecked(m_settings.shouldAutosaveSnapshots());
+    m_cbAutosave->setEnabled(m_settings.isAutosaveSnapshotsEnabled());
+    layout->addWidget(m_cbAutosave);
 
     m_cbSnapshotOnReopen = new QCheckBox(tr("Save snapshot on reopen"), this);
     m_cbSnapshotOnReopen->setChecked(AppSettings::snapshotOnReopen());
-    m_cbSnapshotOnReopen->setEnabled(!m_cbAutosave->isChecked());
     layout->addWidget(m_cbSnapshotOnReopen);
 
-    m_cbAutosave->setEnabled(m_cbAutoreload->isChecked());
-    connect(m_cbAutoreload, &QCheckBox::toggled, m_cbAutosave, &QCheckBox::setEnabled);
+    connect(m_cbAutoreload, &QCheckBox::toggled, [this](bool checked) {
+        m_cbAutosave->setEnabled(checked);
+        if (!checked) {
+            m_cbAutosave->setChecked(false);
+        }
+    });
+
     connect(m_cbAutosave, &QCheckBox::toggled, [this](bool checked) {
-        m_cbSnapshotOnReopen->setEnabled(!checked);
+        if (checked) {
+            m_cbSnapshotOnReopen->setChecked(false);
+        }
+    });
+
+    connect(m_cbSnapshotOnReopen, &QCheckBox::toggled, [this](bool checked) {
+        if (checked) {
+            m_cbAutosave->setChecked(false);
+        }
     });
 
     // Background color
@@ -104,14 +118,14 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     layout->addWidget(buttonBox);
 
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
-        AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
-        AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
-        AppSettings::setAutoreloadImages(m_cbAutoreload->isChecked());
-        AppSettings::setSnapshotOnReopen(m_cbSnapshotOnReopen->isChecked());
-        AppSettings::setBackgroundColor(m_bgColor);
-        AppSettings::setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
+        m_settings.setRestoreSession(m_cbRestoreSession->isChecked());
+        m_settings.setAutosaveSnapshots(m_cbAutosave->isChecked());
+        m_settings.setAutoreloadImages(m_cbAutoreload->isChecked());
+        m_settings.setSnapshotOnReopen(m_cbSnapshotOnReopen->isChecked());
+        m_settings.setBackgroundColor(m_bgColor);
+        m_settings.setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
         ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
-        AppSettings::setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());
+        m_settings.setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());
         DeltaCache::updateMaxCost(m_sbDeltaCacheSize->value());
         accept();
     });

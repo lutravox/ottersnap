@@ -1,9 +1,10 @@
 #include <QDebug>
 #include "controllers/viewercontroller.h"
-#include "config/appsettings.h"
+#include "controllers/appsettingscontroller.h"
 #include "ui/vkimageviewer.h"
 
-ViewerController::ViewerController(QObject *parent) : QObject(parent) {
+ViewerController::ViewerController(AppSettingsController *settings, QObject *parent)
+    : QObject(parent), m_settings(settings) {
 }
 
 void ViewerController::setActiveSession(ImageSession *session) {
@@ -95,7 +96,7 @@ void ViewerController::setZoomPercentage(double pct) {
 }
 
 void ViewerController::setScaleWithWindowEnabled(bool enabled) {
-    AppSettings::setScaleWithWindow(enabled);
+    m_settings->setScaleWithWindow(enabled);
 
     if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
         vkViewer->setScaleWithWindowChecked(enabled);
@@ -103,7 +104,7 @@ void ViewerController::setScaleWithWindowEnabled(bool enabled) {
 }
 
 bool ViewerController::isScaleWithWindowEnabled() const {
-    return AppSettings::scaleWithWindow();
+    return m_settings->scaleWithWindow();
 }
 
 void ViewerController::handleViewportResize(int width, int height) {

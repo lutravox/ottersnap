@@ -1,5 +1,6 @@
 #include <QCoreApplication>
 #include <QtTest>
+#include "controllers/appsettingscontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
@@ -65,9 +66,10 @@ class TestViewerController : public QObject {
 
   private slots:
     void testSyncSessionToViewer() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -88,9 +90,10 @@ class TestViewerController : public QObject {
     }
 
     void testSyncViewerToSession() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -110,9 +113,10 @@ class TestViewerController : public QObject {
     }
 
     void testFitToWindow() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -127,9 +131,10 @@ class TestViewerController : public QObject {
     }
 
     void testHandleViewportResize() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -145,7 +150,8 @@ class TestViewerController : public QObject {
     }
 
     void testNullPointers() {
-        ViewerController controller;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
         // No session or viewer set.
         // These should not crash.
         controller.syncSessionToViewer();
@@ -157,8 +163,9 @@ class TestViewerController : public QObject {
     }
 
     void testScaleWithWindowToggle() {
-        ViewerController controller;
-        bool             initial = controller.isScaleWithWindowEnabled();
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        bool                  initial = controller.isScaleWithWindowEnabled();
 
         controller.setScaleWithWindowEnabled(!initial);
         QVERIFY(controller.isScaleWithWindowEnabled() != initial);
@@ -168,9 +175,10 @@ class TestViewerController : public QObject {
     }
 
     void testHandleZoomRequested() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -183,9 +191,10 @@ class TestViewerController : public QObject {
     }
 
     void testHandlePanRequested() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);
@@ -198,9 +207,10 @@ class TestViewerController : public QObject {
     }
 
     void testSetZoomPercentage() {
-        ViewerController controller;
-        ImageSession     session;
-        MockViewer       viewer;
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+        MockViewer            viewer;
 
         controller.setActiveSession(&session);
         controller.setViewer(&viewer);

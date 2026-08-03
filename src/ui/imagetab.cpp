@@ -9,7 +9,7 @@
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
-ImageTab::ImageTab(QWidget *parent) : QWidget(parent), m_session(new ImageSession(this)) {
+ImageTab::ImageTab(QWidget *parent, ImageSession *session) : QWidget(parent), m_session(session) {
     connect(m_session, &ImageSession::imageChanged, this, &ImageTab::onImageChanged);
     connect(m_session, &ImageSession::snapshotsChanged, this, &ImageTab::onSnapshotsChanged);
     connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);

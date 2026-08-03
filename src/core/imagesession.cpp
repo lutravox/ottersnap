@@ -201,7 +201,6 @@ void ImageSession::reloadImage() {
         }
 
         m_diskImage = newImage;
-        rebuildSnapshotList();
         emit imageChanged();
     });
 

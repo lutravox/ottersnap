@@ -54,11 +54,19 @@ void AppSettings::setMaxDeltaCacheSizeMB(int value) {
 }
 
 bool AppSettings::autosaveSnapshots() {
-    return settings().value(c_keyAutosaveSnapshots, true).toBool();
+    return settings().value(c_keyAutosaveSnapshots, c_defaultAutosaveSnapshots).toBool();
 }
 
 void AppSettings::setAutosaveSnapshots(bool value) {
     settings().setValue(c_keyAutosaveSnapshots, value);
+}
+
+bool AppSettings::autoreloadImages() {
+    return settings().value(c_keyAutoreloadImages, c_defaultAutoreloadImages).toBool();
+}
+
+void AppSettings::setAutoreloadImages(bool value) {
+    settings().setValue(c_keyAutoreloadImages, value);
 }
 
 int AppSettings::baseInterval() {

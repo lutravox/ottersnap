@@ -176,6 +176,9 @@ bool ImageSession::isCurrentImage(int index) const {
 }
 
 void ImageSession::onFileChanged() {
+    if (!AppSettings::autoreloadImages())
+        return;
+
     reloadImage();
 }
 

@@ -3,16 +3,19 @@
 #include <QSettings>
 
 // Defaults
-constexpr int c_defaultSnapshotCacheMB = 256;
-constexpr int c_defaultThumbnailCacheMB = 128;
-constexpr int c_defaultDeltaCacheMB = 1024;
-constexpr int c_defaultBaseInterval = 100;
+constexpr int  c_defaultSnapshotCacheMB = 256;
+constexpr int  c_defaultThumbnailCacheMB = 128;
+constexpr int  c_defaultDeltaCacheMB = 1024;
+constexpr int  c_defaultBaseInterval = 100;
+constexpr bool c_defaultAutosaveSnapshots = true;
+constexpr bool c_defaultAutoreloadImages = true;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
 constexpr char c_keyResizeToFit[] = "General/resizeToFit";
 constexpr char c_keyRestoreSession[] = "General/restoreSession";
 constexpr char c_keyAutosaveSnapshots[] = "General/autosaveSnapshots";
+constexpr char c_keyAutoreloadImages[] = "General/autoreloadImages";
 constexpr char c_keyBaseInterval[] = "General/baseInterval";
 constexpr char c_keySnapshotCacheSizeMB[] = "General/maxSnapshotCacheSizeMB";
 constexpr char c_keyThumbnailCacheSizeMB[] = "General/maxThumbnailCacheSizeMB";
@@ -50,6 +53,11 @@ class AppSettings {
     static bool autosaveSnapshots();
     /// @brief Set the autosave snapshots preference.
     static void setAutosaveSnapshots(bool value);
+
+    /// @brief Return whether the image should be automatically reloaded when the file changes.
+    static bool autoreloadImages();
+    /// @brief Set the autoreload images preference.
+    static void setAutoreloadImages(bool value);
 
     /// @brief Return the interval between base snapshots.
     static int baseInterval();

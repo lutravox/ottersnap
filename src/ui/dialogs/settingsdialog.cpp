@@ -26,6 +26,13 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     m_cbAutosave->setChecked(AppSettings::autosaveSnapshots());
     layout->addWidget(m_cbAutosave);
 
+    m_cbAutoreload = new QCheckBox(tr("Autoreload images"), this);
+    m_cbAutoreload->setChecked(AppSettings::autoreloadImages());
+    layout->addWidget(m_cbAutoreload);
+
+    m_cbAutosave->setEnabled(m_cbAutoreload->isChecked());
+    connect(m_cbAutoreload, &QCheckBox::toggled, m_cbAutosave, &QCheckBox::setEnabled);
+
     // Cap the spinbox max at total system RAM
     struct sysinfo si;
     sysinfo(&si);
@@ -61,6 +68,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
         AppSettings::setRestoreSession(m_cbRestoreSession->isChecked());
         AppSettings::setAutosaveSnapshots(m_cbAutosave->isChecked());
+        AppSettings::setAutoreloadImages(m_cbAutoreload->isChecked());
         AppSettings::setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
         ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
         AppSettings::setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());

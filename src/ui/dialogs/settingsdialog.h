@@ -19,6 +19,7 @@ class SettingsDialog : public QDialog {
   private:
     QCheckBox *m_cbRestoreSession;
     QCheckBox *m_cbAutosave;
+    QCheckBox *m_cbAutoreload;
     QSpinBox  *m_sbThumbCacheSize;
     QSpinBox  *m_sbDeltaCacheSize;
 };

@@ -7,6 +7,7 @@
 #include "config/appsettings.h"
 #include "core/imagesession.h"
 #include "core/snapshotstore.h"
+#include "core/vulkancontext.h"
 
 class TestImageSession : public QObject {
     Q_OBJECT
@@ -24,6 +25,9 @@ class TestImageSession : public QObject {
     void testSnapshotNavigation();
     void testViewStateAccess();
     void testSnapshotDeletion();
+    void testGetReconstructionSequence();
+    void testThumbnailGeneration();
+    void testUIReconstructorInitialization();
 
   private:
     QTemporaryFile *m_tempFile = nullptr;
@@ -32,6 +36,11 @@ class TestImageSession : public QObject {
 };
 
 void TestImageSession::initTestCase() {
+    // Initialize Vulkan context to enable GPU-accelerated reconstruction tests.
+    if (!VulkanContext::instance().initializeInstance()) {
+        qWarning() << "VulkanContext failed to initialize. GPU tests may fail.";
+    }
+
     m_tempFile = new QTemporaryFile(this);
     if (m_tempFile->open()) {
         // QImage needs an extension to determine the format during save/load
@@ -48,7 +57,7 @@ void TestImageSession::cleanupTestCase() {
 }
 
 void TestImageSession::createTestImage(const QString& path, const QColor& color) {
-    QImage img(100, 100, QImage::Format_RGB32);
+    QImage img(100, 100, QImage::Format_ARGB32);
     img.fill(color);
     img.save(path);
 }
@@ -195,10 +204,14 @@ void TestImageSession::testSnapshotDeletion() {
     QColor colors[] = {Qt::blue, Qt::green, Qt::yellow};
     for (int i = 0; i < 3; ++i) {
         createTestImage(uniquePath, colors[i]);
+
+        QSignalSpy reloadSpy(&session, &ImageSession::imageChanged);
         session.reloadImage();
+        QVERIFY(reloadSpy.wait(2000));
+
         session.saveSnapshot();
-        QSignalSpy spy(&session, &ImageSession::snapshotsChanged);
-        QVERIFY(spy.wait(2000));
+        QSignalSpy saveSpy(&session, &ImageSession::snapshotsChanged);
+        QVERIFY(saveSpy.wait(2000));
     }
 
     // Current state: snapshots [S1, S2, S3], current image is Disk Image (index 3)
@@ -236,6 +249,76 @@ void TestImageSession::testSnapshotDeletion() {
     QCOMPARE(session.snapshots().size(), 0);
     QCOMPARE(session.currentSnapshotIndex(), 0);
     QVERIFY(!session.diskImage().isNull());
+}
+
+void TestImageSession::testGetReconstructionSequence() {
+    AppSettings::setBaseInterval(10);
+    ImageSession session;
+    QString      uniquePath = m_tempFile->fileName() + "_seq.png";
+    SnapshotStore::deleteAllSnapshots(uniquePath);
+
+    // Create a sequence of 3 unique images
+    QColor colors[] = {Qt::red, Qt::green, Qt::blue};
+    for (int i = 0; i < 3; ++i) {
+        createTestImage(uniquePath, colors[i]);
+        session.openImage(uniquePath); // Re-open to update diskImage
+        session.saveSnapshot();
+        QSignalSpy spy(&session, &ImageSession::snapshotsChanged);
+        QVERIFY(spy.wait(2000));
+    }
+
+    // S1: Base
+    // S2: Delta of S1
+    // S3: Delta of S2
+
+    auto seq1 = session.getReconstructionSequence(0);
+    QVERIFY(seq1.has_value());
+    QCOMPARE(seq1->deltas.size(), 0);
+    QVERIFY(!seq1->base.isNull());
+
+    auto seq2 = session.getReconstructionSequence(1);
+    QVERIFY(seq2.has_value());
+    QCOMPARE(seq2->deltas.size(), 1);
+
+    auto seq3 = session.getReconstructionSequence(2);
+    QVERIFY(seq3.has_value());
+    QCOMPARE(seq3->deltas.size(), 2);
+
+    // Test invalid index
+    auto seqInvalid = session.getReconstructionSequence(99);
+    QVERIFY(!seqInvalid.has_value());
+}
+
+void TestImageSession::testThumbnailGeneration() {
+    ImageSession session;
+    session.openImage(m_testFilePath);
+
+    // Test thumbnail helper for current image
+    QImage thumb = session.thumbnail(32);
+    QVERIFY(!thumb.isNull());
+    QCOMPARE(thumb.size(), QSize(32, 32));
+
+    // Test thumbnail for invalid index (should return placeholder)
+    QImage invalidThumb = session.generateThumbnail(-1, 32);
+    QVERIFY(!invalidThumb.isNull());
+    QCOMPARE(invalidThumb.size(), QSize(32, 32));
+}
+
+void TestImageSession::testUIReconstructorInitialization() {
+    ImageSession session;
+    session.openImage(m_testFilePath);
+
+    VulkanHandles handles = VulkanContext::instance().getUIHandles();
+
+    // First initialization
+    session.setUIReconstructorHandles(handles);
+    auto recon1 = session.uiReconstructor();
+    QVERIFY(recon1 != nullptr);
+
+    // Second initialization with same handles should not change the pointer
+    session.setUIReconstructorHandles(handles);
+    auto recon2 = session.uiReconstructor();
+    QCOMPARE(recon1, recon2);
 }
 
 QTEST_MAIN(TestImageSession)

@@ -20,16 +20,26 @@ struct ThumbnailRequest {
 class ThumbnailManager : public QObject {
     Q_OBJECT
   public:
+    /// @brief Returns the singleton instance of the ThumbnailManager.
+    /// @return Reference to the global ThumbnailManager instance.
     static ThumbnailManager& instance();
 
     /// @brief Returns a thumbnail if available in cache, otherwise queues
     /// reconstruction and returns a null image.
+    /// @param index The index of the snapshot.
+    /// @param size The desired thumbnail size.
+    /// @param filePath Absolute path of the source image.
+    /// @param isCurrent Whether this is the currently active snapshot.
+    /// @param snapshots List of available snapshots for this file.
+    /// @return The cached thumbnail image, or a null image if reconstruction was queued.
     QImage getThumbnail(int                           index,
                         int                           size,
                         const QString&                filePath,
                         bool                          isCurrent,
                         const QVector<ImageSnapshot>& snapshots);
 
+    /// @brief Enqueues a request to generate a thumbnail.
+    /// @param request The thumbnail request details.
     void enqueueRequest(const ThumbnailRequest& request);
 
   signals:
@@ -50,7 +60,7 @@ class ThumbnailManager : public QObject {
 
     void saveThumbnail(const QString& filePath, int snapshotIndex, const QImage& image);
     static std::optional<QImage> reconstructDiskImage(const QString& path);
-    static std::optional<QImage> reconstructSnapshot(const QString& path, int snapshotIdx);
+    static std::optional<QImage> reconstructThumbnail(const QString& path, int snapshotIdx);
 
     QQueue<ThumbnailRequest> m_queue;
     QSet<QString>            m_activeRequests;

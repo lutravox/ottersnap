@@ -191,9 +191,6 @@ void MainWindow::setupMenu() {
     m_actionExportSnapshot = m_fileMenu->addAction(tr("&Export Snapshot As..."));
     connect(m_actionExportSnapshot, &QAction::triggered, this, &MainWindow::onExportSnapshot);
 
-    m_actionExportCPUSnapshot = m_fileMenu->addAction(tr("Export CPU Snapshot (Debug)"));
-    connect(m_actionExportCPUSnapshot, &QAction::triggered, this, &MainWindow::onExportCPUSnapshot);
-
     m_actionDeleteSnapshot = m_fileMenu->addAction(tr("&Delete Selected Snapshot"));
     m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
     connect(m_actionDeleteSnapshot,
@@ -296,7 +293,6 @@ void MainWindow::updateMenuBar() {
     switch (m_currentState) {
         case ContentState::Empty:
             m_actionSaveSnapshot->setVisible(false);
-            m_actionExportCPUSnapshot->setVisible(false);
             m_actionDeleteSnapshot->setVisible(false);
             m_actionCloseTab->setVisible(false);
             m_actionCloseAllTabs->setVisible(false);
@@ -311,7 +307,6 @@ void MainWindow::updateMenuBar() {
 
         case ContentState::Viewer:
             m_actionSaveSnapshot->setVisible(true);
-            m_actionExportCPUSnapshot->setVisible(true);
             m_actionDeleteSnapshot->setVisible(true);
             m_actionCloseTab->setVisible(true);
             m_actionCloseAllTabs->setVisible(true);
@@ -473,45 +468,6 @@ void MainWindow::onExportSnapshot() {
 
         return img.save(params.path);
     }));
-}
-
-void MainWindow::onExportCPUSnapshot() {
-    auto *tab = currentTab();
-    if (!tab)
-        return;
-
-    int index = tab->session()->currentSnapshotIndex();
-    if (index < 0) {
-        notify("No snapshot selected for CPU export", 3000);
-        return;
-    }
-
-    QString path = tab->session()->filePath();
-
-    // Reconstruct using the CPU path (SnapshotStore)
-    auto optImg = SnapshotStore::reconstruct(path, index);
-
-    if (!optImg) {
-        QMessageBox::critical(
-            this,
-            tr("Export Error"),
-            tr("Failed to reconstruct snapshot using CPU. The delta file may be corrupted."));
-        return;
-    }
-
-    QString savePath = QFileDialog::getSaveFileName(this,
-                                                    tr("Export CPU Snapshot"),
-                                                    QString("cpu_snapshot_%1.png").arg(index),
-                                                    tr("Images (*.png *.jpg *.bmp)"));
-
-    if (savePath.isEmpty())
-        return;
-
-    if (optImg->save(savePath)) {
-        notify(tr("CPU Snapshot exported successfully to %1").arg(savePath), 3000);
-    } else {
-        QMessageBox::critical(this, tr("Export Error"), tr("Failed to save image to disk."));
-    }
 }
 
 void MainWindow::onSaveSnapshot() {

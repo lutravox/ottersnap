@@ -37,7 +37,7 @@ class VkSnapshotReconstructor {
     /// @brief Applies a delta to the current state using the compute shader.
     /// @param delta The delta data to apply.
     /// @return True if delta was applied successfully, false otherwise.
-    bool applyDelta(const QByteArray& delta);
+    bool applyDelta(const DeltaEntry& delta);
 
     /// @brief Copies the current state buffer to a Vulkan image for rendering.
     /// @param cmd Command buffer to record the copy command into.
@@ -115,7 +115,7 @@ class VkSnapshotReconstructor {
     bool ensurePendingStateBuffer(uint32_t width, uint32_t height, VkDeviceSize size);
     bool prepareBaseStaging(const QImage& base, uint32_t width, uint32_t height, VkDeviceSize size);
     bool recordBaseUploadCommands(bool isCached, VkDeviceSize size);
-    bool parseAndDecompressDelta(const QByteArray&  delta,
+    bool parseAndDecompressDelta(const DeltaEntry&  delta,
                                  uint32_t&          tileW,
                                  uint32_t&          tileH,
                                  QByteArray&        packedPixels,

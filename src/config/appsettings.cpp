@@ -10,19 +10,19 @@ QSettings& AppSettings::settings() {
 }
 
 bool AppSettings::scaleWithWindow() {
-    return settings().value("General/resizeToFit", true).toBool();
+    return settings().value(c_keyResizeToFit, true).toBool();
 }
 
 void AppSettings::setScaleWithWindow(bool value) {
-    settings().setValue("General/resizeToFit", value);
+    settings().setValue(c_keyResizeToFit, value);
 }
 
 bool AppSettings::restoreSession() {
-    return settings().value("General/restoreSession", true).toBool();
+    return settings().value(c_keyRestoreSession, true).toBool();
 }
 
 void AppSettings::setRestoreSession(bool value) {
-    settings().setValue("General/restoreSession", value);
+    settings().setValue(c_keyRestoreSession, value);
 }
 
 QString AppSettings::fileFilter() {
@@ -30,35 +30,43 @@ QString AppSettings::fileFilter() {
 }
 
 int AppSettings::maxSnapshotCacheSizeMB() {
-    return settings().value("General/maxSnapshotCacheSizeMB", 256).toInt();
+    return settings().value(c_keySnapshotCacheSizeMB, c_defaultSnapshotCacheMB).toInt();
 }
 
 void AppSettings::setMaxSnapshotCacheSizeMB(int value) {
-    settings().setValue("General/maxSnapshotCacheSizeMB", value);
+    settings().setValue(c_keySnapshotCacheSizeMB, value);
 }
 
 int AppSettings::maxThumbnailCacheSizeMB() {
-    return settings().value("General/maxThumbnailCacheSizeMB", 128).toInt();
+    return settings().value(c_keyThumbnailCacheSizeMB, c_defaultThumbnailCacheMB).toInt();
 }
 
 void AppSettings::setMaxThumbnailCacheSizeMB(int value) {
-    settings().setValue("General/maxThumbnailCacheSizeMB", value);
+    settings().setValue(c_keyThumbnailCacheSizeMB, value);
+}
+
+int AppSettings::maxDeltaCacheSizeMB() {
+    return settings().value(c_keyDeltaCacheSizeMB, c_defaultDeltaCacheMB).toInt();
+}
+
+void AppSettings::setMaxDeltaCacheSizeMB(int value) {
+    settings().setValue(c_keyDeltaCacheSizeMB, value);
 }
 
 bool AppSettings::autosaveSnapshots() {
-    return settings().value("General/autosaveSnapshots", true).toBool();
+    return settings().value(c_keyAutosaveSnapshots, true).toBool();
 }
 
 void AppSettings::setAutosaveSnapshots(bool value) {
-    settings().setValue("General/autosaveSnapshots", value);
+    settings().setValue(c_keyAutosaveSnapshots, value);
 }
 
 int AppSettings::baseInterval() {
-    return settings().value("General/baseInterval", 100).toInt();
+    return settings().value(c_keyBaseInterval, c_defaultBaseInterval).toInt();
 }
 
 void AppSettings::setBaseInterval(int value) {
-    settings().setValue("General/baseInterval", value);
+    settings().setValue(c_keyBaseInterval, value);
 }
 
 const char *AppSettings::applicationName() {

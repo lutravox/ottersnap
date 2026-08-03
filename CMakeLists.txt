@@ -110,6 +110,7 @@ set(OTTERSNAP_CORE_SOURCES
     # Core logic
     src/core/diskutils.cpp
     src/core/thumbnailcache.cpp
+    src/core/deltacache.cpp
     src/core/snapshotstore.cpp
     src/core/vksnapshotreconstructor.cpp
     src/core/vulkancontext.cpp

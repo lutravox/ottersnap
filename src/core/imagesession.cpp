@@ -110,11 +110,12 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         m_baseCache = {baseSnapshotIdx, seq.base};
     }
 
+    QString imageKey = SnapshotStore::imageKey(m_filePath);
     for (int i = baseIdx + 1; i <= index; ++i) {
         auto optDelta = SnapshotStore::loadDelta(m_filePath, m_snapshots[i].snapshotIndex);
         if (!optDelta)
             return std::nullopt;
-        seq.deltas.append(std::move(*optDelta));
+        seq.deltas.append({imageKey + ":" + m_snapshots[i].fileName, std::move(*optDelta)});
     }
 
     return seq;
@@ -320,7 +321,7 @@ void ImageSession::handleThumbnailGenerated(const QString& path, int index, cons
 QImage ImageSession::generateThumbnail(int index, int size) {
     if (index < 0 || index > static_cast<int>(m_snapshots.size())) {
         qDebug() << "[ImageSession] generateThumbnail: index out of bounds";
-        return QImage();
+        return getPlaceholder(size);
     }
 
     QImage result = ThumbnailManager::instance().getThumbnail(

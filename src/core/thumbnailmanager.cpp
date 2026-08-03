@@ -84,7 +84,7 @@ void ThumbnailManager::processNext() {
     } else {
         int snapshotIdx = request.snapshotIndex;
         worker = [path = request.filePath, snapshotIdx]() {
-            return reconstructSnapshot(path, snapshotIdx);
+            return reconstructThumbnail(path, snapshotIdx);
         };
     }
 
@@ -139,37 +139,23 @@ std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path
     if (img.isNull())
         return std::nullopt;
 
-    auto reconstructor = VulkanContext::instance().getUtilityReconstructor();
-    if (!reconstructor)
-        return std::nullopt;
-
-    ReconstructionSequence diskSeq;
-    diskSeq.base = img;
-    diskSeq.baseChecksum = "disk_image";
-
     float aspect = float(img.width()) / float(img.height());
     int   storageSize = 256;
     QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
                                        : QSize(qRound(storageSize * aspect), storageSize);
 
-    return reconstructor->reconstructToImage(diskSeq, targetSize, reconstructor.get());
+    QImage result = SnapshotStore::resizeImage(img, targetSize);
+    if (result.isNull())
+        return std::nullopt;
+    return result;
 }
 
-std::optional<QImage> ThumbnailManager::reconstructSnapshot(const QString& path, int snapshotIdx) {
+std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path, int snapshotIdx) {
     auto snapList = SnapshotStore::loadSnapshots(path);
-    int  localIdx = -1;
-    for (int i = 0; i < static_cast<int>(snapList.size()); ++i) {
-        if (snapList[i].snapshotIndex == snapshotIdx) {
-            localIdx = i;
-            break;
-        }
-    }
-    if (localIdx == -1)
-        return std::nullopt;
 
     int baseIdx = -1;
-    for (int i = localIdx; i >= 0; --i) {
-        if (snapList[i].isBase) {
+    for (int i = static_cast<int>(snapList.size()) - 1; i >= 0; --i) {
+        if (snapList[i].snapshotIndex <= snapshotIdx && snapList[i].isBase) {
             baseIdx = i;
             break;
         }
@@ -177,29 +163,17 @@ std::optional<QImage> ThumbnailManager::reconstructSnapshot(const QString& path,
     if (baseIdx == -1)
         return std::nullopt;
 
-    ReconstructionSequence seq;
-    seq.baseIdx = baseIdx;
     auto optBase = SnapshotStore::loadBaseImage(path, snapList[baseIdx].snapshotIndex);
     if (!optBase)
         return std::nullopt;
-    seq.base = std::move(optBase->image);
-    seq.baseChecksum = optBase->checksum;
 
-    for (int i = baseIdx + 1; i <= localIdx; ++i) {
-        auto optDelta = SnapshotStore::loadDelta(path, snapList[i].snapshotIndex);
-        if (!optDelta)
-            return std::nullopt;
-        seq.deltas.append(std::move(*optDelta));
-    }
-
-    auto reconstructor = VulkanContext::instance().getUtilityReconstructor();
-    if (!reconstructor)
-        return std::nullopt;
-
-    float aspect = float(seq.base.width()) / float(seq.base.height());
+    float aspect = float(optBase->image.width()) / float(optBase->image.height());
     int   storageSize = 256;
     QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
                                        : QSize(qRound(storageSize * aspect), storageSize);
 
-    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
+    QImage result = SnapshotStore::reconstructSnapshot(path, snapshotIdx, targetSize);
+    if (result.isNull())
+        return std::nullopt;
+    return result;
 }

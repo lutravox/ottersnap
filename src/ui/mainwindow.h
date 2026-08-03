@@ -57,7 +57,6 @@ class MainWindow : public QMainWindow {
     void onActualSize();
     void onToggleFullScreen();
     void onExportSnapshot();
-    void onExportCPUSnapshot();
     void onResetEffects();
     void onSettings();
     void onTabChanged(int index);
@@ -112,7 +111,6 @@ class MainWindow : public QMainWindow {
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
     QAction *m_actionExportSnapshot;
-    QAction *m_actionExportCPUSnapshot;
     QAction *m_actionDeleteSnapshot;
     QAction *m_actionCloseTab;
     QAction *m_actionCloseAllTabs;

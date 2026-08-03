@@ -11,7 +11,10 @@ class TestAppSettings : public QObject {
     void testRestoreSession();
     void testAutosaveSnapshots();
     void testMaxSnapshotCacheSize();
+    void testMaxThumbnailCacheSize();
+    void testMaxDeltaCacheSize();
     void testBaseInterval();
+    void testScaleWithWindow();
     void testIdentity();
 };
 
@@ -42,14 +45,34 @@ void TestAppSettings::testMaxSnapshotCacheSize() {
     QCOMPARE(AppSettings::maxSnapshotCacheSizeMB(), testSize);
 }
 
+void TestAppSettings::testMaxThumbnailCacheSize() {
+    int testSize = 256;
+    AppSettings::setMaxThumbnailCacheSizeMB(testSize);
+    QCOMPARE(AppSettings::maxThumbnailCacheSizeMB(), testSize);
+}
+
+void TestAppSettings::testMaxDeltaCacheSize() {
+    int testSize = 1024;
+    AppSettings::setMaxDeltaCacheSizeMB(testSize);
+    QCOMPARE(AppSettings::maxDeltaCacheSizeMB(), testSize);
+}
+
 void TestAppSettings::testBaseInterval() {
     int testInterval = 50;
     AppSettings::setBaseInterval(testInterval);
     QCOMPARE(AppSettings::baseInterval(), testInterval);
 }
 
+void TestAppSettings::testScaleWithWindow() {
+    AppSettings::setScaleWithWindow(true);
+    QCOMPARE(AppSettings::scaleWithWindow(), true);
+    AppSettings::setScaleWithWindow(false);
+    QCOMPARE(AppSettings::scaleWithWindow(), false);
+}
+
 void TestAppSettings::testIdentity() {
     QVERIFY(QString(AppSettings::applicationName()).contains("Ottersnap"));
+    QVERIFY(AppSettings::organizationName() != nullptr);
     QVERIFY(!QString(AppSettings::organizationDomain()).isEmpty());
     QVERIFY(!AppSettings::fileFilter().isEmpty());
 }

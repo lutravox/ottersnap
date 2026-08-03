@@ -2,6 +2,22 @@
 
 #include <QSettings>
 
+// Defaults
+constexpr int c_defaultSnapshotCacheMB = 256;
+constexpr int c_defaultThumbnailCacheMB = 128;
+constexpr int c_defaultDeltaCacheMB = 1024;
+constexpr int c_defaultBaseInterval = 100;
+// UI range
+constexpr int c_minCacheSizeMB = 16;
+// Setting keys
+constexpr char c_keyResizeToFit[] = "General/resizeToFit";
+constexpr char c_keyRestoreSession[] = "General/restoreSession";
+constexpr char c_keyAutosaveSnapshots[] = "General/autosaveSnapshots";
+constexpr char c_keyBaseInterval[] = "General/baseInterval";
+constexpr char c_keySnapshotCacheSizeMB[] = "General/maxSnapshotCacheSizeMB";
+constexpr char c_keyThumbnailCacheSizeMB[] = "General/maxThumbnailCacheSizeMB";
+constexpr char c_keyDeltaCacheSizeMB[] = "General/maxDeltaCacheSizeMB";
+
 /// @brief Global application settings persisted via QSettings.
 class AppSettings {
     Q_DISABLE_COPY(AppSettings)
@@ -54,7 +70,13 @@ class AppSettings {
     /// @param value The size in MB.
     static void setMaxThumbnailCacheSizeMB(int value);
 
-    /// @brief Return whether snapshots should be automatically saved when the file changes.
+    /// @brief Return the maximum memory allowed for the delta cache in MB.
+    /// @return The cache size in MB.
+    static int maxDeltaCacheSizeMB();
+    /// @brief Set the maximum memory allowed for the delta cache.
+    /// @param value The size in MB.
+    static void setMaxDeltaCacheSizeMB(int value);
+
   private:
     AppSettings() = delete;
     ~AppSettings() = delete;

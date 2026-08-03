@@ -8,6 +8,7 @@
 #include <mutex>
 #include <qlogging.h>
 #include "core/vksnapshotreconstructor.h"
+#include "core/deltacache.h"
 #include "core/vulkancontext.h"
 #include "core/vulkanutils.h"
 
@@ -217,13 +218,31 @@ bool VkSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
     return true;
 }
 
-bool VkSnapshotReconstructor::parseAndDecompressDelta(const QByteArray&  delta,
+bool VkSnapshotReconstructor::parseAndDecompressDelta(const DeltaEntry&  delta,
                                                       uint32_t&          tileW,
                                                       uint32_t&          tileH,
                                                       QByteArray&        packedPixels,
                                                       QVector<uint32_t>& tileIndices,
                                                       QVector<uint32_t>& tileOffsets) {
-    QDataStream stream(delta);
+    const QByteArray& compressedDelta = delta.data;
+    const QString&    deltaId = delta.id;
+
+    // Check cache — skip decompression if already cached
+    {
+        auto cached = DeltaCache::get(deltaId);
+        if (cached) {
+            tileW = cached->tileW;
+            tileH = cached->tileH;
+            packedPixels = std::move(cached->packedPixels);
+            tileIndices = std::move(cached->tileIndices);
+            tileOffsets = std::move(cached->tileOffsets);
+            return true;
+        }
+    }
+
+    qDebug() << "[VkSnapshotReconstructor] Delta cache MISS";
+
+    QDataStream stream(compressedDelta);
     stream.setByteOrder(QDataStream::LittleEndian);
 
     uint32_t version = 0;
@@ -265,27 +284,38 @@ bool VkSnapshotReconstructor::parseAndDecompressDelta(const QByteArray&  delta,
         tiles.append({idx, compressed});
     }
 
-    QVector<UncompressedTile> uncompressed =
-        QtConcurrent::blockingMapped(tiles, [](const TileData& td) {
-            return UncompressedTile{td.index, qUncompress(td.compressed)};
-        });
+    struct UncompressedTile {
+        uint32_t   index;
+        QByteArray pixels;
+    };
+    QVector<UncompressedTile> uncompressed;
+    uncompressed.reserve(numTiles);
+
+    for (const auto& td : tiles) {
+        QByteArray data = qUncompress(td.compressed);
+        if (data.isEmpty()) {
+            qCritical() << "[VkSnapshotReconstructor] Failed to decompress tile" << td.index;
+            return false;
+        }
+        uncompressed.append({td.index, std::move(data)});
+    }
 
     packedPixels.clear();
     tileIndices.clear();
     tileOffsets.clear();
+    packedPixels.reserve(numTiles * tileW * tileH * 4);
     tileIndices.reserve(numTiles);
     tileOffsets.reserve(numTiles);
 
     for (const auto& tile : uncompressed) {
-        if (tile.pixels.isEmpty()) {
-            qCritical() << "[VkSnapshotReconstructor] Delta corruption: Tile index" << tile.index
-                        << "decompression failed. Aborting applyDelta.";
-            return false;
-        }
-        tileIndices.append(tile.index);
         tileOffsets.append(packedPixels.size() / sizeof(uint32_t));
         packedPixels.append(tile.pixels);
+        tileIndices.append(tile.index);
     }
+
+    // Cache the decompressed delta for future reconstructions
+    DeltaCache::insert(deltaId,
+                       DecompressedDelta{tileW, tileH, packedPixels, tileIndices, tileOffsets});
 
     return true;
 }
@@ -442,7 +472,7 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
     return true;
 }
 
-bool VkSnapshotReconstructor::applyDelta(const QByteArray& delta) {
+bool VkSnapshotReconstructor::applyDelta(const DeltaEntry& delta) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_isDirty = true;
 

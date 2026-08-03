@@ -2,7 +2,6 @@
 #include <QImage>
 #include <QString>
 #include <QtTest>
-#include <functional>
 #include "core/thumbnailcache.h"
 
 class TestThumbnailCache : public QObject {

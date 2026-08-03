@@ -773,8 +773,6 @@ void VkImageViewerRenderer::performUploads(
             return;
         }
 
-        qDebug() << "[VkImageViewerRenderer] Uploading reconstructed snapshot";
-
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (m_textureImage == VK_NULL_HANDLE || m_textureView == VK_NULL_HANDLE ||
             (m_session && (m_session->viewState().imageWidth() != m_currentTextureWidth ||

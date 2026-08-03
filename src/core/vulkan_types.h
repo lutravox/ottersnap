@@ -23,10 +23,16 @@ struct VulkanHandles {
     }
 };
 
+/// @brief A single uncompressed delta file within a reconstruction sequence.
+struct DeltaEntry {
+    QString    id;
+    QByteArray data;
+};
+
 /// @brief The reconstruction sequence containing the base and deltas.
 struct ReconstructionSequence {
     int                 baseIdx;
     QImage              base;
     QString             baseChecksum;
-    QVector<QByteArray> deltas;
+    QVector<DeltaEntry> deltas;
 };

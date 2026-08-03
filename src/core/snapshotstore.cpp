@@ -280,12 +280,13 @@ std::optional<SnapshotStore::SaveResult> SnapshotStore::saveSnapshot(const QStri
     QString                key = imageKey(filePath);
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
-    // Skip if identical snapshot already exists
-    for (const ImageSnapshot& s : snapshots) {
-        if (s.checksum == checksum) {
-            qDebug() << "[SnapshotStore] Duplicate image skipped for" << filePath
-                     << "(existing snapshot" << s.snapshotIndex << ")";
-            return SaveResult{SaveStatus::Existing, s.snapshotIndex};
+    // Skip if latest snapshot is identical
+    if (!snapshots.isEmpty()) {
+        const ImageSnapshot& last = snapshots.last();
+        if (last.checksum == checksum) {
+            qDebug() << "[SnapshotStore] Duplicate of latest snapshot skipped for" << filePath
+                     << "(snapshot" << last.snapshotIndex << ")";
+            return SaveResult{SaveStatus::Existing, last.snapshotIndex};
         }
     }
 

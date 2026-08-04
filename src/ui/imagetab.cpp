@@ -31,13 +31,11 @@ void ImageTab::setupUi() {
     mainLayout->setSpacing(0);
 }
 
-void ImageTab::openImage(const QString& filePath) {
-    if (m_session->openImage(filePath)) {
-        emit snapshotChanged(m_session->currentSnapshotIndex());
-    }
+void ImageTab::notifyImageOpened() {
+    emit snapshotChanged(m_session->currentSnapshotIndex());
 }
 
-void ImageTab::closeImage() {
+void ImageTab::close() {
     m_session->close();
 }
 

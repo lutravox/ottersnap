@@ -15,6 +15,7 @@ struct ThumbnailRequest {
     int     index;
     QString filePath;
     int     snapshotIndex;
+    QImage  currentImage;
 };
 
 class ThumbnailManager : public QObject {
@@ -36,7 +37,8 @@ class ThumbnailManager : public QObject {
                         int                           size,
                         const QString&                filePath,
                         bool                          isCurrent,
-                        const QVector<ImageSnapshot>& snapshots);
+                        const QVector<ImageSnapshot>& snapshots,
+                        const QImage&                 currentImage = QImage());
 
     /// @brief Enqueues a request to generate a thumbnail.
     /// @param request The thumbnail request details.
@@ -59,7 +61,9 @@ class ThumbnailManager : public QObject {
                                   const ThumbnailRequest&                request);
 
     void saveThumbnail(const QString& filePath, int snapshotIndex, const QImage& image);
-    static std::optional<QImage> reconstructDiskImage(const QString& path);
+    static std::optional<QImage> reconstructDiskImage(const QString& path,
+                                                      const QImage&  currentImage = QImage());
+
     static std::optional<QImage> reconstructThumbnail(const QString& path, int snapshotIdx);
 
     QQueue<ThumbnailRequest> m_queue;

@@ -1,5 +1,5 @@
-#include <QCache>
-#include <QFutureWatcher>
+#include <QDateTime>
+#include <QFileInfo>
 #include <QThreadPool>
 #include <QTimer>
 #include <QtConcurrent>
@@ -34,6 +34,7 @@ bool ImageSession::openImage(const QString& filePath) {
     ThumbnailCache::invalidate(SnapshotStore::imageKey(filePath), -1);
 
     m_filePath = filePath;
+    m_lastModified = QFileInfo(m_filePath).lastModified();
     m_diskImage = DiskUtils::loadImage(m_filePath);
     if (m_diskImage.isNull()) {
         emit statusMessage(QString("Failed to load: %1").arg(m_filePath));
@@ -100,6 +101,10 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     if (m_baseCache.index == baseSnapshotIdx && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;
         seq.baseChecksum = m_snapshots[baseIdx].checksum;
+    } else if (baseSnapshotIdx == -1) {
+        seq.base = m_diskImage;
+        seq.baseChecksum = m_snapshots[baseIdx].checksum;
+        m_baseCache = {baseSnapshotIdx, seq.base};
     } else {
         auto optBase = SnapshotStore::loadBaseImage(m_filePath, baseSnapshotIdx);
         if (!optBase)
@@ -326,8 +331,13 @@ QImage ImageSession::generateThumbnail(int index, int size) {
         return getPlaceholder(size);
     }
 
-    QImage result = ThumbnailManager::instance().getThumbnail(
-        index, size, m_filePath, index == static_cast<int>(m_snapshots.size()), m_snapshots);
+    QImage result =
+        ThumbnailManager::instance().getThumbnail(index,
+                                                  size,
+                                                  m_filePath,
+                                                  index == static_cast<int>(m_snapshots.size()),
+                                                  m_snapshots,
+                                                  m_diskImage);
 
     if (result.isNull()) {
         return getPlaceholder(size);

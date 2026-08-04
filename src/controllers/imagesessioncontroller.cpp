@@ -1,3 +1,4 @@
+#include <QFileInfo>
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/appsettingscontroller.h"
 #include "core/diskutils.h"
@@ -15,17 +16,12 @@ ImageSessionController::~ImageSessionController() {
 
 ImageSession *ImageSessionController::openImage(const QString& path) {
     if (auto *existing = m_sessions.value(path)) {
-        if (DiskUtils::loadImage(path) != existing->diskImage()) {
-            qDebug() << "[ImageSessionController] Image changed on disk, checking reopen-save...";
+        if (QFileInfo(path).lastModified() > existing->lastModified()) {
             if (m_settings->shouldSaveSnapshotOnReopen()) {
                 qDebug() << "[ImageSessionController] Triggering saveSnapshot() on reopen";
                 existing->saveSnapshot();
-            } else {
-                qDebug() << "[ImageSessionController] snapshotOnReopen is disabled";
             }
             existing->reloadImage();
-        } else {
-            qDebug() << "[ImageSessionController] Image on disk is identical to session";
         }
         return existing;
     }

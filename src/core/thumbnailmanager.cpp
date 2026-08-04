@@ -18,7 +18,8 @@ QImage ThumbnailManager::getThumbnail(int                           index,
                                       int                           size,
                                       const QString&                filePath,
                                       bool                          isCurrent,
-                                      const QVector<ImageSnapshot>& snapshots) {
+                                      const QVector<ImageSnapshot>& snapshots,
+                                      const QImage&                 currentImage) {
     if (index < 0 || index > static_cast<int>(snapshots.size()))
         return QImage();
 
@@ -34,7 +35,7 @@ QImage ThumbnailManager::getThumbnail(int                           index,
         return QImage();
     }
 
-    enqueueRequest({index, filePath, version});
+    enqueueRequest({index, filePath, version, currentImage});
     return QImage();
 }
 
@@ -51,7 +52,6 @@ void ThumbnailManager::enqueueRequest(const ThumbnailRequest& request) {
     }
     m_activeRequests.insert(requestKey);
 
-    // Prioritize current image thumbnails (snapshotIndex == -1)
     if (request.snapshotIndex == -1) {
         static_cast<QList<ThumbnailRequest>&>(m_queue).prepend(request);
     } else {
@@ -80,7 +80,9 @@ void ThumbnailManager::processNext() {
 
     std::function<std::optional<QImage>()> worker;
     if (request.snapshotIndex == -1) {
-        worker = [path = request.filePath]() { return reconstructDiskImage(path); };
+        worker = [path = request.filePath, img = request.currentImage]() -> std::optional<QImage> {
+            return reconstructDiskImage(path, img);
+        };
     } else {
         int snapshotIdx = request.snapshotIndex;
         worker = [path = request.filePath, snapshotIdx]() {
@@ -134,8 +136,9 @@ void ThumbnailManager::saveThumbnail(const QString& filePath,
     image.save(path, ThumbnailConstants::Format.toUtf8().constData());
 }
 
-std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path) {
-    QImage img = DiskUtils::loadImage(path);
+std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path,
+                                                             const QImage&  currentImage) {
+    QImage img = currentImage.isNull() ? DiskUtils::loadImage(path) : currentImage;
     if (img.isNull())
         return std::nullopt;
 

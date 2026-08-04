@@ -551,7 +551,7 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
 
     QString displayName = QFileInfo(path).fileName();
     int     index = m_tabBar->addTab(tab, displayName);
-    tab->openImage(path);
+    tab->notifyImageOpened();
     setTabThumbnail(index);
     m_tabPaths.insert(path, tab);
 

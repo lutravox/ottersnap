@@ -100,8 +100,8 @@ class ImageSession : public QObject, public IEffectsState {
     const QVector<ImageSnapshot>& snapshots() const {
         return m_snapshots;
     }
-    const QVector<QString>& labels() const {
-        return m_labels;
+    QDateTime lastModified() const {
+        return m_lastModified;
     }
 
     /// @brief Returns the UI-bound reconstructor for the current session.
@@ -137,6 +137,7 @@ class ImageSession : public QObject, public IEffectsState {
     int    getRelativeVersion(int snapshotIndex) const;
     QImage getPlaceholder(int size);
 
+    QDateTime              m_lastModified;
     QString                m_filePath;
     QImage                 m_diskImage;
     QVector<ImageSnapshot> m_snapshots;

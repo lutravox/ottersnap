@@ -14,12 +14,10 @@ class ImageTab : public QWidget {
     explicit ImageTab(QWidget *parent, ImageSession *session);
     ~ImageTab();
 
-    /// @brief Open an image file and populate the tab.
-    /// @param filePath Absolute path to the image file.
-    void openImage(const QString& filePath);
-
     /// @brief Close the current image and release resources.
-    void closeImage();
+    void close();
+    /// @brief Notify the tab that the associated image has been opened or changed.
+    void notifyImageOpened();
 
     /// @brief The session associated with this tab.
     ImageSession *session() const {

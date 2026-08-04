@@ -570,6 +570,10 @@ void MainWindow::onCloseTab(int index) {
 
     auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
     if (tab) {
+        if (tab == currentTab()) {
+            m_viewerController->setActiveSession(nullptr);
+        }
+
         QString path = tab->filePath();
         m_tabPaths.remove(path);
         m_sessionController->closeSession(path);

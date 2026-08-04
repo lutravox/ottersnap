@@ -19,7 +19,7 @@ void AppSettings::setScaleWithWindow(bool value) {
 }
 
 bool AppSettings::restoreSession() {
-    return settings().value(c_keyRestoreSession, true).toBool();
+    return settings().value(c_keyRestoreSession, false).toBool();
 }
 
 void AppSettings::setRestoreSession(bool value) {
@@ -28,14 +28,6 @@ void AppSettings::setRestoreSession(bool value) {
 
 QString AppSettings::fileFilter() {
     return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tiff *.webp)");
-}
-
-int AppSettings::maxSnapshotCacheSizeMB() {
-    return settings().value(c_keySnapshotCacheSizeMB, c_defaultSnapshotCacheMB).toInt();
-}
-
-void AppSettings::setMaxSnapshotCacheSizeMB(int value) {
-    settings().setValue(c_keySnapshotCacheSizeMB, value);
 }
 
 int AppSettings::maxThumbnailCacheSizeMB() {

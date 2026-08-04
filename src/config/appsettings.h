@@ -4,13 +4,13 @@
 #include <string_view>
 
 // Defaults
-constexpr int  c_defaultSnapshotCacheMB = 256;
+constexpr bool c_defaultRestoreSession = false;
 constexpr int  c_defaultThumbnailCacheMB = 128;
 constexpr int  c_defaultDeltaCacheMB = 1024;
 constexpr int  c_defaultBaseInterval = 100;
-constexpr bool c_defaultAutosaveSnapshots = true;
-constexpr bool c_defaultAutoreloadImages = true;
-constexpr bool c_defaultSnapshotOnReopen = true;
+constexpr bool c_defaultAutosaveSnapshots = false;
+constexpr bool c_defaultAutoreloadImages = false;
+constexpr bool c_defaultSnapshotOnReopen = false;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
@@ -20,7 +20,6 @@ constexpr std::string_view c_keyAutosaveSnapshots = "General/autosaveSnapshots";
 constexpr std::string_view c_keyAutoreloadImages = "General/autoreloadImages";
 constexpr std::string_view c_keySnapshotOnReopen = "General/snapshotOnReopen";
 constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
-constexpr std::string_view c_keySnapshotCacheSizeMB = "General/maxSnapshotCacheSizeMB";
 constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
 constexpr std::string_view c_keyDeltaCacheSizeMB = "General/maxDeltaCacheSizeMB";
 constexpr std::string_view c_keyBackgroundColor = "General/backgroundColor";
@@ -73,13 +72,6 @@ class AppSettings {
     static int baseInterval();
     /// @brief Set the interval between base snapshots.
     static void setBaseInterval(int value);
-
-    /// @brief Return the maximum memory allowed for the snapshot cache in MB.
-    /// @return The cache size in MB.
-    static int maxSnapshotCacheSizeMB();
-    /// @brief Set the maximum memory allowed for the snapshot cache.
-    /// @param value The size in MB.
-    static void setMaxSnapshotCacheSizeMB(int value);
 
     /// @brief Return the maximum memory allowed for the thumbnail cache in MB.
     /// @return The cache size in MB.

@@ -17,6 +17,6 @@ void GrayscaleTool::syncState(bool state) {
     m_state = state;
 }
 
-void GrayscaleTool::setup(EffectsController *controller) {
-    m_controller = controller;
+void GrayscaleTool::setup(EffectsController *effects, ViewerController *viewer) {
+    m_controller = effects;
 }

@@ -1,5 +1,6 @@
 #include <QCoreApplication>
 #include <QtTest>
+#include <QSignalSpy>
 #include "controllers/appsettingscontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
@@ -204,6 +205,47 @@ class TestViewerController : public QObject {
         controller.handlePanRequested(10, 20);
         QVERIFY(session.viewState().pan() != initialPan);
         QCOMPARE(viewer.setViewStateCalled(), true);
+    }
+
+    void testCanSwap() {
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+
+        // Case 1: No session
+        ViewerController noSessionController(&settings);
+        QVERIFY(!noSessionController.canSwap());
+
+        // Case 2: Session set, but no secondary selected
+        controller.setActiveSession(&session);
+        QVERIFY(!controller.canSwap());
+
+        // Case 3: Different secondary selected (should be able to swap)
+        controller.setSecondarySnapshot(123);
+        QVERIFY(controller.canSwap());
+
+        // Case 4: Secondary is the same as primary (should NOT be able to swap)
+        // In a default session with no snapshots, primary is SecondaryCurrent (-1)
+        controller.setSecondarySnapshot(ImageSession::SecondaryCurrent);
+        QVERIFY(!controller.canSwap());
+    }
+
+    void testSecondarySnapshotHandling() {
+        AppSettingsController settings;
+        ViewerController      controller(&settings);
+        ImageSession          session;
+
+        controller.setActiveSession(&session);
+
+        // Test setting and getting
+        controller.setSecondarySnapshot(456);
+        QCOMPARE(controller.secondarySnapshotIndex(), 456);
+
+        // Test signal emission
+        QSignalSpy spy(&controller, &ViewerController::secondarySnapshotChanged);
+        controller.setSecondarySnapshot(789);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toInt(), 789);
     }
 
     void testSetZoomPercentage() {

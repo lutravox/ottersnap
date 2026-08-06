@@ -81,6 +81,7 @@ void ImageSession::close() {
     m_snapshots.clear();
     m_labels.clear();
     m_selectedIndex = 0;
+    m_secondarySnapshotIndex = SecondaryNone;
     m_baseCache = {-1, QImage()};
 
     if (m_uiReconstructor) {
@@ -173,6 +174,10 @@ void ImageSession::deleteSnapshot(int index) {
     if (SnapshotManager::deleteSnapshot(m_filePath, snapshotId)) {
         // Store current index to adjust it after the list is rebuilt
         int oldIndex = m_selectedIndex;
+
+        if (m_secondarySnapshotIndex == snapshotId) {
+            m_secondarySnapshotIndex = SecondaryNone;
+        }
 
         rebuildSnapshotList();
 

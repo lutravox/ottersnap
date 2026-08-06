@@ -47,6 +47,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_sessionController = new ImageSessionController(m_settingsController, this);
     m_effectsController = new EffectsController(this);
     m_viewerController = new ViewerController(m_settingsController, this);
+    m_snapshotController = new SnapshotTimelineController(this);
 
     connect(m_viewerController,
             &ViewerController::grayscaleToggled,
@@ -126,6 +127,8 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSnapshotSelected);
 
+    m_viewerState->snapshotTimeline()->setController(m_snapshotController);
+
     connect(m_viewerState, &ViewerState::zoomRequested, this, [this](double pct) {
         if (m_viewerController) {
             m_viewerController->setZoomPercentage(pct);
@@ -148,12 +151,39 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onSnapshotDeletionRequested);
 
+    connect(m_viewerState->snapshotTimeline(),
+            &SnapshotTimeline::secondarySnapshotSelected,
+            m_viewerController,
+            &ViewerController::setSecondarySnapshot);
+
+    // Link controller signals to main window/viewer
+    connect(m_snapshotController,
+            &SnapshotTimelineController::snapshotSelected,
+            this,
+            &MainWindow::onSnapshotSelected);
+
+    connect(m_snapshotController,
+            &SnapshotTimelineController::snapshotDeletionRequested,
+            this,
+            &MainWindow::onSnapshotDeletionRequested);
+
+    connect(m_snapshotController,
+            &SnapshotTimelineController::createSnapshotRequested,
+            this,
+            &MainWindow::onSaveSnapshot);
+
+    connect(m_snapshotController,
+            &SnapshotTimelineController::secondarySnapshotSelected,
+            m_viewerController,
+            &ViewerController::setSecondarySnapshot);
+
+
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
     m_effectsController->setup(m_viewerState->viewer());
     m_effectsController->addUI(uiAdapter);
     m_effectsController->addUI(m_viewerState->toolbar());
-    m_viewerState->toolbar()->setup(m_effectsController);
+    m_viewerState->toolbar()->setup(m_effectsController, m_viewerController);
     m_viewerController->setViewer(m_viewerState->viewer());
     m_viewerState->setToolbarVisible(m_viewerController->isToolbarVisible());
 
@@ -199,6 +229,21 @@ void MainWindow::setupUi() {
             &ViewerController::toolbarVisibilityToggled,
             m_viewerState,
             &ViewerState::setToolbarVisible);
+
+    connect(m_viewerController,
+            &ViewerController::secondarySnapshotChanged,
+            m_viewerState,
+            &ViewerState::setSecondarySnapshotIndex);
+
+    connect(m_viewerController,
+            &ViewerController::secondarySnapshotChanged,
+            m_viewerState->toolbar(),
+            &ViewerToolbar::updateToolStates);
+
+    connect(m_viewerController,
+            &ViewerController::secondarySnapshotChanged,
+            this,
+            &MainWindow::updateMenuBar);
 
     // Connect image drop and drop on viewer
     connect(m_viewerState->viewer(),
@@ -274,6 +319,10 @@ void MainWindow::setupMenu() {
     m_actionToggleToolbar->setCheckable(true);
     m_actionToggleToolbar->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
     connect(m_actionToggleToolbar, &QAction::triggered, this, &MainWindow::onToggleToolbar);
+
+    m_actionSwap = m_viewMenu->addAction(tr("&Swap Comparison"));
+    m_actionSwap->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
+    connect(m_actionSwap, &QAction::triggered, this, &MainWindow::onSwap);
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
     m_actionResetView->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
@@ -361,6 +410,7 @@ void MainWindow::updateMenuBar() {
             m_actionResetView->setVisible(false);
             m_actionGrayscale->setVisible(false);
             m_actionMirror->setVisible(false);
+            m_actionSwap->setVisible(false);
 
             m_viewMenu->menuAction()->setVisible(false);
             m_effectsMenu->menuAction()->setVisible(false);
@@ -376,10 +426,17 @@ void MainWindow::updateMenuBar() {
             m_actionResetView->setVisible(true);
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
+            m_actionSwap->setVisible(true);
 
             m_viewMenu->menuAction()->setVisible(true);
             m_effectsMenu->menuAction()->setVisible(true);
             break;
+    }
+
+    if (m_viewerController) {
+        m_actionSwap->setEnabled(m_viewerController->canSwap());
+    } else {
+        m_actionSwap->setEnabled(false);
     }
 }
 
@@ -403,6 +460,12 @@ void MainWindow::onToggleScaleWithWindow() {
 void MainWindow::onToggleToolbar() {
     bool visible = m_actionToggleToolbar->isChecked();
     m_viewerController->setToolbarVisible(visible);
+}
+
+void MainWindow::onSwap() {
+    if (m_viewerController) {
+        m_viewerController->swapPrimaryAndSecondary();
+    }
 }
 
 void MainWindow::onResetView() {
@@ -564,7 +627,7 @@ void MainWindow::setupTabConnections(ImageTab *tab) {
     });
     connect(tab, &ImageTab::thumbnailUpdated, this, [this, tab](int index, const QPixmap& pixmap) {
         if (tab == currentTab()) {
-            m_viewerState->snapshotTimeline()->updateThumbnail(index, pixmap);
+            m_snapshotController->updateThumbnail(index, pixmap);
         }
     });
     connect(tab, &ImageTab::tabIconChanged, this, [this, tab](const QPixmap& pixmap) {
@@ -578,7 +641,7 @@ void MainWindow::setupTabConnections(ImageTab *tab) {
     connect(tab, &ImageTab::snapshotChanged, this, &MainWindow::onSnapshotChanged);
     connect(tab, &ImageTab::snapshotCreated, this, [this, tab](int snapshotIdx) {
         if (tab == currentTab()) {
-            m_viewerState->snapshotTimeline()->markSnapshotAsNew(snapshotIdx);
+            m_snapshotController->clearNewStatus(snapshotIdx);
         }
     });
 }
@@ -706,7 +769,7 @@ void MainWindow::syncTimelineSelection() {
         return;
 
     updateSnapshotTimeline();
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+    m_snapshotController->selectSnapshot(tab->session()->currentSnapshotIndex());
 }
 
 void MainWindow::onSnapshotChanged(int index) {
@@ -728,22 +791,8 @@ void MainWindow::updateSnapshotTimeline() {
         return;
     }
 
-    auto [images, labels, indices] =
-        tab->session()->snapshotTimelineThumbnails(ThumbnailConstants::StandardSize);
-    QVector<QPixmap> thumbs;
-    thumbs.reserve(images.size());
-
-    for (const auto& img : images) {
-        if (img.isNull()) {
-            thumbs.append(QPixmap());
-        } else {
-            thumbs.append(QPixmap::fromImage(img));
-        }
-    }
-
-    m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels, indices);
-    m_viewerState->snapshotTimeline()->model()->setSnapshotOnly(tab->session()->isSnapshotOnly());
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+    m_snapshotController->updateModel();
+    m_snapshotController->selectSnapshot(tab->session()->currentSnapshotIndex());
     m_viewerState->snapshotTimeline()->setCreateButtonEnabled(!tab->session()->isSnapshotOnly());
     m_viewerState->setSnapshotOnlyIndicator(tab->session()->isSnapshotOnly());
 }
@@ -880,7 +929,9 @@ void MainWindow::updateViewer(ImageTab *tab) {
 
     // Restore state for the new tab
     m_viewerController->setActiveSession(tab->session());
+    m_snapshotController->setSession(tab->session());
     m_viewerController->syncSessionToViewer();
+
 
     bool isSnapshot = false;
     if (!tab->session()->isCurrentImageSelected()) {
@@ -936,8 +987,6 @@ void MainWindow::onSnapshotSelected(int index) {
     if (!tab)
         return;
     tab->selectSnapshot(index);
-
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 
     // Update the version tracker AFTER updateViewer so it doesn't return early
     if (index == static_cast<int>(tab->session()->snapshots().size())) {

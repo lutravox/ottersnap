@@ -8,6 +8,7 @@
 #include "controllers/appsettingscontroller.h"
 #include "controllers/effectscontroller.h"
 #include "controllers/imagesessioncontroller.h"
+#include "controllers/snapshottimelinecontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
@@ -64,6 +65,7 @@ class MainWindow : public QMainWindow {
     void onResetEffects();
     void onSettings();
     void onToggleToolbar();
+    void onSwap();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
@@ -106,6 +108,7 @@ class MainWindow : public QMainWindow {
     SessionManager         m_session;
     EffectsController     *m_effectsController;
     ViewerController      *m_viewerController;
+    SnapshotTimelineController *m_snapshotController;
     AppSettingsController *m_settingsController;
     QMenu                 *m_fileMenu;
     QMenu                 *m_recentFilesMenu;
@@ -136,6 +139,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionSettings;
     QAction *m_actionManageSnapshots;
     QAction *m_actionToggleToolbar;
+    QAction *m_actionSwap;
 
     ImageTab *m_currentTabInView = nullptr;
     int       m_currentVersionInView = -1;

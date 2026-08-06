@@ -6,8 +6,9 @@
 #include <QVector>
 #include <QWidget>
 
-#include "ui/snapshotmodel.h"
+#include "core/snapshottimelinemodel.h"
 #include "ui/snapshottimelinedelegate.h"
+#include "controllers/snapshottimelinecontroller.h"
 
 #include <QHBoxLayout>
 #include <QListView>
@@ -28,48 +29,22 @@ class SnapshotTimeline : public QWidget {
     explicit SnapshotTimeline(QWidget *parent = nullptr);
 
     /**
-     * @brief Updates the timeline with a new set of thumbnails and labels.
-     * @param thumbnails List of thumbnail images to display.
-     * @param labels List of labels for each thumbnail.
-     * @param indices The internal indices mapping thumbnails to snapshots.
+     * @brief Associate a controller with this timeline.
+     * @param controller The controller that manages the model and selection state.
      */
-    void setThumbnails(const QVector<QPixmap>& thumbnails,
-                       const QVector<QString>& labels,
-                       const QVector<int>&     indices);
+    void setController(SnapshotTimelineController *controller);
 
-    /**
-     * @brief Marks a snapshot as new to highlight it in the timeline.
-     * @param snapshotIndex The index of the snapshot to mark.
-     */
-    void markSnapshotAsNew(int snapshotIndex);
-
-    /**
-     * @brief Sets the currently selected snapshot index.
-     * @param index The index to select.
-     */
-    void setSelectedIndex(int index);
-
-    /**
-     * @brief Updates a single thumbnail in the timeline.
-     * @param index The row index in the model.
-     * @param pixmap The new thumbnail image.
-     */
-    void updateThumbnail(int index, const QPixmap& pixmap);
-
-    /**
-     * @brief Sets whether the create snapshot button is enabled.
-     * @param enabled True to enable the button, false to disable it.
-     */
+    /// @brief Sets whether the create snapshot button is enabled.
+    /// @param enabled True to enable the button, false to disable it.
     void setCreateButtonEnabled(bool enabled);
 
-    SnapshotModel *model() const {
-        return m_model;
-    }
+    /// @brief Updates the secondary selection highlight in the timeline.
+    /// @param index The database ID of the snapshot to highlight as secondary.
+    void setSecondaryIndex(int index);
 
-    /**
-     * @brief Check if the timeline is currently empty.
-     */
-    bool isEmpty() const;
+    /// @brief Updates the view to reflect the current selection.
+    /// @param newIndex The index of the snapshot that was selected.
+    void updateSelection(int newIndex);
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
@@ -94,11 +69,11 @@ class SnapshotTimeline : public QWidget {
      */
     void snapshotDeletionRequested(int index);
 
-  private:
-    void updateSelection(int newIndex);
+    /// @brief Emitted when a snapshot is set as the secondary/comparison snapshot.
+    void secondarySnapshotSelected(int index);
 
-    int                       m_currentIndex = -1;
-    SnapshotModel            *m_model = nullptr;
+  private:
+    SnapshotTimelineController *m_controller = nullptr;
     QListView                *m_listView = nullptr;
     SnapshotTimelineDelegate *m_delegate = nullptr;
 

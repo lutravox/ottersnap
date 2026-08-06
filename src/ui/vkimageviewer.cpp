@@ -11,7 +11,9 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QShowEvent>
+#include <QStyleOption>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QVulkanFunctions>
@@ -57,7 +59,7 @@ VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
 
     m_container = QWidget::createWindowContainer(m_vulkanWindow, this);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(1, 1, 1, 1);
     layout->addWidget(m_container);
 
     // Intercept events on the embedded QVulkanWindow
@@ -279,4 +281,11 @@ void VkImageViewer::setReconstructor(std::shared_ptr<VkSnapshotReconstructor> re
     if (m_vulkanWindow) {
         m_vulkanWindow->requestUpdate();
     }
+}
+
+void VkImageViewer::paintEvent(QPaintEvent *event) {
+    QStyleOption opt;
+    opt.initFrom(this);
+    QPainter p(this);
+    style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 }

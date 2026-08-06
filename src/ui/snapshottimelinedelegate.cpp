@@ -2,7 +2,7 @@
 #include <QPainter>
 #include <QPalette>
 #include "ui/snapshottimelinedelegate.h"
-#include "ui/snapshotmodel.h"
+#include "core/snapshottimelinemodel.h"
 
 SnapshotTimelineDelegate::SnapshotTimelineDelegate(QObject *parent) : QStyledItemDelegate(parent) {
 }
@@ -16,12 +16,12 @@ void SnapshotTimelineDelegate::paint(QPainter                   *painter,
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
 
-    QPixmap pixmap = index.data(SnapshotModel::ThumbnailRole).value<QPixmap>();
-    bool    isNew = index.data(SnapshotModel::IsNewRole).toBool();
+    QPixmap pixmap = index.data(SnapshotTimelineModel::ThumbnailRole).value<QPixmap>();
+    bool    isNew = index.data(SnapshotTimelineModel::IsNewRole).toBool();
 
     // Create label
     int     row = index.row();
-    bool    isCurrent = index.data(SnapshotModel::IsCurrentImageRole).toBool();
+    bool    isCurrent = index.data(SnapshotTimelineModel::IsCurrentImageRole).toBool();
     QString labelText = isCurrent ? tr("C") : QString::number(row + 1);
 
     // Dimensions
@@ -38,14 +38,17 @@ void SnapshotTimelineDelegate::paint(QPainter                   *painter,
     int   y = rect.y() + (rect.height() - totalHeight) / 2 + padding + c_borderMargin;
 
     // Background (Selection or Hover)
-    if (index.row() == m_currentIndex || index.row() == m_hoverIndex) {
+    if (index.row() == m_currentIndex || index.row() == m_hoverIndex || index.row() == m_secondaryIndex) {
         QColor hoverColor = QApplication::palette().midlight().color();
         QColor selectedColor = QApplication::palette().light().color();
+        QColor secondaryColor = QApplication::palette().mid().color();
 
-        QColor bgColor = (index.row() == m_currentIndex) ? selectedColor : hoverColor;
+        QColor bgColor = (index.row() == m_currentIndex) ? selectedColor : 
+                         (index.row() == m_secondaryIndex) ? secondaryColor : hoverColor;
         painter->setBrush(bgColor);
 
-        QColor borderColor = (index.row() == m_currentIndex) ? selectedColor : hoverColor;
+        QColor borderColor = (index.row() == m_currentIndex) ? selectedColor : 
+                             (index.row() == m_secondaryIndex) ? secondaryColor : hoverColor;
         QPen   borderPen(borderColor);
 
         borderPen.setWidth(1);
@@ -59,6 +62,8 @@ void SnapshotTimelineDelegate::paint(QPainter                   *painter,
     // Draw Label
     if (index.row() == m_currentIndex) {
         painter->setPen(QApplication::palette().highlight().color());
+    } else if (index.row() == m_secondaryIndex) {
+        painter->setPen(QApplication::palette().color(QPalette::Text));
     } else {
         painter->setPen(QApplication::palette().color(QPalette::Disabled, QPalette::Text));
     }

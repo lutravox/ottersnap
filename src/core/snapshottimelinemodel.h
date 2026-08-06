@@ -6,13 +6,13 @@
 #include <QVector>
 
 /**
- * @class SnapshotModel
+ * @class SnapshotTimelineModel
  * @brief A model that manages the data for the snapshot timeline.
  *
  * This model stores the thumbnails, labels, and indices of snapshots,
  * providing them to the view via custom roles.
  */
-class SnapshotModel : public QAbstractListModel {
+class SnapshotTimelineModel : public QAbstractListModel {
     Q_OBJECT
 
   public:
@@ -27,7 +27,7 @@ class SnapshotModel : public QAbstractListModel {
         IsCurrentImageRole                ///< Whether the item is the current disk image.
     };
 
-    explicit SnapshotModel(QObject *parent = nullptr);
+    explicit SnapshotTimelineModel(QObject *parent = nullptr);
 
     int      rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -44,13 +44,13 @@ class SnapshotModel : public QAbstractListModel {
 
     /**
      * @brief Marks a specific snapshot as "new" to trigger a visual highlight.
-     * @param snapshotIndex The index of the snapshot to mark.
+     * @param snapshotIndex The database ID of the snapshot to mark.
      */
     void markSnapshotAsNew(int snapshotIndex);
 
     /**
      * @brief Removes the "new" status from a snapshot.
-     * @param snapshotIndex The index of the snapshot.
+     * @param snapshotIndex The database ID of the snapshot.
      */
     void clearNewStatus(int snapshotIndex);
 
@@ -62,11 +62,13 @@ class SnapshotModel : public QAbstractListModel {
     void updateThumbnail(int index, const QPixmap& pixmap);
 
     /// @brief Check if the current session is in snapshot-only mode.
+    /// @return True if in snapshot-only mode, false otherwise.
     bool isSnapshotOnly() const {
         return m_isSnapshotOnly;
     }
 
     /// @brief Set whether the session is in snapshot-only mode.
+    /// @param snapshotOnly True to enable snapshot-only mode.
     void setSnapshotOnly(bool snapshotOnly) {
         m_isSnapshotOnly = snapshotOnly;
     }

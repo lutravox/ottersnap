@@ -1,14 +1,14 @@
-#include "ui/snapshotmodel.h"
+#include "core/snapshottimelinemodel.h"
 
-SnapshotModel::SnapshotModel(QObject *parent) : QAbstractListModel(parent) {
+SnapshotTimelineModel::SnapshotTimelineModel(QObject *parent) : QAbstractListModel(parent) {
 }
 
-int SnapshotModel::rowCount(const QModelIndex& parent) const {
+int SnapshotTimelineModel::rowCount(const QModelIndex& parent) const {
     Q_UNUSED(parent);
     return m_thumbnails.size();
 }
 
-QVariant SnapshotModel::data(const QModelIndex& index, int role) const {
+QVariant SnapshotTimelineModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_thumbnails.size())
         return QVariant();
 
@@ -34,7 +34,7 @@ QVariant SnapshotModel::data(const QModelIndex& index, int role) const {
     }
 }
 
-void SnapshotModel::setThumbnails(const QVector<QPixmap>& thumbnails,
+void SnapshotTimelineModel::setThumbnails(const QVector<QPixmap>& thumbnails,
                                   const QVector<QString>& labels,
                                   const QVector<int>&     indices) {
     beginResetModel();
@@ -46,7 +46,7 @@ void SnapshotModel::setThumbnails(const QVector<QPixmap>& thumbnails,
     endResetModel();
 }
 
-void SnapshotModel::markSnapshotAsNew(int snapshotIndex) {
+void SnapshotTimelineModel::markSnapshotAsNew(int snapshotIndex) {
     if (snapshotIndex == -1)
         return;
     m_newSnapshots.insert(snapshotIndex);
@@ -60,7 +60,7 @@ void SnapshotModel::markSnapshotAsNew(int snapshotIndex) {
     }
 }
 
-void SnapshotModel::clearNewStatus(int snapshotIndex) {
+void SnapshotTimelineModel::clearNewStatus(int snapshotIndex) {
     if (snapshotIndex == -1)
         return;
     if (m_newSnapshots.contains(snapshotIndex)) {
@@ -74,7 +74,7 @@ void SnapshotModel::clearNewStatus(int snapshotIndex) {
     }
 }
 
-void SnapshotModel::updateThumbnail(int index, const QPixmap& pixmap) {
+void SnapshotTimelineModel::updateThumbnail(int index, const QPixmap& pixmap) {
     if (index < 0 || index >= m_thumbnails.size())
         return;
     m_thumbnails[index] = pixmap;

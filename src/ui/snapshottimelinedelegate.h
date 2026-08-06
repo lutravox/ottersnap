@@ -46,6 +46,14 @@ class SnapshotTimelineDelegate : public QStyledItemDelegate {
         m_hoverIndex = index;
     }
 
+    /**
+     * @brief Updates the secondary snapshot index for custom rendering.
+     * @param index The index of the secondary snapshot.
+     */
+    void setSecondaryIndex(int index) {
+        m_secondaryIndex = index;
+    }
+
   private:
     static constexpr int c_thumbSize = 48;
     static constexpr int c_labelHeight = 16;
@@ -57,4 +65,5 @@ class SnapshotTimelineDelegate : public QStyledItemDelegate {
 
     int m_currentIndex = -1;
     int m_hoverIndex = -1;
+    int m_secondaryIndex = -1;
 };

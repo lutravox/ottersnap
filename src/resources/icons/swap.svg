@@ -1,0 +1,9 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <!-- Top Arrow (Right) -->
+    <path d="M4 10h20v2h-20z" fill="currentColor"/>
+    <path d="M24 7l4 4l-4 4z" fill="currentColor"/>
+    
+    <!-- Bottom Arrow (Left) -->
+    <path d="M8 20h20v2h-20z" fill="currentColor"/>
+    <path d="M8 17l-4 4l4 4z" fill="currentColor"/>
+</svg>

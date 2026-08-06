@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QWidget>
+#include <QFrame>
 #include <QPushButton>
 #include <memory>
 #include <vector>
@@ -13,16 +13,19 @@ class EffectsController;
  * @class ViewerToolbar
  * @brief A vertical toolbar for quick access to image effects.
  */
-class ViewerToolbar : public QWidget, public IEffectsUI {
+class ViewerToolbar : public QFrame, public IEffectsUI {
     Q_OBJECT
 
   public:
     explicit ViewerToolbar(QWidget *parent = nullptr);
 
     /**
-     * @brief Connects the toolbar buttons to the effects controller.
+     * @brief Connects the toolbar buttons to the controllers.
      */
-    void setup(EffectsController *controller);
+    void setup(EffectsController *effects, class ViewerController *viewer);
+
+    /// @brief Updates the enabled/disabled state of all tools.
+    void updateToolStates();
 
     // IEffectsUI implementation
     void setGrayscaleChecked(bool checked) override;

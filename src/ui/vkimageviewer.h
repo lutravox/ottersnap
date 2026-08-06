@@ -145,6 +145,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @return True if the event was handled, false otherwise.
     bool eventFilter(QObject *obj, QEvent *event) override;
 
+    /// @brief Handles the paint event for QSS support.
+    void paintEvent(QPaintEvent *event) override;
+
   public slots:
     /// @brief Handles changes in effects state.
     void onEffectsChanged();

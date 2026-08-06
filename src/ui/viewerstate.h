@@ -48,6 +48,13 @@ class ViewerState : public QWidget {
         }
     }
 
+    /// @brief Updates the secondary snapshot index in the timeline.
+    void setSecondarySnapshotIndex(int index) {
+        if (m_snapshotTimeline) {
+            m_snapshotTimeline->setSecondaryIndex(index);
+        }
+    }
+
     /// @brief Toggles the visibility of the snapshot-only indicator.
     void setSnapshotOnlyIndicator(bool visible);
 

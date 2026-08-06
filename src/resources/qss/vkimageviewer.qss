@@ -1,10 +1,19 @@
 VkImageViewer {
     background-color: transparent;
+    border: 1px solid palette(Midlight);
+}
+
+#viewerToolbar {
+    background-color: palette(Mid);
+}
+
+#toolbarSeparator {
+    background-color: palette(Light);
 }
 
 #snapshotOnlyLabel {
     color: palette(Text);
-    background: palette(Button);
+    background: palette(Mid);
     font-size: 12px;
     padding: 5px;
 }

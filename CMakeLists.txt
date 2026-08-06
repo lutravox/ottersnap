@@ -98,10 +98,11 @@ set(OTTERSNAP_CORE_SOURCES
     src/controllers/imagesessioncontroller.cpp
     src/controllers/appsettingscontroller.cpp
     src/controllers/viewercontroller.cpp
+    src/controllers/snapshottimelinecontroller.cpp
     src/ui/notification.cpp
     src/ui/notificationmanager.cpp
     src/ui/snapshottimeline.cpp
-    src/ui/snapshotmodel.cpp
+    src/core/snapshottimelinemodel.cpp
     src/ui/snapshottimelinedelegate.cpp
     src/ui/tabbar.cpp
     src/ui/emptystate.cpp
@@ -111,8 +112,10 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/dialogs/snapshotmanagerdialog.cpp
     src/ui/dialogutils.cpp
     src/ui/viewertoolbar.cpp
+    src/ui/viewertools/viewertool.cpp
     src/ui/viewertools/grayscaletool.cpp
     src/ui/viewertools/mirrortool.cpp
+    src/ui/viewertools/swaptool.cpp
 
     # Core logic
     src/core/diskutils.cpp

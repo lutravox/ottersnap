@@ -17,6 +17,6 @@ void MirrorTool::syncState(bool state) {
     m_state = state;
 }
 
-void MirrorTool::setup(EffectsController *controller) {
-    m_controller = controller;
+void MirrorTool::setup(EffectsController *effects, ViewerController *viewer) {
+    m_controller = effects;
 }

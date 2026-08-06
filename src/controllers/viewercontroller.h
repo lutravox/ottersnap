@@ -38,6 +38,18 @@ class ViewerController : public QObject {
     /// @brief Return whether the viewer toolbar is currently visible.
     bool isToolbarVisible() const;
 
+    /// @brief Set the secondary snapshot for comparison.
+    void setSecondarySnapshot(int index);
+
+    /// @brief Return the index of the secondary snapshot, or -1 if none is set.
+    int secondarySnapshotIndex() const;
+
+    /// @brief Check if swapping primary and secondary is currently possible.
+    bool canSwap() const;
+
+    /// @brief Swap the primary and secondary snapshots.
+    void swapPrimaryAndSecondary();
+
     /// @brief Notify the controller that the viewport size has changed.
     void handleViewportResize(int width, int height);
 
@@ -50,6 +62,7 @@ class ViewerController : public QObject {
     void grayscaleToggled(bool enabled);
     void mirrorToggled(bool enabled);
     void toolbarVisibilityToggled(bool visible);
+    void secondarySnapshotChanged(int index);
 
   private:
     AppSettingsController *m_settings;

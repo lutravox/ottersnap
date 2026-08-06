@@ -1,11 +1,11 @@
 #pragma once
 
+#include <QFutureWatcher>
 #include <QImage>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QVector>
-#include <QFutureWatcher>
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
@@ -19,6 +19,9 @@
 class ImageSession : public QObject, public IEffectsState {
     Q_OBJECT
   public:
+    static constexpr int SecondaryNone = -2;
+    static constexpr int SecondaryCurrent = -1;
+
     explicit ImageSession(QObject *parent = nullptr);
     ~ImageSession();
 
@@ -95,6 +98,14 @@ class ImageSession : public QObject, public IEffectsState {
         return m_selectedIndex;
     }
 
+    int secondarySnapshotIndex() const {
+        return m_secondarySnapshotIndex;
+    }
+
+    void setSecondarySnapshotIndex(int index) {
+        m_secondarySnapshotIndex = index;
+    }
+
     bool isCurrentImageSelected() const {
         return isCurrentImage(m_selectedIndex);
     }
@@ -108,6 +119,9 @@ class ImageSession : public QObject, public IEffectsState {
 
     /// @brief Return the maximum valid index for the current session mode.
     int maxValidIndex() const;
+
+    /// @brief Return the relative version of a snapshot on the timeline (1-based).
+    int getRelativeVersion(int snapshotIndex) const;
 
     /// @brief Returns the UI-bound reconstructor for the current session.
     std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
@@ -145,8 +159,8 @@ class ImageSession : public QObject, public IEffectsState {
   private:
     void   autosaveSnapshot(const QImage& img);
     void   performSave(const QImage& img, bool isAutosave);
-    void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>>* watcher, bool isAutosave);
-    int    getRelativeVersion(int snapshotIndex) const;
+    void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher,
+                              bool                                                        isAutosave);
     QImage getPlaceholder(int size);
 
     bool                   m_isSnapshotOnly = false;
@@ -156,6 +170,7 @@ class ImageSession : public QObject, public IEffectsState {
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
     int                    m_selectedIndex = 0;
+    int                    m_secondarySnapshotIndex = SecondaryNone;
 
     QMap<int, QImage> m_placeholderCache;
 

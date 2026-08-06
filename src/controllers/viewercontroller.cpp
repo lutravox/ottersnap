@@ -37,6 +37,8 @@ void ViewerController::setActiveSession(ImageSession *session) {
             m_viewer->reconstruct(*seq);
         }
     }
+
+    emit secondarySnapshotChanged(m_session ? m_session->secondarySnapshotIndex() : ImageSession::SecondaryNone);
 }
 
 void ViewerController::setViewer(IViewer *viewer) {
@@ -114,6 +116,83 @@ void ViewerController::setToolbarVisible(bool visible) {
 
 bool ViewerController::isToolbarVisible() const {
     return m_settings->toolbarVisible();
+}
+
+void ViewerController::setSecondarySnapshot(int index) {
+    if (m_session) {
+        m_session->setSecondarySnapshotIndex(index);
+    }
+    emit secondarySnapshotChanged(index);
+}
+
+int ViewerController::secondarySnapshotIndex() const {
+    return m_session ? m_session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
+}
+
+bool ViewerController::canSwap() const {
+    if (!m_session)
+        return false;
+
+    int secondary = m_session->secondarySnapshotIndex();
+    if (secondary == ImageSession::SecondaryNone)
+        return false;
+
+    int primaryRow = m_session->currentSnapshotIndex();
+    int primaryDbId = -1;
+    const auto& snapshots = m_session->snapshots();
+
+    if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
+        primaryDbId = snapshots[primaryRow].snapshotIndex;
+    } else if (primaryRow == static_cast<int>(snapshots.size()) && !m_session->isSnapshotOnly()) {
+        primaryDbId = ImageSession::SecondaryCurrent;
+    }
+
+    return primaryDbId != secondary;
+}
+
+void ViewerController::swapPrimaryAndSecondary() {
+    if (!m_session)
+        return;
+
+    int primaryRow = m_session->currentSnapshotIndex();
+    int secondaryDbId = m_session->secondarySnapshotIndex();
+
+    if (secondaryDbId == ImageSession::SecondaryNone)
+        return; // No secondary snapshot selected
+
+    if (secondaryDbId == ImageSession::SecondaryCurrent && m_session->isSnapshotOnly())
+        return; // Secondary cannot be 'current' in snapshot-only mode
+
+    // Determine the row of the secondary snapshot
+    int secondaryRow = -1;
+    if (secondaryDbId == ImageSession::SecondaryCurrent) {
+        // Secondary is the current disk image
+        secondaryRow = static_cast<int>(m_session->snapshots().size());
+    } else {
+        int relVer = m_session->getRelativeVersion(secondaryDbId);
+        if (relVer != -1) {
+            secondaryRow = relVer - 1;
+        }
+    }
+
+    if (secondaryRow < 0 || secondaryRow > m_session->maxValidIndex())
+        return;
+
+    // Determine the database ID of the current primary
+    int primaryDbId = -1;
+    const auto& snapshots = m_session->snapshots();
+    if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
+        primaryDbId = snapshots[primaryRow].snapshotIndex;
+    } else if (primaryRow == static_cast<int>(snapshots.size()) && !m_session->isSnapshotOnly()) {
+        primaryDbId = -1; // Primary is the current image
+    }
+
+    // Perform swap
+    m_session->selectSnapshot(secondaryRow);
+    m_session->setSecondarySnapshotIndex(primaryDbId);
+
+    emit secondarySnapshotChanged(primaryDbId);
+    syncSessionToViewer();
 }
 
 void ViewerController::handleViewportResize(int width, int height) {

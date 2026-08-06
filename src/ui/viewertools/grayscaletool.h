@@ -11,7 +11,7 @@ class GrayscaleTool : public IViewerTool {
     bool isCheckable() const override { return true; }
     void onToggled(bool checked) override;
     void syncState(bool state) override;
-    void setup(class EffectsController *controller) override;
+    void setup(class EffectsController *effects, class ViewerController *viewer) override;
 
   private:
     class EffectsController *m_controller = nullptr;

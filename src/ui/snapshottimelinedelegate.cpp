@@ -96,7 +96,7 @@ QSize SnapshotTimelineDelegate::sizeHint(const QStyleOptionViewItem& option,
                                          const QModelIndex&          index) const {
     Q_UNUSED(option);
     Q_UNUSED(index);
-    return QSize(c_thumbSize,
+    return QSize(c_thumbSize + 4,
                  c_thumbSize + c_labelHeight + c_spacing + (c_padding * 2) + c_bottomPadding +
                      (c_borderMargin * 2));
 }

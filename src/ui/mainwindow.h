@@ -66,6 +66,7 @@ class MainWindow : public QMainWindow {
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
+    void onDeleteAllSnapshotsRequested();
 
   private:
     void      setupUi();
@@ -118,6 +119,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionSaveSnapshot;
     QAction *m_actionExportSnapshot;
     QAction *m_actionDeleteSnapshot;
+    QAction *m_actionDeleteAllSnapshots;
     QAction *m_actionCloseTab;
     QAction *m_actionCloseAllTabs;
     QAction *m_actionExit;

@@ -12,6 +12,8 @@
 #include <QHBoxLayout>
 #include <QListView>
 
+static constexpr int c_startPadding = 6;
+
 /**
  * @class SnapshotTimeline
  * @brief A widget providing a horizontal timeline of image snapshots.
@@ -102,5 +104,6 @@ class SnapshotTimeline : public QWidget {
     SnapshotTimelineDelegate *m_delegate = nullptr;
 
     QPushButton *m_createButton = nullptr;
+    QWidget     *m_stripContainer = nullptr;
     QLabel      *m_snapshotOnlyLabel = nullptr;
 };

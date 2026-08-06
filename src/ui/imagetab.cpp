@@ -90,3 +90,9 @@ void ImageTab::saveSnapshot() {
 void ImageTab::deleteSnapshot(int index) {
     m_session->deleteSnapshot(index);
 }
+
+void ImageTab::deleteAllSnapshots() {
+    SnapshotManager::deleteAllSnapshots(m_session->filePath());
+    m_session->rebuildSnapshotList();
+    emit snapshotsChanged();
+}

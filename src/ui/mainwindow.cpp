@@ -5,6 +5,7 @@
 #include "core/imagesession.h"
 #include "core/snapshotmanager.h"
 #include "core/thumbnailcache.h"
+#include "ui/dialogutils.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -225,6 +226,12 @@ void MainWindow::setupMenu() {
             this,
             &MainWindow::onDeleteCurrentSnapshotRequested);
 
+    m_actionDeleteAllSnapshots = m_fileMenu->addAction(tr("Delete &All Snapshots"));
+    connect(m_actionDeleteAllSnapshots,
+            &QAction::triggered,
+            this,
+            &MainWindow::onDeleteAllSnapshotsRequested);
+
     m_actionManageSnapshots = m_fileMenu->addAction(tr("Manage Snapshots..."));
     connect(m_actionManageSnapshots, &QAction::triggered, this, &MainWindow::onManageSnapshots);
 
@@ -321,9 +328,11 @@ void MainWindow::updateMenuBar() {
 
         // Disable "Save Snapshot of Current" if in Snapshot Only mode
         m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
+        m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
     } else {
         m_actionDeleteSnapshot->setEnabled(false);
         m_actionSaveSnapshot->setEnabled(false);
+        m_actionDeleteAllSnapshots->setEnabled(false);
     }
 
     switch (m_currentState) {
@@ -577,6 +586,7 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
 
     QString displayName = QFileInfo(path).fileName();
     int     index = m_tabBar->addTab(tab, displayName);
+    m_tabBar->setTabToolTip(index, path);
     tab->notifyImageOpened();
     setTabThumbnail(index);
     m_tabPaths.insert(path, tab);
@@ -764,11 +774,26 @@ void MainWindow::onManageSnapshots() {
     SnapshotManagerDialog dialog(this);
     connect(
         &dialog, &SnapshotManagerDialog::snapshotChanged, this, [this](const QString& imagePath) {
+            QVector<ImageTab *> tabsToClose;
             for (auto *tab : m_tabPaths.values()) {
                 if (tab->session()->filePath() == imagePath) {
                     tab->session()->rebuildSnapshotList();
+
+                    // If it's a snapshot-only session and all snapshots were deleted, mark for
+                    // closure
+                    if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
+                        tabsToClose.append(tab);
+                    }
                 }
             }
+
+            for (auto *tab : tabsToClose) {
+                int idx = m_tabBar->indexOf(tab);
+                if (idx != -1) {
+                    onCloseTab(idx);
+                }
+            }
+
             updateSnapshotTimeline();
         });
     connect(&dialog,
@@ -908,28 +933,42 @@ void MainWindow::onSnapshotDeletionRequested(int index) {
     if (!tab)
         return;
 
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Delete Snapshot"));
-    msgBox.setText(tr("Delete snapshot %1?").arg(index + 1));
-    msgBox.setIcon(QMessageBox::Warning);
-
-    QFile qssFile(":/qss/messagebox.qss");
-    if (qssFile.open(QIODevice::ReadOnly)) {
-        msgBox.setStyleSheet(qssFile.readAll());
-    }
-
-    QPushButton *deleteButton = msgBox.addButton(tr("Delete"), QMessageBox::AcceptRole);
-    QPushButton *cancelButton = msgBox.addButton(tr("Cancel"), QMessageBox::RejectRole);
-
-    msgBox.setDefaultButton(cancelButton);
-    msgBox.exec();
-
-    if (msgBox.clickedButton() == deleteButton) {
+    if (DialogUtils::confirm(this,
+                             tr("Delete Snapshot"),
+                             tr("Delete snapshot %1?").arg(index + 1),
+                             tr("Delete"),
+                             tr("Cancel"))) {
         tab->deleteSnapshot(index);
         updateSnapshotTimeline();
         updateViewer();
 
         // If it's a snapshot-only session and the last snapshot was deleted, close the tab.
+        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
+            onCloseCurrentTab();
+        }
+    }
+}
+
+void MainWindow::onDeleteAllSnapshotsRequested() {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    const auto& snapshots = tab->session()->snapshots();
+    if (snapshots.isEmpty())
+        return;
+
+    if (DialogUtils::confirm(
+            this,
+            tr("Delete All Snapshots"),
+            tr("Are you sure you want to delete all %1 snapshots?").arg(snapshots.size()),
+            tr("Delete All"),
+            tr("Cancel"))) {
+        tab->deleteAllSnapshots();
+        updateSnapshotTimeline();
+        updateViewer();
+
+        // If it's a snapshot-only session and all snapshots were deleted, close the tab.
         if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
             onCloseCurrentTab();
         }

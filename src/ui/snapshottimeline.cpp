@@ -72,11 +72,21 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     connect(
         m_createButton, &QPushButton::clicked, this, &SnapshotTimeline::createSnapshotRequested);
 
-    auto *root = new QHBoxLayout(this);
+    auto *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
-    root->addWidget(m_listView, 1);
+
+    m_stripContainer = new QWidget(this);
+    auto *stripLayout = new QHBoxLayout(m_stripContainer);
+    stripLayout->setContentsMargins(c_startPadding, 0, 0, 0);
+    stripLayout->setSpacing(0);
+    stripLayout->addWidget(m_listView, 1);
+
+    root->addWidget(m_stripContainer, 0);
+    root->addWidget(m_snapshotOnlyLabel, 0);
+
     // m_createButton is positioned manually in resizeEvent for edge clipping
+    m_createButton->setParent(m_stripContainer);
 
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     int baseH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
@@ -241,17 +251,9 @@ void SnapshotTimeline::resizeEvent(QResizeEvent *event) {
     // Position button so part of it extends past the right edge (clipped)
 
     int btnH = m_createButton->height();
-    int x = width() - 23; // crop ~27px of the right edge
+    int x = m_stripContainer->width() - 23; // crop ~27px of the right edge
     int y =
-        (height() - btnH) / 2; // This is wrong if we increase height, should be relative to strip
+        (m_stripContainer->height() - btnH) / 2;
 
-    // The strip height is what we used for setFixedHeight
-    int stripH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
-    y = (stripH - btnH) / 2;
     m_createButton->move(x, y);
-
-    if (m_snapshotOnlyLabel) {
-        int labelH = m_snapshotOnlyLabel->sizeHint().height();
-        m_snapshotOnlyLabel->setGeometry(0, stripH, width(), labelH);
-    }
 }

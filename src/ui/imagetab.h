@@ -47,6 +47,9 @@ class ImageTab : public QWidget {
     /// @brief Delete a specific snapshot.
     void deleteSnapshot(int index);
 
+    /// @brief Delete all snapshots associated with this image.
+    void deleteAllSnapshots();
+
   signals:
     /// @brief Emitted with a status message to show to the user.
     /// @param message Status text.

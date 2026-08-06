@@ -13,6 +13,7 @@
 #include "core/snapshotmanager.h"
 #include "core/thumbnailmanager.h"
 #include "core/vulkancontext.h"
+#include "ui/dialogutils.h"
 
 SnapshotItem::SnapshotItem(int            index,
                            const QString& filename,
@@ -252,12 +253,11 @@ void SnapshotManagerDialog::onClearImage() {
 
     const auto& img = images[m_selectedImageIndex];
 
-    auto result =
-        QMessageBox::question(this,
-                              tr("Clear Snapshots"),
-                              tr("Are you sure you want to delete ALL snapshots for this image?"),
-                              QMessageBox::Yes | QMessageBox::No);
-    if (result == QMessageBox::Yes) {
+    if (DialogUtils::confirm(this,
+                             tr("Delete All Snapshots"),
+                             tr("Are you sure you want to delete ALL snapshots for this image?"),
+                             tr("Delete All"),
+                             tr("Cancel"))) {
         SnapshotManager::deleteAllSnapshots(img.path);
         SnapshotDatabase::instance().clearImage(img.key);
 

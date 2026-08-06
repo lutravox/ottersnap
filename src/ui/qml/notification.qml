@@ -3,7 +3,7 @@ import QtQuick.Controls 2.15
 
 Item {
     id: root
-    width: 320
+    width: 400
     height: pill.height + 4
 
     property string message: ""
@@ -17,7 +17,7 @@ Item {
 
     Rectangle {
         id: pill
-        width: 300
+        width: 380
         height: messageText.implicitHeight + 20
         anchors.right: parent.right
         anchors.bottom: parent.bottom

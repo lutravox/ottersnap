@@ -6,6 +6,7 @@
 #include <qlogging.h>
 #include <qnamespace.h>
 #include <qobject.h>
+#include <QApplication>
 #include "core/imagesession.h"
 #include "config/appsettings.h"
 #include "core/diskutils.h"
@@ -158,6 +159,7 @@ void ImageSession::saveSnapshot() {
     if (m_diskImage.isNull())
         return;
 
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     performSave(m_diskImage, false);
 }
 
@@ -232,6 +234,7 @@ void ImageSession::reloadImage() {
 
         m_diskImage = newImage;
         m_lastModified = QFileInfo(m_filePath).lastModified();
+        emit statusMessage(tr("Current image reloaded."));
         emit imageChanged();
     });
 
@@ -256,6 +259,10 @@ void ImageSession::performSave(const QImage& img, bool isAutosave) {
 
 void ImageSession::handleSaveFinished(
     QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher, bool isAutosave) {
+    if (!isAutosave) {
+        QApplication::restoreOverrideCursor();
+    }
+
     auto res = watcher->result();
     if (res && res->status == SnapshotManager::SaveStatus::Created) {
         bool wasViewingCurrent = isCurrentImage(m_selectedIndex);

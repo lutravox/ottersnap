@@ -19,6 +19,7 @@ class TestAppSettings : public QObject {
     void testToolbarVisible();
     void testBackgroundColor();
     void testIdentity();
+    void testRepositoryUrl();
 };
 
 void TestAppSettings::initTestCase() {
@@ -102,6 +103,12 @@ void TestAppSettings::testIdentity() {
     QVERIFY(AppSettings::organizationName() != nullptr);
     QVERIFY(!QString(AppSettings::organizationDomain()).isEmpty());
     QVERIFY(!AppSettings::fileFilter().isEmpty());
+}
+
+void TestAppSettings::testRepositoryUrl() {
+    QVERIFY(AppSettings::repositoryUrl() != nullptr);
+    QVERIFY(!QString(AppSettings::repositoryUrl()).isEmpty());
+    QVERIFY(QString(AppSettings::repositoryUrl()).startsWith("http"));
 }
 
 QTEST_MAIN(TestAppSettings)

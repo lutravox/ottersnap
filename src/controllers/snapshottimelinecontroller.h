@@ -41,7 +41,7 @@ class SnapshotTimelineController : public QObject {
 
     /// @brief Return the current secondary selection database ID.
     /// @return The database ID of the secondary snapshot, or ImageSession::SecondaryNone if none.
-    int secondarySnapshotDbId() const { return m_secondaryDbId; }
+    int secondarySnapshotDbId() const;
 
     /// @brief Get the row index for a given snapshot database ID.
     /// @param dbId The database ID to search for.
@@ -72,5 +72,4 @@ class SnapshotTimelineController : public QObject {
     std::unique_ptr<SnapshotTimelineModel> m_model;
     ImageSession*                  m_session = nullptr;
     int                            m_currentIndex = -1;
-    int                            m_secondaryDbId = -2;
 };

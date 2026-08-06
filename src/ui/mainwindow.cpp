@@ -28,6 +28,7 @@
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
 #include "core/vulkancontext.h"
+#include "ui/dialogs/aboutdialog.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/dialogs/snapshotmanagerdialog.h"
 #include "ui/emptystate.h"
@@ -176,7 +177,6 @@ void MainWindow::setupUi() {
             &SnapshotTimelineController::secondarySnapshotSelected,
             m_viewerController,
             &ViewerController::setSecondarySnapshot);
-
 
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
@@ -369,6 +369,10 @@ void MainWindow::setupMenu() {
     connect(
         m_actionResetEffects, &QAction::triggered, m_effectsController, &EffectsController::reset);
 
+    m_helpMenu = menuBar()->addMenu(tr("&Help"));
+    m_actionAbout = m_helpMenu->addAction(tr("&About"));
+    connect(m_actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
+
     updateMenuBar();
     updateRecentFilesMenu();
 }
@@ -466,6 +470,11 @@ void MainWindow::onSwap() {
     if (m_viewerController) {
         m_viewerController->swapPrimaryAndSecondary();
     }
+}
+
+void MainWindow::onAbout() {
+    AboutDialog dialog(this);
+    dialog.exec();
 }
 
 void MainWindow::onResetView() {
@@ -694,6 +703,7 @@ void MainWindow::onCloseTab(int index) {
     if (tab) {
         if (tab == currentTab()) {
             m_viewerController->setActiveSession(nullptr);
+            m_snapshotController->setSession(nullptr);
         }
 
         QString path = tab->filePath();
@@ -788,9 +798,11 @@ void MainWindow::updateSnapshotTimeline() {
 
     auto *tab = currentTab();
     if (!tab) {
+        m_snapshotController->setSession(nullptr);
         return;
     }
 
+    m_snapshotController->setSession(tab->session());
     m_snapshotController->updateModel();
     m_snapshotController->selectSnapshot(tab->session()->currentSnapshotIndex());
     m_viewerState->snapshotTimeline()->setCreateButtonEnabled(!tab->session()->isSnapshotOnly());
@@ -931,7 +943,6 @@ void MainWindow::updateViewer(ImageTab *tab) {
     m_viewerController->setActiveSession(tab->session());
     m_snapshotController->setSession(tab->session());
     m_viewerController->syncSessionToViewer();
-
 
     bool isSnapshot = false;
     if (!tab->session()->isCurrentImageSelected()) {

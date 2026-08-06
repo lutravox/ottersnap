@@ -2,6 +2,7 @@
 #include "config/appsettings.h"
 
 constexpr char c_applicationName[] = "Ottersnap";
+constexpr char c_repositoryUrl[] = "https://github.com/Kipwisp/ottersnap";
 constexpr char c_organizationName[] = "";
 constexpr char c_organizationDomain[] = "kipwisp.com";
 
@@ -102,6 +103,10 @@ void AppSettings::resetBackgroundColor() {
 
 const char *AppSettings::applicationName() {
     return c_applicationName;
+}
+
+const char *AppSettings::repositoryUrl() {
+    return c_repositoryUrl;
 }
 
 const char *AppSettings::organizationName() {

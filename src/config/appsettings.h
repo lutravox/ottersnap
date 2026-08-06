@@ -52,6 +52,8 @@ class AppSettings {
 
     /// @brief Return the application name.
     static const char *applicationName();
+    /// @brief Return the repository URL.
+    static const char *repositoryUrl();
     /// @brief Return the organization name.
     static const char *organizationName();
     /// @brief Return the organization domain.

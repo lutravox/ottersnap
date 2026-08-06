@@ -11,6 +11,9 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
+configure_file(src/config/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/version.h)
+
+
 # ── Shader pipeline ──────────────────────────────────────────────────────
 #
 # GLSL shaders are auto-discovered in src/resources/shaders/, compiled to
@@ -110,6 +113,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/viewerstate.cpp
     src/ui/dialogs/settingsdialog.cpp
     src/ui/dialogs/snapshotmanagerdialog.cpp
+    src/ui/dialogs/aboutdialog.cpp
     src/ui/dialogutils.cpp
     src/ui/viewertoolbar.cpp
     src/ui/viewertools/viewertool.cpp
@@ -137,7 +141,7 @@ set(OTTERSNAP_CORE_SOURCES
 )
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
-target_include_directories(ottersnap_core PUBLIC src)
+target_include_directories(ottersnap_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql)
 
 add_executable(${PROJECT_NAME}

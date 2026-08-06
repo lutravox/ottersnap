@@ -66,6 +66,7 @@ class MainWindow : public QMainWindow {
     void onSettings();
     void onToggleToolbar();
     void onSwap();
+    void onAbout();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
@@ -115,6 +116,7 @@ class MainWindow : public QMainWindow {
     QMenu                 *m_editMenu;
     QMenu                 *m_viewMenu;
     QMenu                 *m_effectsMenu;
+    QMenu                 *m_helpMenu;
 
     ContentState m_currentState = ContentState::Empty;
     bool         m_isRestoringSession = false;
@@ -140,6 +142,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionManageSnapshots;
     QAction *m_actionToggleToolbar;
     QAction *m_actionSwap;
+    QAction *m_actionAbout;
 
     ImageTab *m_currentTabInView = nullptr;
     int       m_currentVersionInView = -1;

@@ -12,10 +12,18 @@ class SwapTool : public IViewerTool {
   public:
     explicit SwapTool();
 
-    QString name() const override { return tr("Swap"); }
-    QString tooltip() const override { return tr("Swap Primary and Secondary Snapshots"); }
-    QString iconPath() const override { return QString(":/icons/swap.svg"); }
-    bool isCheckable() const override { return false; }
+    QString name() const override {
+        return tr("Swap");
+    }
+    QString tooltip() const override {
+        return tr("Swap Comparison");
+    }
+    QString iconPath() const override {
+        return QString(":/icons/swap.svg");
+    }
+    bool isCheckable() const override {
+        return false;
+    }
 
     void onToggled(bool checked) override;
     void syncState(bool state) override;

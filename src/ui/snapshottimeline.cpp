@@ -101,17 +101,9 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
         if (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove ||
             event->type() == QEvent::MouseButtonPress) {
             if (auto *me = dynamic_cast<QMouseEvent *>(event)) {
-                if (obj == m_listView->viewport()) {
-                    pos = me->position().toPoint();
-                } else {
-                    pos = m_listView->viewport()->mapFromGlobal(me->globalPosition().toPoint());
-                }
+                pos = m_listView->viewport()->mapFromGlobal(me->globalPosition().toPoint());
             } else if (auto *he = dynamic_cast<QHoverEvent *>(event)) {
-                if (obj == m_listView->viewport()) {
-                    pos = he->position().toPoint();
-                } else {
-                    pos = m_listView->viewport()->mapFromGlobal(he->globalPosition().toPoint());
-                }
+                pos = m_listView->viewport()->mapFromGlobal(he->globalPosition().toPoint());
             }
         }
 

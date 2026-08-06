@@ -1,3 +1,10 @@
 VkImageViewer {
     background-color: transparent;
 }
+
+#snapshotOnlyLabel {
+    color: palette(Text);
+    background: palette(Button);
+    font-size: 12px;
+    padding: 5px;
+}

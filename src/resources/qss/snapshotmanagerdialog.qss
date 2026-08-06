@@ -1,0 +1,59 @@
+/* SnapshotItem styles */
+SnapshotItem {
+    border: none;
+    border-radius: 4px;
+    background: palette(Dark);
+}
+
+SnapshotItem:hover {
+    background: palette(Mid);
+}
+
+SnapshotItem[selected="true"] {
+    border: 1px solid palette(Highlight);
+    background: palette(Midlight);
+}
+
+/* Grid Background */
+QWidget#imageGridWidget {
+    background-color: palette(Dark);
+    border: 1px solid palette(Midlight);
+    border-radius: 8px;
+}
+
+/* Labels inside SnapshotItem */
+SnapshotItem QLabel {
+    background: transparent;
+    border: none;
+}
+
+SnapshotItem QLabel#nameLabel {
+    font-size: 10px;
+    color: palette(WindowText);
+}
+
+SnapshotItem QLabel#countLabel {
+    font-size: 10px;
+    color: palette(Text);
+}
+
+/* SnapshotManagerDialog Details Panel */
+QLabel#pathLabel {
+    color: palette(WindowText);
+    font-size: 11px;
+}
+
+QLabel#countLabelDetail, QLabel#storageLabelDetail {
+    color: palette(Text);
+    font-size: 12px;
+}
+
+QLabel#detailsTitle {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Separator */
+QFrame#detailsSeparator {
+    background-color: palette(Mid);
+}

@@ -17,8 +17,9 @@ class ImageSessionController : public QObject {
 
     /// @brief Open an image or return the existing session if already open.
     /// @param path Absolute path to the image file.
+    /// @param snapshotOnly Whether to open in snapshot-only mode (skipping disk load).
     /// @return The session associated with the image, or nullptr on failure.
-    ImageSession *openImage(const QString& path);
+    ImageSession *openImage(const QString& path, bool snapshotOnly = false);
 
     /// @brief Close the session associated with the given path.
     /// @param path Absolute path to the image file.

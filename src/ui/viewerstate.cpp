@@ -1,15 +1,21 @@
 #include "ui/viewerstate.h"
 
+#include <QDebug>
+#include <QFile>
+#include <QLabel>
 #include <QVBoxLayout>
 
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
-#include "ui/viewerstate.h"
 #include "ui/vkimageviewer.h"
 
-#include <QVBoxLayout>
-
 ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
+    {
+        QFile qss(":/qss/vkimageviewer.qss");
+        if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
+            setStyleSheet(QString::fromUtf8(qss.readAll()));
+    }
+
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);

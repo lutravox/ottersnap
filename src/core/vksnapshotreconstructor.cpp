@@ -928,7 +928,16 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
         barrier.buffer = m_pendingStateBuffer;
         barrier.offset = 0;
         barrier.size = size;
-        df->vkCmdPipelineBarrier(m_computeCmdBuffer, 0, 0, 0, 0, nullptr, 1, &barrier, 0, nullptr);
+        df->vkCmdPipelineBarrier(m_computeCmdBuffer,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   0,
+                                   0,
+                                   nullptr,
+                                   1,
+                                   &barrier,
+                                   0,
+                                   nullptr);
 
         df->vkCmdCopyBuffer(
             m_computeCmdBuffer, m_pendingStateBuffer, m_cachedBaseBuffer, 1, &copyRegion);

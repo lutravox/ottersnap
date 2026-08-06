@@ -47,6 +47,8 @@ class MainWindow : public QMainWindow {
 
   private slots:
     void onFileOpen();
+    void onManageSnapshots();
+    void onOpenSnapshotRequested(const QString& path, int index);
     void onSaveSnapshot();
     void onDeleteCurrentSnapshotRequested();
     void onCloseTab(int index);
@@ -70,7 +72,8 @@ class MainWindow : public QMainWindow {
     void      setupMenu();
     void      updateMenuBar();
     void      updateRecentFilesMenu();
-    void      openImageFile(const QString& path, bool setAsCurrent = true);
+    void      setupTabConnections(ImageTab *tab);
+    ImageTab *openImageFile(const QString& path, bool setAsCurrent = true);
     ImageTab *currentTab();
     void      applyEffects();
     void      updateTabThumbnail(int index);
@@ -128,6 +131,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionMirror;
     QAction *m_actionResetEffects;
     QAction *m_actionSettings;
+    QAction *m_actionManageSnapshots;
 
     ImageTab *m_currentTabInView = nullptr;
     int       m_currentVersionInView = -1;

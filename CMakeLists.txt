@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 # ── Shader pipeline ──────────────────────────────────────────────────────
@@ -102,18 +102,20 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/notificationmanager.cpp
     src/ui/snapshottimeline.cpp
     src/ui/snapshotmodel.cpp
-    src/ui/snapshottimelinedelagate.cpp
+    src/ui/snapshottimelinedelegate.cpp
     src/ui/tabbar.cpp
     src/ui/emptystate.cpp
     src/ui/statusbar.cpp
     src/ui/viewerstate.cpp
     src/ui/dialogs/settingsdialog.cpp
+    src/ui/dialogs/snapshotmanagerdialog.cpp
 
     # Core logic
     src/core/diskutils.cpp
     src/core/thumbnailcache.cpp
     src/core/deltacache.cpp
-    src/core/snapshotstore.cpp
+    src/core/snapshotmanager.cpp
+    src/core/snapshotdb.cpp
     src/core/vksnapshotreconstructor.cpp
     src/core/vulkancontext.cpp
     src/core/vulkanutils.cpp
@@ -129,7 +131,7 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src)
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml)
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql)
 
 add_executable(${PROJECT_NAME}
     # Entry point
@@ -147,7 +149,7 @@ add_executable(${PROJECT_NAME}
 add_dependencies(${PROJECT_NAME} shader_rcc)
 
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml)
+target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql)
 
 qt_add_translations(${PROJECT_NAME}
     RESOURCE_PREFIX "/translations"

@@ -31,6 +31,10 @@ void ImageTab::setupUi() {
     mainLayout->setSpacing(0);
 }
 
+void ImageTab::setSnapshotOnly(bool snapshotOnly) {
+    m_isSnapshotOnly = snapshotOnly;
+}
+
 void ImageTab::notifyImageOpened() {
     emit snapshotChanged(m_session->currentSnapshotIndex());
 }

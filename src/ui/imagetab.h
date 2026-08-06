@@ -18,6 +18,11 @@ class ImageTab : public QWidget {
     void close();
     /// @brief Notify the tab that the associated image has been opened or changed.
     void notifyImageOpened();
+    /// @brief Set whether the tab is a snapshot-only tab.
+    void setSnapshotOnly(bool snapshotOnly);
+    bool isSnapshotOnly() const {
+        return m_isSnapshotOnly;
+    }
 
     /// @brief The session associated with this tab.
     ImageSession *session() const {
@@ -81,5 +86,6 @@ class ImageTab : public QWidget {
     void setupUi();
 
     QTimer        m_thumbnailUpdateTimer;
+    bool          m_isSnapshotOnly = false;
     ImageSession *m_session = nullptr;
 };

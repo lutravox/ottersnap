@@ -48,12 +48,6 @@ VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 
-    {
-        QFile qss(":/qss/vkimageviewer.qss");
-        if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
-            setStyleSheet(QString::fromUtf8(qss.readAll()));
-    }
-
     m_renderer = new VkImageViewerRenderer();
     auto *vkWindow = new VkImageViewerWindow();
     vkWindow->setViewerRenderer(m_renderer);

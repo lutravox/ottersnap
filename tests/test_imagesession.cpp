@@ -6,7 +6,7 @@
 #include <QtTest>
 #include "config/appsettings.h"
 #include "core/imagesession.h"
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 #include "core/vulkancontext.h"
 
 class TestImageSession : public QObject {
@@ -49,6 +49,7 @@ void TestImageSession::initTestCase() {
         m_tempFile->close();
     }
     createTestImage(m_testFilePath, Qt::red);
+    AppSettings::setAutoreloadImages(true);
 }
 
 void TestImageSession::cleanupTestCase() {
@@ -61,7 +62,7 @@ void TestImageSession::cleanup() {
     // Reset AppSettings to prevent test pollution between alphabetically-ordered tests.
     // testSaveSnapshot sets autosaveSnapshots(true) which affects subsequent tests.
     AppSettings::setAutosaveSnapshots(false);
-    SnapshotStore::clearCache();
+    SnapshotManager::clearCache();
 }
 
 void TestImageSession::createTestImage(const QString& path, const QColor& color) {
@@ -94,7 +95,7 @@ void TestImageSession::testSelectSnapshot() {
     session.selectSnapshot(-1);
     QCOMPARE(session.currentSnapshotIndex(), initialIndex);
 
-    // Normally we'd create a snapshot via SnapshotStore to test navigation,
+    // Normally we'd create a snapshot via SnapshotManager to test navigation,
     // but we can verify the signal is emitted when a valid index is set.
     QSignalSpy spy(&session, &ImageSession::imageChanged);
     session.selectSnapshot(0);
@@ -207,7 +208,7 @@ void TestImageSession::testSnapshotDeletion() {
 
     QString uniquePath = m_tempFile->fileName() + "_del.png";
     AppSettings::setAutosaveSnapshots(false);
-    SnapshotStore::deleteAllSnapshots(uniquePath);
+    SnapshotManager::deleteAllSnapshots(uniquePath);
     createTestImage(uniquePath, Qt::red);
     session.openImage(uniquePath);
 
@@ -266,7 +267,7 @@ void TestImageSession::testGetReconstructionSequence() {
     AppSettings::setBaseInterval(10);
     ImageSession session;
     QString      uniquePath = m_tempFile->fileName() + "_seq.png";
-    SnapshotStore::deleteAllSnapshots(uniquePath);
+    SnapshotManager::deleteAllSnapshots(uniquePath);
 
     // Create a sequence of 3 unique images
     QColor colors[] = {Qt::red, Qt::green, Qt::blue};

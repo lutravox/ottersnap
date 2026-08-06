@@ -5,13 +5,14 @@
 #include <QPointer>
 #include <QString>
 #include <QVector>
+#include <QFutureWatcher>
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
 #include "core/effects_interfaces.h"
 #include "core/effectsstate.h"
 #include "core/imagemonitor.h"
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 #include "core/viewstate.h"
 
 /// @brief Manages the state logic for a single opened image.
@@ -53,9 +54,7 @@ class ImageSession : public QObject, public IEffectsState {
     }
 
     /// @brief Return the dimensions of the image.
-    QSize dimensions() const {
-        return m_diskImage.size();
-    }
+    QSize dimensions() const;
 
     /// @brief Retrieve the reconstruction sequence (base image and deltas) for the current
     /// snapshot.
@@ -86,6 +85,9 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Generate and cache a thumbnail for the currently selected image.
     QImage thumbnail(int size);
 
+    /// @brief Rebuild the internal list of snapshots from disk.
+    void rebuildSnapshotList();
+
     QString filePath() const {
         return m_filePath;
     }
@@ -104,6 +106,9 @@ class ImageSession : public QObject, public IEffectsState {
         return m_lastModified;
     }
 
+    /// @brief Return the maximum valid index for the current session mode.
+    int maxValidIndex() const;
+
     /// @brief Returns the UI-bound reconstructor for the current session.
     std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
         return m_uiReconstructor;
@@ -111,6 +116,13 @@ class ImageSession : public QObject, public IEffectsState {
 
     /// @brief Initializes the UI reconstructor with the provided device handles.
     void setUIReconstructorHandles(const VulkanHandles& handles);
+    /// @brief Set whether the session is in snapshot-only mode (original file missing).
+    void setSnapshotOnly(bool snapshotOnly) {
+        m_isSnapshotOnly = snapshotOnly;
+    }
+    bool isSnapshotOnly() const {
+        return m_isSnapshotOnly;
+    }
 
   signals:
     /// @brief Emitted when the image data changes (requiring UI refresh).
@@ -131,12 +143,13 @@ class ImageSession : public QObject, public IEffectsState {
     void onDeviceChanged();
 
   private:
-    void   rebuildSnapshotList();
     void   autosaveSnapshot(const QImage& img);
     void   performSave(const QImage& img, bool isAutosave);
+    void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>>* watcher, bool isAutosave);
     int    getRelativeVersion(int snapshotIndex) const;
     QImage getPlaceholder(int size);
 
+    bool                   m_isSnapshotOnly = false;
     QDateTime              m_lastModified;
     QString                m_filePath;
     QImage                 m_diskImage;

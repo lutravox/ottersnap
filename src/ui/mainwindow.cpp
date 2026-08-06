@@ -3,7 +3,7 @@
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 #include "core/thumbnailcache.h"
 
 #include <QApplication>
@@ -28,6 +28,7 @@
 #include "controllers/effectscontroller.h"
 #include "core/vulkancontext.h"
 #include "ui/dialogs/settingsdialog.h"
+#include "ui/dialogs/snapshotmanagerdialog.h"
 #include "ui/emptystate.h"
 #include "ui/imagetab.h"
 #include "ui/snapshottimeline.h"
@@ -63,7 +64,15 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    m_session.save(m_sessionController->openPaths());
+    QStringList openPaths;
+    if (m_tabBar) {
+        for (int i = 0; i < m_tabBar->count(); ++i) {
+            if (auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(i))) {
+                openPaths.append(tab->filePath());
+            }
+        }
+    }
+    m_session.save(openPaths);
 
     //  Cleanup tab session resources
     if (m_tabBar) {
@@ -216,6 +225,9 @@ void MainWindow::setupMenu() {
             this,
             &MainWindow::onDeleteCurrentSnapshotRequested);
 
+    m_actionManageSnapshots = m_fileMenu->addAction(tr("Manage Snapshots..."));
+    connect(m_actionManageSnapshots, &QAction::triggered, this, &MainWindow::onManageSnapshots);
+
     m_fileMenu->addSeparator();
 
     m_actionCloseTab = m_fileMenu->addAction(tr("Close &Tab"));
@@ -306,8 +318,12 @@ void MainWindow::updateMenuBar() {
         const auto& snapshots = tab->session()->snapshots();
         // Disable if no snapshot is selected or if it's the current image ('C')
         m_actionDeleteSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
+
+        // Disable "Save Snapshot of Current" if in Snapshot Only mode
+        m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
     } else {
         m_actionDeleteSnapshot->setEnabled(false);
+        m_actionSaveSnapshot->setEnabled(false);
     }
 
     switch (m_currentState) {
@@ -512,20 +528,7 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
     onSnapshotDeletionRequested(index);
 }
 
-void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
-    ImageSession *session = m_sessionController->openImage(path);
-    if (!session)
-        return;
-
-    // Check if already open in a tab
-    if (auto *existing = m_tabPaths.value(path)) {
-        if (setAsCurrent) {
-            m_tabBar->setCurrentWidget(existing);
-        }
-        return;
-    }
-
-    auto *tab = new ImageTab(this, session);
+void MainWindow::setupTabConnections(ImageTab *tab) {
     connect(tab, &ImageTab::statusMessage, this, [this](const QString& msg, int timeout) {
         notify(msg, timeout);
     });
@@ -548,6 +551,29 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
             m_viewerState->snapshotTimeline()->markSnapshotAsNew(snapshotIdx);
         }
     });
+}
+
+ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
+    ImageSession *session = m_sessionController->openImage(path, false);
+
+    // file wasn't found, open in snapshot only mode
+    if (!session) {
+        session = m_sessionController->openImage(path, true);
+    }
+
+    if (!session)
+        return nullptr;
+
+    // Check if already open in a tab
+    if (auto *existing = m_tabPaths.value(path)) {
+        if (setAsCurrent) {
+            m_tabBar->setCurrentWidget(existing);
+        }
+        return existing;
+    }
+
+    auto *tab = new ImageTab(this, session);
+    setupTabConnections(tab);
 
     QString displayName = QFileInfo(path).fileName();
     int     index = m_tabBar->addTab(tab, displayName);
@@ -562,6 +588,8 @@ void MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
         updateViewer(tab);
         m_viewerController->fitToWindow();
     }
+
+    return tab;
 }
 
 void MainWindow::onCloseTab(int index) {
@@ -645,6 +673,7 @@ void MainWindow::syncTimelineSelection() {
     auto *tab = currentTab();
     if (!tab)
         return;
+
     updateSnapshotTimeline();
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
 }
@@ -655,6 +684,7 @@ void MainWindow::onSnapshotChanged(int index) {
         return;
 
     updateViewer(tab);
+    syncTimelineSelection();
 }
 
 void MainWindow::updateSnapshotTimeline() {
@@ -681,7 +711,10 @@ void MainWindow::updateSnapshotTimeline() {
     }
 
     m_viewerState->snapshotTimeline()->setThumbnails(thumbs, labels, indices);
+    m_viewerState->snapshotTimeline()->model()->setSnapshotOnly(tab->session()->isSnapshotOnly());
     m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+    m_viewerState->snapshotTimeline()->setCreateButtonEnabled(!tab->session()->isSnapshotOnly());
+    m_viewerState->setSnapshotOnlyIndicator(tab->session()->isSnapshotOnly());
 }
 
 void MainWindow::showEvent(QShowEvent *event) {
@@ -696,10 +729,8 @@ void MainWindow::showEvent(QShowEvent *event) {
     QStringList paths = m_session.restorePaths();
     for (size_t i = 0; i < paths.size(); ++i) {
         const QString& path = paths.at(i);
-        if (QFile::exists(path)) {
-            bool isLast = (i == paths.size() - 1);
-            openImageFile(path, isLast);
-        }
+        bool           isLast = (i == paths.size() - 1);
+        openImageFile(path, isLast);
     }
     m_isRestoringSession = false;
     updateSnapshotTimeline();
@@ -727,6 +758,49 @@ void MainWindow::dropEvent(QDropEvent *event) {
 void MainWindow::onSettings() {
     SettingsDialog dialog(this);
     dialog.exec();
+}
+
+void MainWindow::onManageSnapshots() {
+    SnapshotManagerDialog dialog(this);
+    connect(
+        &dialog, &SnapshotManagerDialog::snapshotChanged, this, [this](const QString& imagePath) {
+            for (auto *tab : m_tabPaths.values()) {
+                if (tab->session()->filePath() == imagePath) {
+                    tab->session()->rebuildSnapshotList();
+                }
+            }
+            updateSnapshotTimeline();
+        });
+    connect(&dialog,
+            &SnapshotManagerDialog::openSnapshotRequested,
+            this,
+            [this, &dialog](const QString& path, int index) {
+                onOpenSnapshotRequested(path, index);
+                dialog.accept();
+            });
+    dialog.exec();
+}
+
+void MainWindow::onOpenSnapshotRequested(const QString& path, int index) {
+    if (m_tabPaths.contains(path)) {
+        ImageTab *tab = m_tabPaths.value(path);
+        tab->session()->selectSnapshot(index);
+        m_tabBar->setCurrentWidget(tab);
+        updateState();
+        updateViewer(tab);
+        m_viewerController->fitToWindow();
+        return;
+    }
+
+    ImageTab *tab = openImageFile(path, true);
+    if (!tab)
+        return;
+
+    tab->session()->selectSnapshot(index);
+
+    updateState();
+    updateViewer(tab);
+    m_viewerController->fitToWindow();
 }
 
 void MainWindow::updateViewer(ImageTab *tab) {
@@ -784,7 +858,8 @@ void MainWindow::updateViewer(ImageTab *tab) {
 
     // Update timestamp in status bar
     int idx = tab->session()->currentSnapshotIndex();
-    if (idx >= 0 && !tab->session()->isCurrentImage(idx)) {
+    if (idx >= 0 && idx < static_cast<int>(tab->session()->snapshots().size()) &&
+        !tab->session()->isCurrentImage(idx)) {
         const auto& snapshots = tab->session()->snapshots();
         m_viewerState->statusBar()->setTimestamp(
             snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
@@ -816,15 +891,15 @@ void MainWindow::onSnapshotSelected(int index) {
         return;
     tab->selectSnapshot(index);
 
-    // Update the version tracker so updateViewer knows something changed
+    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
+
+    // Update the version tracker AFTER updateViewer so it doesn't return early
     if (index == static_cast<int>(tab->session()->snapshots().size())) {
         m_currentVersionInView = -1;
     } else {
         m_currentVersionInView = index;
     }
 
-    m_viewerState->snapshotTimeline()->setSelectedIndex(tab->session()->currentSnapshotIndex());
-    updateViewer();
     updateMenuBar();
 }
 
@@ -853,6 +928,11 @@ void MainWindow::onSnapshotDeletionRequested(int index) {
         tab->deleteSnapshot(index);
         updateSnapshotTimeline();
         updateViewer();
+
+        // If it's a snapshot-only session and the last snapshot was deleted, close the tab.
+        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
+            onCloseCurrentTab();
+        }
     }
 }
 

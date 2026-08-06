@@ -5,6 +5,7 @@
 #include <QtConcurrent>
 #include <qlogging.h>
 #include <qnamespace.h>
+#include <qobject.h>
 #include "core/imagesession.h"
 #include "config/appsettings.h"
 #include "core/diskutils.h"
@@ -31,22 +32,38 @@ ImageSession::~ImageSession() {
 }
 
 bool ImageSession::openImage(const QString& filePath) {
-    ThumbnailCache::invalidate(SnapshotStore::imageKey(filePath), -1);
+    ThumbnailCache::invalidate(SnapshotManager::imageKey(filePath), -1);
 
     m_filePath = filePath;
     m_lastModified = QFileInfo(m_filePath).lastModified();
-    m_diskImage = DiskUtils::loadImage(m_filePath);
-    if (m_diskImage.isNull()) {
-        emit statusMessage(QString("Failed to load: %1").arg(m_filePath));
-        return false;
+    if (m_isSnapshotOnly) {
+        m_diskImage = QImage();
+    } else {
+        m_diskImage = DiskUtils::loadImage(m_filePath);
+        if (m_diskImage.isNull()) {
+            emit statusMessage(QString("Failed to load: %1").arg(m_filePath));
+            return false;
+        }
     }
 
     rebuildSnapshotList();
     m_monitor->watch(m_filePath);
-    m_selectedIndex = static_cast<int>(m_snapshots.size());
+
+    if (m_isSnapshotOnly && m_snapshots.isEmpty()) {
+        return false;
+    }
+
+    m_selectedIndex = m_isSnapshotOnly ? 0 : static_cast<int>(m_snapshots.size());
 
     // Initialize view state with image dimensions
-    m_viewState.resetState(m_diskImage.width(), m_diskImage.height());
+    QSize dims = m_diskImage.size();
+    if (m_isSnapshotOnly && !m_snapshots.isEmpty()) {
+        auto optBase = SnapshotManager::loadBaseImage(m_filePath, m_snapshots[0].snapshotIndex);
+        if (optBase) {
+            dims = optBase->image.size();
+        }
+    }
+    m_viewState.resetState(dims.width(), dims.height());
 
     emit imageChanged();
     return true;
@@ -77,7 +94,6 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() 
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
     if (index < 0 || index >= static_cast<int>(m_snapshots.size())) {
-        qWarning() << "[ImageSession] Index out of bounds for reconstruction sequence";
         return std::nullopt;
     }
 
@@ -106,7 +122,7 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         seq.baseChecksum = m_snapshots[baseIdx].checksum;
         m_baseCache = {baseSnapshotIdx, seq.base};
     } else {
-        auto optBase = SnapshotStore::loadBaseImage(m_filePath, baseSnapshotIdx);
+        auto optBase = SnapshotManager::loadBaseImage(m_filePath, baseSnapshotIdx);
         if (!optBase)
             return std::nullopt;
 
@@ -115,9 +131,9 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         m_baseCache = {baseSnapshotIdx, seq.base};
     }
 
-    QString imageKey = SnapshotStore::imageKey(m_filePath);
+    QString imageKey = SnapshotManager::imageKey(m_filePath);
     for (int i = baseIdx + 1; i <= index; ++i) {
-        auto optDelta = SnapshotStore::loadDelta(m_filePath, m_snapshots[i].snapshotIndex);
+        auto optDelta = SnapshotManager::loadDelta(m_filePath, m_snapshots[i].snapshotIndex);
         if (!optDelta)
             return std::nullopt;
         seq.deltas.append({imageKey + ":" + m_snapshots[i].fileName, std::move(*optDelta)});
@@ -126,8 +142,13 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     return seq;
 }
 
+int ImageSession::maxValidIndex() const {
+    return m_isSnapshotOnly ? std::max(0, static_cast<int>(m_snapshots.size()) - 1)
+                            : static_cast<int>(m_snapshots.size());
+}
+
 void ImageSession::selectSnapshot(int index) {
-    if (index < 0 || (index > static_cast<int>(m_snapshots.size())))
+    if (index < 0 || index > maxValidIndex())
         return;
     m_selectedIndex = index;
     emit imageChanged();
@@ -147,15 +168,16 @@ void ImageSession::deleteSnapshot(int index) {
     int snapshotId = m_snapshots[index].snapshotIndex;
     int relativeVersion = index + 1;
 
-    if (SnapshotStore::deleteSnapshot(m_filePath, snapshotId)) {
+    if (SnapshotManager::deleteSnapshot(m_filePath, snapshotId)) {
         // Store current index to adjust it after the list is rebuilt
         int oldIndex = m_selectedIndex;
 
         rebuildSnapshotList();
 
         if (oldIndex == index) {
-            // Viewing the deleted snapshot -> move to current disk image
-            m_selectedIndex = static_cast<int>(m_snapshots.size());
+            // Viewing the deleted snapshot -> move to current disk image (or last available
+            // snapshot if snapshot-only)
+            m_selectedIndex = maxValidIndex();
         } else if (oldIndex > index && (isCurrentImage(oldIndex) ||
                                         oldIndex < static_cast<int>(m_snapshots.size()) + 1)) {
             // Viewed snapshot shifted left, or we were viewing the disk image
@@ -177,6 +199,9 @@ void ImageSession::deleteSnapshot(int index) {
 }
 
 bool ImageSession::isCurrentImage(int index) const {
+    if (m_isSnapshotOnly) {
+        return false;
+    }
     return index == static_cast<int>(m_snapshots.size());
 }
 
@@ -199,13 +224,14 @@ void ImageSession::reloadImage() {
         if (newImage.isNull() || newImage == m_diskImage)
             return;
 
-        ThumbnailCache::invalidate(SnapshotStore::imageKey(m_filePath), -1);
+        ThumbnailCache::invalidate(SnapshotManager::imageKey(m_filePath), -1);
 
         if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
             autosaveSnapshot(m_diskImage);
         }
 
         m_diskImage = newImage;
+        m_lastModified = QFileInfo(m_filePath).lastModified();
         emit imageChanged();
     });
 
@@ -219,41 +245,40 @@ void ImageSession::autosaveSnapshot(const QImage& img) {
 void ImageSession::performSave(const QImage& img, bool isAutosave) {
     QString path = m_filePath;
 
-    auto watcher = new QFutureWatcher<std::optional<SnapshotStore::SaveResult>>(this);
+    auto watcher = new QFutureWatcher<std::optional<SnapshotManager::SaveResult>>(this);
     connect(watcher,
-            &QFutureWatcher<std::optional<SnapshotStore::SaveResult>>::finished,
-            [this, watcher, isAutosave]() {
-                auto res = watcher->result();
-                if (res && res->status == SnapshotStore::SaveStatus::Created) {
-                    bool wasViewingCurrent = isCurrentImage(m_selectedIndex);
-                    if (wasViewingCurrent) {
-                        m_selectedIndex++;
-                    }
+            &QFutureWatcher<std::optional<SnapshotManager::SaveResult>>::finished,
+            [this, watcher, isAutosave]() { handleSaveFinished(watcher, isAutosave); });
 
-                    rebuildSnapshotList();
-
-                    if (wasViewingCurrent) {
-                        emit imageChanged();
-                    }
-
-                    QString msg =
-                        isAutosave ? "Autosave successful." : "New snapshot created successfully.";
-                    emit statusMessage(msg);
-                    emit snapshotCreated(res->snapshotIndex);
-                } else if (res && res->status == SnapshotStore::SaveStatus::Existing &&
-                           !isAutosave) {
-                    int  pos = getRelativeVersion(res->snapshotIndex);
-                    emit statusMessage(QString("Current image already saved as snapshot %1.")
-                                           .arg(pos != -1 ? QString::number(pos)
-                                                          : QString::number(res->snapshotIndex)));
-                } else if (!res || (res && res->status != SnapshotStore::SaveStatus::Existing &&
-                                    res->status != SnapshotStore::SaveStatus::Created)) {
-                    emit statusMessage("Save failed.");
-                }
-                watcher->deleteLater();
-            });
     watcher->setFuture(
-        QtConcurrent::run([path, img]() { return SnapshotStore::saveSnapshot(path, img); }));
+        QtConcurrent::run([path, img]() { return SnapshotManager::saveSnapshot(path, img); }));
+}
+
+void ImageSession::handleSaveFinished(
+    QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher, bool isAutosave) {
+    auto res = watcher->result();
+    if (res && res->status == SnapshotManager::SaveStatus::Created) {
+        bool wasViewingCurrent = isCurrentImage(m_selectedIndex);
+        rebuildSnapshotList();
+
+        if (wasViewingCurrent) {
+            m_selectedIndex++;
+            emit imageChanged();
+        }
+
+        QString msg = isAutosave ? "Autosave successful." : "New snapshot created successfully.";
+        emit    statusMessage(msg);
+        emit    snapshotCreated(res->snapshotIndex);
+    } else if (res && res->status == SnapshotManager::SaveStatus::Existing && !isAutosave) {
+        int     pos = getRelativeVersion(res->snapshotIndex);
+        QString msg =
+            QString("Current image already saved as snapshot %1.").arg(QString::number(pos));
+        emit statusMessage(msg);
+    } else if (!res || (res && res->status != SnapshotManager::SaveStatus::Existing &&
+                        res->status != SnapshotManager::SaveStatus::Created)) {
+        emit statusMessage("Save failed.");
+    }
+    watcher->deleteLater();
 }
 
 int ImageSession::getRelativeVersion(int snapshotIndex) const {
@@ -276,12 +301,14 @@ void ImageSession::setMirror(bool enabled) {
 }
 
 void ImageSession::rebuildSnapshotList() {
-    m_snapshots = SnapshotStore::loadSnapshots(m_filePath);
+    m_snapshots = SnapshotManager::loadSnapshots(m_filePath);
     m_labels.clear();
     for (const auto& v : m_snapshots) {
         m_labels.append(v.timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
     }
-    m_labels.append("Current");
+    if (!m_isSnapshotOnly) {
+        m_labels.append("Current");
+    }
     emit snapshotsChanged();
 }
 
@@ -297,8 +324,10 @@ ImageSession::snapshotTimelineThumbnails(int size) {
         indices.append(m_snapshots[i].snapshotIndex);
     }
 
-    thumbs.append(generateThumbnail(static_cast<int>(m_snapshots.size()), size));
-    indices.append(-1); // Current image is not a snapshot in the store
+    if (!m_isSnapshotOnly) {
+        thumbs.append(generateThumbnail(static_cast<int>(m_snapshots.size()), size));
+        indices.append(-1); // Current image is not a snapshot in the store
+    }
 
     return {thumbs, m_labels, indices};
 }
@@ -352,6 +381,14 @@ void ImageSession::onDeviceChanged() {
     }
     // UI reconstructor will be re-initialized by the renderer via setUIReconstructorHandles.
     emit imageChanged();
+}
+
+QSize ImageSession::dimensions() const {
+    auto seq = getReconstructionSequence();
+    if (seq) {
+        return seq->base.size();
+    }
+    return m_diskImage.size();
 }
 
 void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {

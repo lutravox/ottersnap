@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHoverEvent>
+#include <QLabel>
 #include <QListView>
 #include <QMenu>
 #include <QModelIndex>
@@ -45,13 +46,18 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_listView->installEventFilter(this);
     m_listView->setAutoFillBackground(true);
 
+    m_snapshotOnlyLabel = new QLabel(tr("Original image not found. Viewing only snapshots."), this);
+    m_snapshotOnlyLabel->setObjectName("snapshotOnlyLabel");
+    m_snapshotOnlyLabel->setAlignment(Qt::AlignCenter);
+    m_snapshotOnlyLabel->setVisible(false);
+
     connect(m_listView, &QListView::clicked, this, [this](const QModelIndex& index) {
         int row = index.row();
         if (row == m_currentIndex)
             return;
         int oldIndex = m_currentIndex;
         m_currentIndex = row;
-        updateSelection(oldIndex, row);
+        updateSelection(row);
         emit snapshotSelected(row);
     });
 
@@ -73,7 +79,8 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     // m_createButton is positioned manually in resizeEvent for edge clipping
 
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height());
+    int baseH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
+    setFixedHeight(baseH);
 
     // Load timeline stylesheet
     QFile qss(":/qss/snapshottimeline.qss");
@@ -121,7 +128,8 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
                 if (index.isValid()) {
                     int row = index.row();
                     // Don't allow deleting the current disk image (the last tab)
-                    if (row < m_model->rowCount() - 1) {
+                    // In snapshot-only mode, all items are deletable.
+                    if (m_model->isSnapshotOnly() || row < m_model->rowCount() - 1) {
                         QMenu    menu(this);
                         QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
                         connect(deleteAct, &QAction::triggered, this, [this, row]() {
@@ -148,7 +156,7 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
             if (next != m_currentIndex) {
                 int oldIndex = m_currentIndex;
                 m_currentIndex = next;
-                updateSelection(oldIndex, next);
+                updateSelection(next);
                 emit snapshotSelected(next);
             }
             return true;
@@ -177,15 +185,30 @@ void SnapshotTimeline::setSelectedIndex(int index) {
 
     int oldIndex = m_currentIndex;
     m_currentIndex = clamped;
-    updateSelection(oldIndex, clamped);
+    updateSelection(clamped);
     m_listView->setCurrentIndex(m_model->index(clamped));
+}
+
+void SnapshotTimeline::setCreateButtonEnabled(bool enabled) {
+    m_createButton->setEnabled(enabled);
+}
+
+void SnapshotTimeline::setSnapshotOnlyIndicator(bool visible) {
+    if (m_snapshotOnlyLabel) {
+        m_snapshotOnlyLabel->setVisible(visible);
+
+        int stripH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
+        int labelH = m_snapshotOnlyLabel->sizeHint().height();
+
+        setFixedHeight(visible ? stripH + labelH : stripH);
+    }
 }
 
 bool SnapshotTimeline::isEmpty() const {
     return m_model->rowCount() == 0;
 }
 
-void SnapshotTimeline::updateSelection(int oldIndex, int newIndex) {
+void SnapshotTimeline::updateSelection(int newIndex) {
     // We can use the model to clear the "new" status
     if (newIndex >= 0 && newIndex < m_model->rowCount()) {
         int snapshotIdx = m_model->data(m_model->index(newIndex), SnapshotModel::IndexRole).toInt();
@@ -219,6 +242,16 @@ void SnapshotTimeline::resizeEvent(QResizeEvent *event) {
 
     int btnH = m_createButton->height();
     int x = width() - 23; // crop ~27px of the right edge
-    int y = (height() - btnH) / 2;
+    int y =
+        (height() - btnH) / 2; // This is wrong if we increase height, should be relative to strip
+
+    // The strip height is what we used for setFixedHeight
+    int stripH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
+    y = (stripH - btnH) / 2;
     m_createButton->move(x, y);
+
+    if (m_snapshotOnlyLabel) {
+        int labelH = m_snapshotOnlyLabel->sizeHint().height();
+        m_snapshotOnlyLabel->setGeometry(0, stripH, width(), labelH);
+    }
 }

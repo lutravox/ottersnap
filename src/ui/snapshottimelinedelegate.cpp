@@ -1,7 +1,7 @@
 #include <QApplication>
 #include <QPainter>
 #include <QPalette>
-#include "ui/snapshottimelinedelagate.h"
+#include "ui/snapshottimelinedelegate.h"
 #include "ui/snapshotmodel.h"
 
 SnapshotTimelineDelegate::SnapshotTimelineDelegate(QObject *parent) : QStyledItemDelegate(parent) {
@@ -21,8 +21,8 @@ void SnapshotTimelineDelegate::paint(QPainter                   *painter,
 
     // Create label
     int     row = index.row();
-    int     total = index.model()->rowCount();
-    QString labelText = (row == total - 1) ? tr("C") : QString::number(row + 1);
+    bool    isCurrent = index.data(SnapshotModel::IsCurrentImageRole).toBool();
+    QString labelText = isCurrent ? tr("C") : QString::number(row + 1);
 
     // Dimensions
     const int thumbSize = c_thumbSize;

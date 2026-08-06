@@ -69,6 +69,11 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     /// @brief Associates the renderer with an image session.
     void setSession(ImageSession *session);
 
+    /// @brief Get the currently associated session.
+    ImageSession *session() const {
+        return m_session;
+    }
+
   protected:
     /// @brief Initializes Vulkan resources (samplers, buffers, etc.).
     void initResources() override;

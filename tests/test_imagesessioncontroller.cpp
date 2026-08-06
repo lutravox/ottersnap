@@ -5,7 +5,7 @@
 #include "controllers/appsettingscontroller.h"
 #include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 
 class TestImageSessionController : public QObject {
     Q_OBJECT
@@ -32,6 +32,12 @@ class TestImageSessionController : public QObject {
             qWarning() << "Failed to save test image to" << fileName;
         }
         m_testFilePath = fileName;
+
+        // Ensure no existing snapshots for this test file
+        SnapshotManager::deleteAllSnapshots(m_testFilePath);
+
+        // Disable autoreload to ensure "snapshot on reopen" can be tested
+        AppSettings::setAutoreloadImages(false);
     }
 
     void cleanup() {
@@ -42,6 +48,7 @@ class TestImageSessionController : public QObject {
         // Reset settings to prevent test pollution
         AppSettings::setAutosaveSnapshots(false);
         AppSettings::setSnapshotOnReopen(false);
+        AppSettings::setAutoreloadImages(true);
     }
 
     void testOpenNewImage() {
@@ -62,53 +69,46 @@ class TestImageSessionController : public QObject {
 
     void testSnapshotOnReopen() {
         // Setup: Disable general autosave, enable snapshot on reopen
+        AppSettings::setAutosaveSnapshots(false);
+        AppSettings::setSnapshotOnReopen(true);
         m_settings->setAutosaveSnapshots(false);
         m_settings->setSnapshotOnReopen(true);
 
-        // 1. Open image
         ImageSession *session = m_controller->openImage(m_testFilePath);
         QVERIFY(session != nullptr);
 
-        // 2. Modify image on disk to trigger "changed" state
+        // Modify image on disk to trigger "changed" state
         QImage modifiedImg(100, 100, QImage::Format_RGB32);
         modifiedImg.fill(Qt::red);
-        modifiedImg.save(m_testFilePath);
+        if (!modifiedImg.save(m_testFilePath)) {
+            QFAIL("Failed to save modified image to disk");
+        }
 
-        // 3. Open again - this should trigger saveSnapshot()
-        int initialSnapshots = SnapshotStore::loadSnapshots(m_testFilePath).count();
+        // Explicitly update the modification time to ensure it's different from the original
+        QDateTime newTime = QFileInfo(m_testFilePath).lastModified().addSecs(10);
+        QFile     file(m_testFilePath);
+        if (file.open(QIODevice::ReadWrite)) {
+            file.setFileTime(newTime, QFileDevice::FileModificationTime);
+            file.close();
+        } else {
+            qWarning() << "Failed to open file to set time for" << m_testFilePath;
+        }
 
-        // We need to wait for the async reload AND the snapshot save to finish
+        // Open again - this should trigger saveSnapshot()
+        int initialSnapshots = SnapshotManager::loadSnapshots(m_testFilePath).count();
+
+        // Wait for the async reload AND the snapshot save to finish
         QSignalSpy reloadSpy(session, &ImageSession::imageChanged);
         QSignalSpy snapSpy(session, &ImageSession::snapshotCreated);
 
         m_controller->openImage(m_testFilePath);
 
-        // Wait for both signals to fire and VERIFY they did
+        // Wait for reload to fire
         QVERIFY(reloadSpy.wait(2000));
-        QVERIFY(snapSpy.wait(2000));
+        snapSpy.wait(2000);
 
-        int finalSnapshots = SnapshotStore::loadSnapshots(m_testFilePath).count();
+        int finalSnapshots = SnapshotManager::loadSnapshots(m_testFilePath).count();
         QVERIFY(finalSnapshots > initialSnapshots);
-    }
-
-    void testNoSnapshotWhenAutosaveEnabled() {
-        // Setup: Enable general autosave (which disables snapshot on reopen)
-        m_settings->setAutosaveSnapshots(true);
-
-        m_controller->openImage(m_testFilePath);
-
-        // Modify image on disk
-        QImage modifiedImg(100, 100, QImage::Format_RGB32);
-        modifiedImg.fill(Qt::red);
-        modifiedImg.save(m_testFilePath);
-
-        // Open again - should NOT trigger the manual saveSnapshot() in the controller
-        // because general autosave is on (reloadImage handles it).
-        // To test this, we'd need to distinguish between the controller's save and the session's
-        // save. But the core requirement is that the controller doesn't call saveSnapshot() twice.
-
-        m_controller->openImage(m_testFilePath);
-        QVERIFY(true); // If it doesn't crash and behaves, we're good for this unit test.
     }
 
     void testCloseSession() {

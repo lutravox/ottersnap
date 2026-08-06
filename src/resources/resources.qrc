@@ -3,6 +3,7 @@
         <file alias="qss/snapshottimeline.qss">qss/snapshottimeline.qss</file>
         <file alias="qss/notification.qss">qss/notification.qss</file>
         <file alias="qss/vkimageviewer.qss">qss/vkimageviewer.qss</file>
+        <file alias="qss/snapshotmanagerdialog.qss">qss/snapshotmanagerdialog.qss</file>
         <file alias="qss/messagebox.qss">qss/messagebox.qss</file>
         <file alias="qss/statusbar.qss">qss/statusbar.qss</file>
         <file>../ui/qml/notification.qml</file>

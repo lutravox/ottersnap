@@ -1,6 +1,6 @@
 #include <QtTest>
 #include "config/appsettings.h"
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -9,9 +9,11 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtConcurrent>
+#include "core/deltacache.h"
+#include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
 
-class TestSnapshotStore : public QObject {
+class TestSnapshotManager : public QObject {
     Q_OBJECT
 
   private slots:
@@ -33,6 +35,7 @@ class TestSnapshotStore : public QObject {
 
     // Reconstruction & Resizing
     void testReconstructSnapshot();
+    void testSparseDeltaReconstruction();
     void testResizeImage();
 
     // Dedup
@@ -56,25 +59,33 @@ class TestSnapshotStore : public QObject {
     static QImage  makeImage(int width, int height, QColor color);
 };
 
-void TestSnapshotStore::initTestCase() {
+void TestSnapshotManager::initTestCase() {
+    // Use a unique temporary database for this test case to avoid collisions with other tests.
+    QString tempDb = QDir::tempPath() + "/test_snapshot_manager_" +
+                     QString::number(QRandomGenerator::global()->generate()) + ".db";
+    SnapshotDatabase::instance().init(tempDb);
+
+    // Clear the delta cache to ensure a clean environment.
+    DeltaCache::clear();
+
     // Initialize Vulkan context to enable GPU-accelerated reconstruction tests.
     if (!VulkanContext::instance().initializeInstance()) {
         qWarning() << "VulkanContext failed to initialize. GPU tests may fail.";
     }
 }
 
-void TestSnapshotStore::cleanupTestCase() {
+void TestSnapshotManager::cleanupTestCase() {
     // Clean up any leftover test data — not strictly necessary
     // since each test uses unique paths, but good practice.
 }
 
-QString TestSnapshotStore::testFilePath(const QString& suffix) {
+QString TestSnapshotManager::testFilePath(const QString& suffix) {
     // Use a path that looks like a real file path but doesn't need to
     // actually exist — it's only used to generate a snapshot key.
     return QString("/tmp/ottersnap_test_%1/file.png").arg(suffix);
 }
 
-QImage TestSnapshotStore::makeImage(int width, int height, QColor color) {
+QImage TestSnapshotManager::makeImage(int width, int height, QColor color) {
     QImage img(width, height, QImage::Format_ARGB32);
     img.fill(color);
     return img;
@@ -82,51 +93,51 @@ QImage TestSnapshotStore::makeImage(int width, int height, QColor color) {
 
 // Checksum
 
-void TestSnapshotStore::testChecksumNullImage() {
+void TestSnapshotManager::testChecksumNullImage() {
     QImage  img;
-    QString checksum = SnapshotStore::computeChecksum(img);
+    QString checksum = SnapshotManager::computeChecksum(img);
     QVERIFY(checksum.isEmpty());
 }
 
-void TestSnapshotStore::testChecksumDeterministic() {
+void TestSnapshotManager::testChecksumDeterministic() {
     QImage  img = makeImage(10, 10, Qt::red);
-    QString cs1 = SnapshotStore::computeChecksum(img);
-    QString cs2 = SnapshotStore::computeChecksum(img);
+    QString cs1 = SnapshotManager::computeChecksum(img);
+    QString cs2 = SnapshotManager::computeChecksum(img);
     QCOMPARE(cs1, cs2);
     QVERIFY(!cs1.isEmpty());
 }
 
-void TestSnapshotStore::testChecksumDifferent() {
+void TestSnapshotManager::testChecksumDifferent() {
     QImage img1 = makeImage(10, 10, Qt::red);
     QImage img2 = makeImage(10, 10, Qt::blue);
-    QVERIFY(SnapshotStore::computeChecksum(img1) != SnapshotStore::computeChecksum(img2));
+    QVERIFY(SnapshotManager::computeChecksum(img1) != SnapshotManager::computeChecksum(img2));
 }
 
-void TestSnapshotStore::testChecksumSameImage() {
+void TestSnapshotManager::testChecksumSameImage() {
     QImage img1 = makeImage(10, 10, Qt::green);
     QImage img2 = makeImage(10, 10, Qt::green);
-    QCOMPARE(SnapshotStore::computeChecksum(img1), SnapshotStore::computeChecksum(img2));
+    QCOMPARE(SnapshotManager::computeChecksum(img1), SnapshotManager::computeChecksum(img2));
 }
 
 // Save / Load cycle
 
-void TestSnapshotStore::testSaveFirstSnapshot() {
+void TestSnapshotManager::testSaveFirstSnapshot() {
     QString path = testFilePath("save1");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
     QImage img = makeImage(20, 20, Qt::magenta);
 
-    auto snap = SnapshotStore::saveSnapshot(path, img);
+    auto snap = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap.has_value());
     QCOMPARE(snap->snapshotIndex, 1);
 }
 
-void TestSnapshotStore::testLoadSnapshots() {
+void TestSnapshotManager::testLoadSnapshots() {
     QString path = testFilePath("load1");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
     QImage img = makeImage(20, 20, Qt::cyan);
-    SnapshotStore::saveSnapshot(path, img);
+    SnapshotManager::saveSnapshot(path, img);
 
-    QVector<ImageSnapshot> snapshots = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 1);
     QCOMPARE(snapshots[0].snapshotIndex, 1);
     QVERIFY(!snapshots[0].fileName.isEmpty());
@@ -134,41 +145,41 @@ void TestSnapshotStore::testLoadSnapshots() {
     QVERIFY(!snapshots[0].timestamp.isNull());
 }
 
-void TestSnapshotStore::testMultipleSnapshots() {
+void TestSnapshotManager::testMultipleSnapshots() {
     QString path = testFilePath("multi");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::red));
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::green));
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::blue));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::green));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue));
 
-    QVector<ImageSnapshot> snapshots = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 3);
     QCOMPARE(snapshots[0].snapshotIndex, 1);
     QCOMPARE(snapshots[1].snapshotIndex, 2);
     QCOMPARE(snapshots[2].snapshotIndex, 3);
 }
 
-void TestSnapshotStore::testSizeChangeTriggersBase() {
+void TestSnapshotManager::testSizeChangeTriggersBase() {
     QString path = testFilePath("sizeChangeBase");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     // Set interval high so we don't trigger a base by index
     AppSettings::setBaseInterval(100);
 
     // Save first image (Base)
     QImage img1 = makeImage(100, 100, Qt::red);
-    SnapshotStore::saveSnapshot(path, img1);
+    SnapshotManager::saveSnapshot(path, img1);
 
     // Save second image of same size (Delta)
     QImage img2 = makeImage(100, 100, Qt::blue);
-    SnapshotStore::saveSnapshot(path, img2);
+    SnapshotManager::saveSnapshot(path, img2);
 
     // Save third image of DIFFERENT size (Should trigger Base)
     QImage img3 = makeImage(200, 200, Qt::green);
-    SnapshotStore::saveSnapshot(path, img3);
+    SnapshotManager::saveSnapshot(path, img3);
 
-    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QVERIFY(snaps.size() >= 3);
     QVERIFY(snaps[0].isBase);  // Snap 1
     QVERIFY(!snaps[1].isBase); // Snap 2
@@ -178,9 +189,9 @@ void TestSnapshotStore::testSizeChangeTriggersBase() {
     QCOMPARE(snaps[2].snapshotIndex, 3);
 }
 
-void TestSnapshotStore::testBaseIntervalLogic() {
+void TestSnapshotManager::testBaseIntervalLogic() {
     QString path = testFilePath("baseInterval");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     // Set a small interval for testing
     int testInterval = 3;
@@ -189,10 +200,10 @@ void TestSnapshotStore::testBaseIntervalLogic() {
     // Save 5 different snapshots of the same size/format
     for (int i = 0; i < 5; ++i) {
         // Use different colors to avoid deduplication
-        SnapshotStore::saveSnapshot(path, makeImage(10, 10, QColor(i * 50, 0, 0)));
+        SnapshotManager::saveSnapshot(path, makeImage(10, 10, QColor(i * 50, 0, 0)));
     }
 
-    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 5);
 
     // Index 1: Always base
@@ -210,93 +221,126 @@ void TestSnapshotStore::testBaseIntervalLogic() {
     AppSettings::setBaseInterval(100);
 }
 
-void TestSnapshotStore::testReconstructSnapshot() {
+void TestSnapshotManager::testReconstructSnapshot() {
     QString path = testFilePath("reconstruct");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     QImage img1 = makeImage(100, 100, Qt::red);
     QImage img2 = makeImage(100, 100, Qt::blue);
 
-    SnapshotStore::saveSnapshot(path, img1); // Snap 1 (Base)
-    SnapshotStore::saveSnapshot(path, img2); // Snap 2 (Delta)
+    SnapshotManager::saveSnapshot(path, img1); // Snap 1 (Base)
+    QTest::qWait(500);
+    SnapshotManager::saveSnapshot(path, img2); // Snap 2 (Delta)
+    QTest::qWait(500);
 
-    QImage restored = SnapshotStore::reconstructSnapshot(path, 2);
-    QCOMPARE(restored.size(), img2.size());
-    QCOMPARE(restored.pixelColor(0, 0), img2.pixelColor(0, 0));
+    // Test base reconstruction first
+    QImage restored1 = SnapshotManager::reconstructSnapshot(path, 1);
+    QCOMPARE(restored1.size(), img1.size());
+    QCOMPARE(restored1.pixelColor(0, 0), img1.pixelColor(0, 0));
+
+    // Test delta reconstruction
+    QImage restored2 = SnapshotManager::reconstructSnapshot(path, 2);
+    QCOMPARE(restored2.size(), img2.size());
+    QCOMPARE(restored2.pixelColor(0, 0), img2.pixelColor(0, 0));
 }
 
-void TestSnapshotStore::testResizeImage() {
+void TestSnapshotManager::testSparseDeltaReconstruction() {
+    QString path = testFilePath("sparseDelta");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    // Create a base image (solid red)
+    QImage img1 = makeImage(100, 100, Qt::red);
+    SnapshotManager::saveSnapshot(path, img1);
+    QTest::qWait(500);
+
+    // Create a second image with only a few pixels changed
+    QImage img2 = img1;
+    img2.setPixelColor(10, 10, Qt::blue);
+    img2.setPixelColor(20, 20, Qt::green);
+    img2.setPixelColor(30, 30, Qt::white);
+    SnapshotManager::saveSnapshot(path, img2);
+    QTest::qWait(500);
+
+    // Reconstruct the second snapshot
+    QImage restored = SnapshotManager::reconstructSnapshot(path, 2);
+
+    QCOMPARE(restored.size(), img2.size());
+    QCOMPARE(restored.pixelColor(10, 10), Qt::blue);
+    QCOMPARE(restored.pixelColor(20, 20), Qt::green);
+    QCOMPARE(restored.pixelColor(30, 30), Qt::white);
+    QCOMPARE(restored.pixelColor(0, 0), Qt::red); // Unchanged pixel
+}
+
+void TestSnapshotManager::testResizeImage() {
     QImage img = makeImage(100, 100, Qt::green);
     QSize  targetSize(50, 50);
 
-    QImage resized = SnapshotStore::resizeImage(img, targetSize);
+    QImage resized = SnapshotManager::resizeImage(img, targetSize);
     QCOMPARE(resized.size(), targetSize);
     QVERIFY(!resized.isNull());
 }
 
-// Dedup
-
-void TestSnapshotStore::testSaveDuplicateSkipped() {
+void TestSnapshotManager::testSaveDuplicateSkipped() {
     QString path = testFilePath("dedup");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
     QImage img = makeImage(15, 15, Qt::darkGray);
 
-    auto snap1 = SnapshotStore::saveSnapshot(path, img);
+    auto snap1 = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap1.has_value());
     QCOMPARE(snap1->snapshotIndex, 1);
 
     // Saving the same image again should return the existing snapshot index
-    auto snap2 = SnapshotStore::saveSnapshot(path, img);
+    auto snap2 = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap2.has_value());
     QCOMPARE(snap2->snapshotIndex, 1);
 
     // Only one snapshot on disk
-    QVector<ImageSnapshot> snapshots = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 1);
 }
 
-void TestSnapshotStore::testDeleteLastSnapshot() {
+void TestSnapshotManager::testDeleteLastSnapshot() {
     QString path = testFilePath("deleteLast");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::red));
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::blue));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue));
 
-    QVector<ImageSnapshot> snapsBefore = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snapsBefore = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapsBefore.size(), 2);
 
     // Delete the last one (index 2)
-    QVERIFY(SnapshotStore::deleteSnapshot(path, 2));
+    QVERIFY(SnapshotManager::deleteSnapshot(path, 2));
 
-    QVector<ImageSnapshot> snapsAfter = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snapsAfter = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapsAfter.size(), 1);
     QCOMPARE(snapsAfter[0].snapshotIndex, 1);
 }
 
-void TestSnapshotStore::testDeleteMiddleSnapshotRebase() {
+void TestSnapshotManager::testDeleteMiddleSnapshotRebase() {
     QString path = testFilePath("deleteMiddle");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     QImage img1 = makeImage(10, 10, Qt::red);
     QImage img2 = makeImage(10, 10, Qt::green);
     QImage img3 = makeImage(10, 10, Qt::blue);
 
-    SnapshotStore::saveSnapshot(path, img1);
-    SnapshotStore::saveSnapshot(path, img2);
-    SnapshotStore::saveSnapshot(path, img3);
+    SnapshotManager::saveSnapshot(path, img1);
+    SnapshotManager::saveSnapshot(path, img2);
+    SnapshotManager::saveSnapshot(path, img3);
 
     // Verify initial state: S1(Base), S2(Delta), S3(Delta)
-    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 3);
     QVERIFY(snaps[0].isBase);
     QVERIFY(!snaps[1].isBase);
     QVERIFY(!snaps[2].isBase);
 
     // Delete S2 (middle)
-    QVERIFY(SnapshotStore::deleteSnapshot(path, 2));
+    QVERIFY(SnapshotManager::deleteSnapshot(path, 2));
 
     // Verify new state: S1(Base), S3(Delta of S1)
-    snaps = SnapshotStore::loadSnapshots(path);
+    snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 2);
     QCOMPARE(snaps[0].snapshotIndex, 1);
     QCOMPARE(snaps[1].snapshotIndex, 3);
@@ -308,21 +352,21 @@ void TestSnapshotStore::testDeleteMiddleSnapshotRebase() {
     QVERIFY(!snaps[1].isBase);
 }
 
-void TestSnapshotStore::testDeleteFirstSnapshotRebase() {
+void TestSnapshotManager::testDeleteFirstSnapshotRebase() {
     QString path = testFilePath("deleteFirst");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     QImage img1 = makeImage(10, 10, Qt::red);
     QImage img2 = makeImage(10, 10, Qt::blue);
 
-    SnapshotStore::saveSnapshot(path, img1);
-    SnapshotStore::saveSnapshot(path, img2);
+    SnapshotManager::saveSnapshot(path, img1);
+    SnapshotManager::saveSnapshot(path, img2);
 
     // Delete S1 (the base)
-    QVERIFY(SnapshotStore::deleteSnapshot(path, 1));
+    QVERIFY(SnapshotManager::deleteSnapshot(path, 1));
 
     // Verify new state: S2(Base)
-    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 1);
     QCOMPARE(snaps[0].snapshotIndex, 2);
     QVERIFY(snaps[0].isBase);
@@ -332,38 +376,38 @@ void TestSnapshotStore::testDeleteFirstSnapshotRebase() {
     QCOMPARE(snaps[0].snapshotIndex, 2);
 }
 
-void TestSnapshotStore::testDeleteAllSnapshots() {
+void TestSnapshotManager::testDeleteAllSnapshots() {
     QString path = testFilePath("delete");
-    SnapshotStore::deleteAllSnapshots(path);
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::red));
-    SnapshotStore::saveSnapshot(path, makeImage(10, 10, Qt::blue));
+    SnapshotManager::deleteAllSnapshots(path);
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue));
 
-    QCOMPARE(SnapshotStore::loadSnapshots(path).size(), 2);
+    QCOMPARE(SnapshotManager::loadSnapshots(path).size(), 2);
 
-    SnapshotStore::deleteAllSnapshots(path);
-    QCOMPARE(SnapshotStore::loadSnapshots(path).size(), 0);
+    SnapshotManager::deleteAllSnapshots(path);
+    QCOMPARE(SnapshotManager::loadSnapshots(path).size(), 0);
 }
 
 // Edge cases
 
-void TestSnapshotStore::testLoadNonExistentFile() {
+void TestSnapshotManager::testLoadNonExistentFile() {
     QString path = testFilePath("nonexistent");
-    SnapshotStore::deleteAllSnapshots(path);
-    QVector<ImageSnapshot> snapshots = SnapshotStore::loadSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QVERIFY(snapshots.isEmpty());
 }
 
-void TestSnapshotStore::testCorruptedSnapshot() {
+void TestSnapshotManager::testCorruptedSnapshot() {
     QString path = testFilePath("corrupt");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
     QImage img = makeImage(100, 100, Qt::red);
-    auto   res = SnapshotStore::saveSnapshot(path, img);
+    auto   res = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(res.has_value());
 
     // Find the file on disk to corrupt it
-    QString     key = SnapshotStore::imageKey(path);
-    QDir        dir(SnapshotStore::baseDir() + "/" + key);
+    QString     key = SnapshotManager::imageKey(path);
+    QDir        dir(SnapshotManager::baseDir() + "/" + key);
     QStringList files = dir.entryList(QDir::Files);
     QVERIFY(!files.isEmpty());
 
@@ -376,37 +420,37 @@ void TestSnapshotStore::testCorruptedSnapshot() {
 
     // Reconstruction should not crash.
     // Depending on implementation, it might return a null image or partial.
-    QImage restored = SnapshotStore::reconstructSnapshot(path, res->snapshotIndex);
+    QImage restored = SnapshotManager::reconstructSnapshot(path, res->snapshotIndex);
     // We just verify it doesn't crash the process.
     Q_UNUSED(restored);
 }
 
-void TestSnapshotStore::testExtremeResolution() {
+void TestSnapshotManager::testExtremeResolution() {
     // Test with a large image (e.g. 16k x 16k).
     // We use a small image if memory is an issue, but 16k is usually okay for GPU.
     QImage largeImg(16384, 16384, QImage::Format_ARGB32);
     largeImg.fill(Qt::blue);
 
     QSize  targetSize(256, 256);
-    QImage resized = SnapshotStore::resizeImage(largeImg, targetSize);
+    QImage resized = SnapshotManager::resizeImage(largeImg, targetSize);
 
     QCOMPARE(resized.size(), targetSize);
     QVERIFY(!resized.isNull());
 }
 
-void TestSnapshotStore::testConcurrentSaves() {
+void TestSnapshotManager::testConcurrentSaves() {
     QString path = testFilePath("concurrent");
-    SnapshotStore::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(path);
 
-    const int                                                  numThreads = 8;
-    QVector<QFuture<std::optional<SnapshotStore::SaveResult>>> futures;
+    const int                                                    numThreads = 8;
+    QVector<QFuture<std::optional<SnapshotManager::SaveResult>>> futures;
 
     for (int i = 0; i < numThreads; ++i) {
         futures.append(QtConcurrent::run([path, i]() {
             // Each thread saves a different color to avoid deduplication
             QImage img(10, 10, QImage::Format_ARGB32);
             img.fill(QColor(i * 20, 0, 0));
-            return SnapshotStore::saveSnapshot(path, img);
+            return SnapshotManager::saveSnapshot(path, img);
         }));
     }
 
@@ -415,9 +459,9 @@ void TestSnapshotStore::testConcurrentSaves() {
         QVERIFY(res.has_value());
     }
 
-    QVector<ImageSnapshot> snaps = SnapshotStore::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), numThreads);
 }
 
-QTEST_MAIN(TestSnapshotStore)
-#include "test_snapshotstore.moc"
+QTEST_MAIN(TestSnapshotManager)
+#include "test_snapshotmanager.moc"

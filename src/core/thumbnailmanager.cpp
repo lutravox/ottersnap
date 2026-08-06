@@ -4,7 +4,6 @@
 #include "core/thumbnailmanager.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
-#include "core/vulkancontext.h"
 
 ThumbnailManager& ThumbnailManager::instance() {
     static ThumbnailManager inst;
@@ -23,7 +22,7 @@ QImage ThumbnailManager::getThumbnail(int                           index,
     if (index < 0 || index > static_cast<int>(snapshots.size()))
         return QImage();
 
-    QString key = SnapshotStore::imageKey(filePath);
+    QString key = SnapshotManager::imageKey(filePath);
     int     version = isCurrent ? -1 : snapshots[index].snapshotIndex;
 
     QImage thumb = ThumbnailCache::loadThumbnail(key, version, QSize(size, size));
@@ -103,11 +102,11 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
         // Cache in memory
         QString cacheKey = (request.snapshotIndex == -1)
                                ? QString("%1:current:%2x%3")
-                                     .arg(SnapshotStore::imageKey(request.filePath))
+                                     .arg(SnapshotManager::imageKey(request.filePath))
                                      .arg(ThumbnailConstants::StorageSize)
                                      .arg(ThumbnailConstants::StorageSize)
                                : QString("%1:%2:%3x%4")
-                                     .arg(SnapshotStore::imageKey(request.filePath))
+                                     .arg(SnapshotManager::imageKey(request.filePath))
                                      .arg(request.snapshotIndex)
                                      .arg(ThumbnailConstants::StorageSize)
                                      .arg(ThumbnailConstants::StorageSize);
@@ -126,8 +125,8 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
 void ThumbnailManager::saveThumbnail(const QString& filePath,
                                      int            snapshotIndex,
                                      const QImage&  image) {
-    QString key = SnapshotStore::imageKey(filePath);
-    QString sd = SnapshotStore::thumbnailDir() + '/' + key;
+    QString key = SnapshotManager::imageKey(filePath);
+    QString sd = SnapshotManager::thumbnailDir() + '/' + key;
     if (!DiskUtils::ensureDir(sd))
         return;
 
@@ -138,7 +137,14 @@ void ThumbnailManager::saveThumbnail(const QString& filePath,
 
 std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path,
                                                              const QImage&  currentImage) {
-    QImage img = currentImage.isNull() ? DiskUtils::loadImage(path) : currentImage;
+    QImage img = currentImage;
+    if (img.isNull()) {
+        if (!QFile::exists(path)) {
+            return std::nullopt;
+        }
+        img = DiskUtils::loadImage(path);
+    }
+
     if (img.isNull())
         return std::nullopt;
 
@@ -147,14 +153,14 @@ std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path
     QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
                                        : QSize(qRound(storageSize * aspect), storageSize);
 
-    QImage result = SnapshotStore::resizeImage(img, targetSize);
+    QImage result = SnapshotManager::resizeImage(img, targetSize);
     if (result.isNull())
         return std::nullopt;
     return result;
 }
 
 std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path, int snapshotIdx) {
-    auto snapList = SnapshotStore::loadSnapshots(path);
+    auto snapList = SnapshotManager::loadSnapshots(path);
 
     int baseIdx = -1;
     for (int i = static_cast<int>(snapList.size()) - 1; i >= 0; --i) {
@@ -166,7 +172,7 @@ std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path
     if (baseIdx == -1)
         return std::nullopt;
 
-    auto optBase = SnapshotStore::loadBaseImage(path, snapList[baseIdx].snapshotIndex);
+    auto optBase = SnapshotManager::loadBaseImage(path, snapList[baseIdx].snapshotIndex);
     if (!optBase)
         return std::nullopt;
 
@@ -175,7 +181,7 @@ std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path
     QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
                                        : QSize(qRound(storageSize * aspect), storageSize);
 
-    QImage result = SnapshotStore::reconstructSnapshot(path, snapshotIdx, targetSize);
+    QImage result = SnapshotManager::reconstructSnapshot(path, snapshotIdx, targetSize);
     if (result.isNull())
         return std::nullopt;
     return result;

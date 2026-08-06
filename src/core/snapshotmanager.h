@@ -10,6 +10,7 @@
 #include <QString>
 #include <QVector>
 
+#include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
 /// @brief Metadata for a single saved image snapshot.
@@ -21,8 +22,8 @@ struct ImageSnapshot {
     bool      isBase = true;
 };
 
-/// @brief Persists image snapshots on disk, keyed by a hash of the source file path.
-class SnapshotStore {
+/// @brief Manager for handling snapshots.
+class SnapshotManager {
   public:
     enum class SaveStatus { Created, Existing };
 
@@ -89,12 +90,24 @@ class SnapshotStore {
     /// @param filePath Absolute path of the source image.
     static void deleteAllSnapshots(const QString& filePath);
 
+    /// @brief Return all images that have associated snapshots.
+    /// @return A list of file paths for images that have been snapshotted.
+    static QVector<QString> getAllSnapshottedImages();
+
+    /// @brief Return the total storage space used by snapshots for an image file.
+    /// @param filePath Absolute path of the source image.
+    /// @return Total size in bytes.
+    static qint64 calculateStorageUsage(const QString& filePath);
+
     /// @brief Reconstruct a snapshot image from base + deltas.
     /// @param filePath Absolute path of the source image.
     /// @param snapshotIndex The snapshot index to reconstruct.
     /// @param targetSize Desired output size; pass QSize() for full resolution.
     static QImage
-    reconstructSnapshot(const QString& filePath, int snapshotIndex, QSize targetSize = {});
+    reconstructSnapshot(const QString&                           filePath,
+                        int                                      snapshotIndex,
+                        QSize                                    targetSize = {},
+                        std::shared_ptr<VkSnapshotReconstructor> reconstructor = nullptr);
 
     /// @brief Resize an image using GPU acceleration.
     /// @param image The source image to resize.

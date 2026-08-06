@@ -34,6 +34,13 @@ class ViewerState : public QWidget {
         return m_statusBar;
     }
 
+    /// @brief Toggles the visibility of the snapshot-only indicator.
+    void setSnapshotOnlyIndicator(bool visible) {
+        if (m_snapshotTimeline) {
+            m_snapshotTimeline->setSnapshotOnlyIndicator(visible);
+        }
+    }
+
   signals:
     void zoomRequested(double pct);
     void fitRequested();

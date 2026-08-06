@@ -14,7 +14,7 @@ ImageSessionController::~ImageSessionController() {
     m_sessions.clear();
 }
 
-ImageSession *ImageSessionController::openImage(const QString& path) {
+ImageSession *ImageSessionController::openImage(const QString& path, bool snapshotOnly) {
     if (auto *existing = m_sessions.value(path)) {
         if (QFileInfo(path).lastModified() > existing->lastModified()) {
             if (m_settings->shouldSaveSnapshotOnReopen()) {
@@ -28,6 +28,8 @@ ImageSession *ImageSessionController::openImage(const QString& path) {
 
     // Create a new session
     ImageSession *session = new ImageSession(this);
+    session->setSnapshotOnly(snapshotOnly);
+
     if (!session->openImage(path)) {
         delete session;
         return nullptr;

@@ -9,7 +9,7 @@
 #include <QVector>
 #include <optional>
 
-#include "core/snapshotstore.h"
+#include "core/snapshotmanager.h"
 
 struct ThumbnailRequest {
     int     index;

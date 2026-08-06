@@ -23,7 +23,8 @@ class SnapshotModel : public QAbstractListModel {
         ThumbnailRole = Qt::UserRole + 1, ///< The thumbnail image of the snapshot.
         LabelRole,                        ///< The display label for the snapshot.
         IndexRole,                        ///< The internal index of the snapshot.
-        IsNewRole                         ///< Whether the snapshot was recently created.
+        IsNewRole,                        ///< Whether the snapshot was recently created.
+        IsCurrentImageRole                ///< Whether the item is the current disk image.
     };
 
     explicit SnapshotModel(QObject *parent = nullptr);
@@ -60,7 +61,18 @@ class SnapshotModel : public QAbstractListModel {
      */
     void updateThumbnail(int index, const QPixmap& pixmap);
 
+    /// @brief Check if the current session is in snapshot-only mode.
+    bool isSnapshotOnly() const {
+        return m_isSnapshotOnly;
+    }
+
+    /// @brief Set whether the session is in snapshot-only mode.
+    void setSnapshotOnly(bool snapshotOnly) {
+        m_isSnapshotOnly = snapshotOnly;
+    }
+
   private:
+    bool             m_isSnapshotOnly = false;
     QVector<QPixmap> m_thumbnails;
     QVector<QString> m_labels;
     QVector<int>     m_indices;

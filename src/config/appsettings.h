@@ -8,8 +8,8 @@ constexpr bool c_defaultRestoreSession = false;
 constexpr int  c_defaultThumbnailCacheMB = 128;
 constexpr int  c_defaultDeltaCacheMB = 1024;
 constexpr int  c_defaultBaseInterval = 100;
-constexpr bool c_defaultAutosaveSnapshots = false;
-constexpr bool c_defaultAutoreloadImages = false;
+constexpr bool c_defaultAutosaveSnapshots = true;
+constexpr bool c_defaultAutoreloadImages = true;
 constexpr bool c_defaultSnapshotOnReopen = false;
 // UI range
 constexpr int c_minCacheSizeMB = 16;

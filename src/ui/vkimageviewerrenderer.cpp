@@ -62,6 +62,17 @@ void VkImageViewerRenderer::initResources() {
     // Mark UBO dirty so the first frame writes the current state into the
     // freshly mapped buffer
     m_uboDirty = true;
+
+    // If a session was set before the window was ready, initialize handles
+    // and trigger the initial render.
+    if (m_session) {
+        setSession(m_session);
+        if (m_session->isCurrentImageSelected()) {
+            setImage(m_session->diskImage());
+        } else if (auto seq = m_session->getReconstructionSequence()) {
+            reconstruct(*seq);
+        }
+    }
 }
 
 bool VkImageViewerRenderer::createSamplers() {
@@ -728,13 +739,16 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq) {
         reconstructor = m_activeReconstructor;
     }
 
-    if (!reconstructor || !m_vkWindow)
+    if (!reconstructor || !m_vkWindow) {
+        qWarning() << "[VkImageViewerRenderer] reconstuct: Null reconstructor or m_vkWindow";
         return;
+    }
 
     QElapsedTimer timer;
     timer.start();
 
     m_sourceImage = seq.base;
+    m_hasImage = true;
     m_uboDirty = true;
 
     m_uploadPending = true;
@@ -938,8 +952,15 @@ void VkImageViewerRenderer::startNextFrame() {
 
     // Skip rendering when there's no image to display, but still present
     // an empty frame so Qt's swapchain lifecycle stays in sync.
-    if (!m_hasImage || m_textureView == VK_NULL_HANDLE) {
+    if (!m_hasImage) {
         qDebug() << "[VkImageViewerRenderer] Skipping render, m_hasImage is false";
+        m_vkWindow->frameReady();
+        m_vkWindow->requestUpdate();
+        return;
+    }
+
+    if (m_textureView == VK_NULL_HANDLE) {
+        qDebug() << "[VkImageViewerRenderer] Skipping render, texture view not yet created";
         m_vkWindow->frameReady();
         m_vkWindow->requestUpdate();
         return;

@@ -24,6 +24,8 @@ QVariant SnapshotModel::data(const QModelIndex& index, int role) const {
             return m_indices[row];
         case IsNewRole:
             return m_newSnapshots.contains(m_indices[row]);
+        case IsCurrentImageRole:
+            return m_indices[row] == -1;
         case Qt::ToolTipRole:
             return m_labels.isEmpty() ? QVariant(QString("v%1").arg(row + 1))
                                       : QVariant(m_labels[row]);
@@ -39,6 +41,8 @@ void SnapshotModel::setThumbnails(const QVector<QPixmap>& thumbnails,
     m_thumbnails = thumbnails;
     m_labels = labels;
     m_indices = indices;
+    // If it's snapshot-only, the model should only contain snapshots.
+    // If not, the last item is the current image.
     endResetModel();
 }
 

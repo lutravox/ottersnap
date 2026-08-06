@@ -1,12 +1,13 @@
 #pragma once
 
+#include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
 #include <QVector>
 #include <QWidget>
 
 #include "ui/snapshotmodel.h"
-#include "ui/snapshottimelinedelagate.h"
+#include "ui/snapshottimelinedelegate.h"
 
 #include <QHBoxLayout>
 #include <QListView>
@@ -54,7 +55,18 @@ class SnapshotTimeline : public QWidget {
     void updateThumbnail(int index, const QPixmap& pixmap);
 
     /**
-     * @brief Checks if the timeline is currently empty.
+     * @brief Sets whether the create snapshot button is enabled.
+     * @param enabled True to enable the button, false to disable it.
+     */
+    void setCreateButtonEnabled(bool enabled);
+    void setSnapshotOnlyIndicator(bool visible);
+
+    SnapshotModel *model() const {
+        return m_model;
+    }
+
+    /**
+     * @brief Check if the timeline is currently empty.
      */
     bool isEmpty() const;
 
@@ -82,7 +94,7 @@ class SnapshotTimeline : public QWidget {
     void snapshotDeletionRequested(int index);
 
   private:
-    void updateSelection(int oldIndex, int newIndex);
+    void updateSelection(int newIndex);
 
     int                       m_currentIndex = -1;
     SnapshotModel            *m_model = nullptr;
@@ -90,4 +102,5 @@ class SnapshotTimeline : public QWidget {
     SnapshotTimelineDelegate *m_delegate = nullptr;
 
     QPushButton *m_createButton = nullptr;
+    QLabel      *m_snapshotOnlyLabel = nullptr;
 };

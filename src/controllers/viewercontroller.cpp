@@ -107,6 +107,15 @@ bool ViewerController::isScaleWithWindowEnabled() const {
     return m_settings->scaleWithWindow();
 }
 
+void ViewerController::setToolbarVisible(bool visible) {
+    m_settings->setToolbarVisible(visible);
+    emit toolbarVisibilityToggled(visible);
+}
+
+bool ViewerController::isToolbarVisible() const {
+    return m_settings->toolbarVisible();
+}
+
 void ViewerController::handleViewportResize(int width, int height) {
     if (!m_session || !m_viewer)
         return;

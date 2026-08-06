@@ -37,6 +37,12 @@ class AppSettingsController : public QObject {
     /// @brief Set whether images should scale with window on resize.
     void setScaleWithWindow(bool value);
 
+    /// @brief Return whether the viewer toolbar should be visible.
+    bool toolbarVisible() const;
+
+    /// @brief Set whether the viewer toolbar should be visible.
+    void setToolbarVisible(bool value);
+
     /// @brief Set the restore session preference.
     void setRestoreSession(bool value);
 

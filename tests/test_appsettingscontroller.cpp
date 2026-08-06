@@ -49,16 +49,32 @@ class TestAppSettingsController : public QObject {
         AppSettings::setAutoreloadImages(true);
         AppSettings::setAutosaveSnapshots(true);
         AppSettings::setSnapshotOnReopen(false);
+        AppSettings::setToolbarVisible(true);
 
         QVERIFY(controller.shouldAutoreloadImages());
         QVERIFY(controller.shouldAutosaveSnapshots());
         QVERIFY(!controller.shouldSaveSnapshotOnReopen());
+        QVERIFY(controller.toolbarVisible());
 
         AppSettings::setAutoreloadImages(true);
         AppSettings::setAutosaveSnapshots(false);
         AppSettings::setSnapshotOnReopen(true);
+        AppSettings::setToolbarVisible(false);
 
         QVERIFY(controller.shouldSaveSnapshotOnReopen());
+        QVERIFY(!controller.toolbarVisible());
+    }
+
+    void testToolbarVisibility() {
+        AppSettingsController controller;
+
+        controller.setToolbarVisible(true);
+        QVERIFY(controller.toolbarVisible());
+        QVERIFY(AppSettings::toolbarVisible());
+
+        controller.setToolbarVisible(false);
+        QVERIFY(!controller.toolbarVisible());
+        QVERIFY(!AppSettings::toolbarVisible());
     }
 };
 

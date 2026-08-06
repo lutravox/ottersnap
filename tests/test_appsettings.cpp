@@ -16,6 +16,7 @@ class TestAppSettings : public QObject {
     void testMaxDeltaCacheSize();
     void testBaseInterval();
     void testScaleWithWindow();
+    void testToolbarVisible();
     void testBackgroundColor();
     void testIdentity();
 };
@@ -78,6 +79,13 @@ void TestAppSettings::testScaleWithWindow() {
     QCOMPARE(AppSettings::scaleWithWindow(), true);
     AppSettings::setScaleWithWindow(false);
     QCOMPARE(AppSettings::scaleWithWindow(), false);
+}
+
+void TestAppSettings::testToolbarVisible() {
+    AppSettings::setToolbarVisible(true);
+    QCOMPARE(AppSettings::toolbarVisible(), true);
+    AppSettings::setToolbarVisible(false);
+    QCOMPARE(AppSettings::toolbarVisible(), false);
 }
 
 void TestAppSettings::testBackgroundColor() {

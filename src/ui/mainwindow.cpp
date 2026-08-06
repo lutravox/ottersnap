@@ -150,8 +150,12 @@ void MainWindow::setupUi() {
 
     // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
-    m_effectsController->setup(m_viewerState->viewer(), uiAdapter);
+    m_effectsController->setup(m_viewerState->viewer());
+    m_effectsController->addUI(uiAdapter);
+    m_effectsController->addUI(m_viewerState->toolbar());
+    m_viewerState->toolbar()->setup(m_effectsController);
     m_viewerController->setViewer(m_viewerState->viewer());
+    m_viewerState->setToolbarVisible(m_viewerController->isToolbarVisible());
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
@@ -190,6 +194,11 @@ void MainWindow::setupUi() {
             &VkImageViewer::viewportResized,
             m_viewerController,
             &ViewerController::handleViewportResize);
+
+    connect(m_viewerController,
+            &ViewerController::toolbarVisibilityToggled,
+            m_viewerState,
+            &ViewerState::setToolbarVisible);
 
     // Connect image drop and drop on viewer
     connect(m_viewerState->viewer(),
@@ -260,6 +269,11 @@ void MainWindow::setupMenu() {
     m_actionScaleWithWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
     connect(
         m_actionScaleWithWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
+
+    m_actionToggleToolbar = m_viewMenu->addAction(tr("&Show Toolbar"));
+    m_actionToggleToolbar->setCheckable(true);
+    m_actionToggleToolbar->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+    connect(m_actionToggleToolbar, &QAction::triggered, this, &MainWindow::onToggleToolbar);
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
     m_actionResetView->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
@@ -335,6 +349,8 @@ void MainWindow::updateMenuBar() {
         m_actionDeleteAllSnapshots->setEnabled(false);
     }
 
+    m_actionToggleToolbar->setChecked(m_viewerController->isToolbarVisible());
+
     switch (m_currentState) {
         case ContentState::Empty:
             m_actionSaveSnapshot->setVisible(false);
@@ -382,6 +398,11 @@ void MainWindow::onToggleScaleWithWindow() {
     bool enabled = !m_viewerController->isScaleWithWindowEnabled();
     m_viewerController->setScaleWithWindowEnabled(enabled);
     m_actionScaleWithWindow->setChecked(enabled);
+}
+
+void MainWindow::onToggleToolbar() {
+    bool visible = m_actionToggleToolbar->isChecked();
+    m_viewerController->setToolbarVisible(visible);
 }
 
 void MainWindow::onResetView() {

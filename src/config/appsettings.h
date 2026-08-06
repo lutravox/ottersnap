@@ -11,6 +11,7 @@ constexpr int  c_defaultBaseInterval = 100;
 constexpr bool c_defaultAutosaveSnapshots = true;
 constexpr bool c_defaultAutoreloadImages = true;
 constexpr bool c_defaultSnapshotOnReopen = false;
+constexpr bool c_defaultToolbarVisible = true;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
@@ -19,6 +20,7 @@ constexpr std::string_view c_keyRestoreSession = "General/restoreSession";
 constexpr std::string_view c_keyAutosaveSnapshots = "General/autosaveSnapshots";
 constexpr std::string_view c_keyAutoreloadImages = "General/autoreloadImages";
 constexpr std::string_view c_keySnapshotOnReopen = "General/snapshotOnReopen";
+constexpr std::string_view c_keyToolbarVisible = "General/toolbarVisible";
 constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
 constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
 constexpr std::string_view c_keyDeltaCacheSizeMB = "General/maxDeltaCacheSizeMB";
@@ -36,6 +38,11 @@ class AppSettings {
     /// @brief Set the scale-with-window preference.
     /// @param value The new value.
     static void setScaleWithWindow(bool value);
+
+    /// @brief Return whether the viewer toolbar should be visible.
+    static bool toolbarVisible();
+    /// @brief Set whether the viewer toolbar should be visible.
+    static void setToolbarVisible(bool value);
 
     /// @brief Return whether the previous session should be restored on startup.
     static bool restoreSession();

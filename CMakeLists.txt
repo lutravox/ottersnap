@@ -110,6 +110,9 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/dialogs/settingsdialog.cpp
     src/ui/dialogs/snapshotmanagerdialog.cpp
     src/ui/dialogutils.cpp
+    src/ui/viewertoolbar.cpp
+    src/ui/viewertools/grayscaletool.cpp
+    src/ui/viewertools/mirrortool.cpp
 
     # Core logic
     src/core/diskutils.cpp

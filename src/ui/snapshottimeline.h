@@ -61,7 +61,6 @@ class SnapshotTimeline : public QWidget {
      * @param enabled True to enable the button, false to disable it.
      */
     void setCreateButtonEnabled(bool enabled);
-    void setSnapshotOnlyIndicator(bool visible);
 
     SnapshotModel *model() const {
         return m_model;
@@ -105,5 +104,4 @@ class SnapshotTimeline : public QWidget {
 
     QPushButton *m_createButton = nullptr;
     QWidget     *m_stripContainer = nullptr;
-    QLabel      *m_snapshotOnlyLabel = nullptr;
 };

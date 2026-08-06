@@ -3,10 +3,12 @@
 #include <QAction>
 #include <QToolBar>
 #include <QWidget>
+#include <QLabel>
 
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
 #include "ui/vkimageviewer.h"
+#include "ui/viewertoolbar.h"
 
 /**
  * @brief Image viewer stage.
@@ -34,12 +36,20 @@ class ViewerState : public QWidget {
         return m_statusBar;
     }
 
-    /// @brief Toggles the visibility of the snapshot-only indicator.
-    void setSnapshotOnlyIndicator(bool visible) {
-        if (m_snapshotTimeline) {
-            m_snapshotTimeline->setSnapshotOnlyIndicator(visible);
+    /// @brief Returns the viewer toolbar for effects.
+    ViewerToolbar *toolbar() {
+        return m_viewerToolbar;
+    }
+
+    /// @brief Sets whether the viewer toolbar should be visible.
+    void setToolbarVisible(bool visible) {
+        if (m_viewerToolbar) {
+            m_viewerToolbar->setVisible(visible);
         }
     }
+
+    /// @brief Toggles the visibility of the snapshot-only indicator.
+    void setSnapshotOnlyIndicator(bool visible);
 
   signals:
     void zoomRequested(double pct);
@@ -49,4 +59,6 @@ class ViewerState : public QWidget {
     SnapshotTimeline *m_snapshotTimeline = nullptr;
     ImageViewer      *m_viewer = nullptr;
     StatusBar        *m_statusBar = nullptr;
+    ViewerToolbar    *m_viewerToolbar = nullptr;
+    QLabel           *m_snapshotOnlyLabel = nullptr;
 };

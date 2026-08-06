@@ -70,3 +70,11 @@ bool AppSettingsController::scaleWithWindow() const {
 void AppSettingsController::setScaleWithWindow(bool value) {
     AppSettings::setScaleWithWindow(value);
 }
+
+bool AppSettingsController::toolbarVisible() const {
+    return AppSettings::toolbarVisible();
+}
+
+void AppSettingsController::setToolbarVisible(bool value) {
+    AppSettings::setToolbarVisible(value);
+}

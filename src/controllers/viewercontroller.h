@@ -32,6 +32,12 @@ class ViewerController : public QObject {
     /// @brief Return whether images should scale with window on resize.
     bool isScaleWithWindowEnabled() const;
 
+    /// @brief Set whether the viewer toolbar should be visible.
+    void setToolbarVisible(bool visible);
+
+    /// @brief Return whether the viewer toolbar is currently visible.
+    bool isToolbarVisible() const;
+
     /// @brief Notify the controller that the viewport size has changed.
     void handleViewportResize(int width, int height);
 
@@ -43,6 +49,7 @@ class ViewerController : public QObject {
   signals:
     void grayscaleToggled(bool enabled);
     void mirrorToggled(bool enabled);
+    void toolbarVisibilityToggled(bool visible);
 
   private:
     AppSettingsController *m_settings;

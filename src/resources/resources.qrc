@@ -6,6 +6,8 @@
         <file alias="qss/snapshotmanagerdialog.qss">qss/snapshotmanagerdialog.qss</file>
         <file alias="qss/messagebox.qss">qss/messagebox.qss</file>
         <file alias="qss/statusbar.qss">qss/statusbar.qss</file>
+        <file alias="icons/grayscale.svg">icons/grayscale.svg</file>
+        <file alias="icons/mirror.svg">icons/mirror.svg</file>
         <file>../ui/qml/notification.qml</file>
         <file>shaders/snapshot_reconstruct.comp</file>
         <file>shaders/snapshot_downsample.comp</file>

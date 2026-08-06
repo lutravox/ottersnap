@@ -8,3 +8,17 @@ VkImageViewer {
     font-size: 12px;
     padding: 5px;
 }
+
+QPushButton#toolbarButton {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#toolbarButton:hover {
+    background: palette(Midlight);
+}
+
+QPushButton#toolbarButton:checked {
+    background: palette(Light);
+}

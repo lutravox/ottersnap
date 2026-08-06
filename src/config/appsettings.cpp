@@ -18,6 +18,14 @@ void AppSettings::setScaleWithWindow(bool value) {
     settings().setValue(c_keyResizeToFit, value);
 }
 
+bool AppSettings::toolbarVisible() {
+    return settings().value(c_keyToolbarVisible, c_defaultToolbarVisible).toBool();
+}
+
+void AppSettings::setToolbarVisible(bool value) {
+    settings().setValue(c_keyToolbarVisible, value);
+}
+
 bool AppSettings::restoreSession() {
     return settings().value(c_keyRestoreSession, false).toBool();
 }

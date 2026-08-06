@@ -37,8 +37,11 @@ class EffectsController : public QObject {
   public:
     explicit EffectsController(QObject *parent = nullptr);
 
-    /// @brief Initialize the controller with the interface implementations.
-    void setup(IEffectsRenderer *renderer, IEffectsUI *ui);
+    /// @brief Initialize the controller with the renderer.
+    void setup(IEffectsRenderer *renderer);
+
+    /// @brief Register a UI component to be synchronized.
+    void addUI(IEffectsUI *ui);
 
     /// @brief Set the current state being managed. Syncs UI and renderer to state.
     void setTargetState(IEffectsState *state);
@@ -64,5 +67,5 @@ class EffectsController : public QObject {
 
     IEffectsRenderer *m_renderer = nullptr;
     IEffectsState    *m_state = nullptr;
-    IEffectsUI       *m_ui = nullptr;
+    std::vector<IEffectsUI*> m_uis;
 };

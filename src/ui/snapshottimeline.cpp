@@ -46,11 +46,6 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_listView->installEventFilter(this);
     m_listView->setAutoFillBackground(true);
 
-    m_snapshotOnlyLabel = new QLabel(tr("Original image not found. Viewing only snapshots."), this);
-    m_snapshotOnlyLabel->setObjectName("snapshotOnlyLabel");
-    m_snapshotOnlyLabel->setAlignment(Qt::AlignCenter);
-    m_snapshotOnlyLabel->setVisible(false);
-
     connect(m_listView, &QListView::clicked, this, [this](const QModelIndex& index) {
         int row = index.row();
         if (row == m_currentIndex)
@@ -83,7 +78,6 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     stripLayout->addWidget(m_listView, 1);
 
     root->addWidget(m_stripContainer, 0);
-    root->addWidget(m_snapshotOnlyLabel, 0);
 
     // m_createButton is positioned manually in resizeEvent for edge clipping
     m_createButton->setParent(m_stripContainer);
@@ -201,17 +195,6 @@ void SnapshotTimeline::setSelectedIndex(int index) {
 
 void SnapshotTimeline::setCreateButtonEnabled(bool enabled) {
     m_createButton->setEnabled(enabled);
-}
-
-void SnapshotTimeline::setSnapshotOnlyIndicator(bool visible) {
-    if (m_snapshotOnlyLabel) {
-        m_snapshotOnlyLabel->setVisible(visible);
-
-        int stripH = m_delegate->sizeHint(QStyleOptionViewItem(), QModelIndex()).height();
-        int labelH = m_snapshotOnlyLabel->sizeHint().height();
-
-        setFixedHeight(visible ? stripH + labelH : stripH);
-    }
 }
 
 bool SnapshotTimeline::isEmpty() const {

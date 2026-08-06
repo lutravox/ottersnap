@@ -63,6 +63,7 @@ class MainWindow : public QMainWindow {
     void onExportSnapshot();
     void onResetEffects();
     void onSettings();
+    void onToggleToolbar();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
@@ -134,6 +135,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionResetEffects;
     QAction *m_actionSettings;
     QAction *m_actionManageSnapshots;
+    QAction *m_actionToggleToolbar;
 
     ImageTab *m_currentTabInView = nullptr;
     int       m_currentVersionInView = -1;

@@ -17,7 +17,8 @@ static constexpr double c_zoomStep = 10.0;
 
 StatusBar::StatusBar(QWidget *parent)
     : QWidget(parent), m_timestampLabel(new QLabel(this)), m_dimensionsLabel(new QLabel(this)),
-      zoomSpinbox(new QDoubleSpinBox(this)), resetButton(new QPushButton(tr("Reset"), this)) {
+      zoomSpinbox(new QDoubleSpinBox(this)), resetButton(new QPushButton(tr("Reset"), this)),
+      m_colorButton(new QPushButton(this)) {
     zoomSpinbox->setRange(c_minZoom, c_maxZoom);
     zoomSpinbox->setSingleStep(c_zoomStep);
     zoomSpinbox->setValue(c_defaultZoom);
@@ -41,6 +42,11 @@ StatusBar::StatusBar(QWidget *parent)
     m_dimensionsLabel->setObjectName("dimensionsLabel");
     m_dimensionsLabel->setEnabled(false);
 
+    m_colorButton->setFixedSize(32, 32);
+    m_colorButton->setObjectName("colorButton");
+    m_colorButton->setEnabled(false);
+    m_colorButton->setToolTip(tr("Show color information"));
+
     QFile qss(":/qss/statusbar.qss");
     if (qss.open(QIODevice::ReadOnly | QIODevice::Text)) {
         setStyleSheet(QString::fromUtf8(qss.readAll()));
@@ -50,6 +56,7 @@ StatusBar::StatusBar(QWidget *parent)
     layout->setContentsMargins(8, 4, 8, 4);
     layout->setSpacing(8);
 
+    layout->addWidget(m_colorButton);
     layout->addWidget(m_timestampLabel);
     layout->addStretch();
     layout->addWidget(m_dimensionsLabel);
@@ -61,6 +68,11 @@ StatusBar::StatusBar(QWidget *parent)
             this,
             &StatusBar::zoomChanged);
     connect(resetButton, &QPushButton::clicked, this, &StatusBar::fitRequested);
+    connect(m_colorButton, &QPushButton::clicked, this, [this]() {
+        m_colorInfoVisible = !m_colorInfoVisible;
+        m_colorButton->setToolTip(m_colorInfoVisible ? tr("Hide color information") : tr("Show color information"));
+        emit colorInfoToggled(m_colorInfoVisible);
+    });
 }
 
 double StatusBar::zoom() const {
@@ -81,6 +93,11 @@ void StatusBar::setDimensions(int width, int height) {
 
 void StatusBar::setTimestamp(const QString& timestamp) {
     m_timestampLabel->setText(timestamp);
+}
+
+void StatusBar::setColor(const QColor& color) {
+    m_colorButton->setEnabled(true);
+    m_colorButton->setStyleSheet(QString("QPushButton#colorButton { background-color: %1; }").arg(color.name()));
 }
 
 void StatusBar::onZoomSpinboxContextMenuRequested(const QPoint& pos) {

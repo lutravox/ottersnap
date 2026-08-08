@@ -17,6 +17,11 @@ class ViewerToolbar : public QFrame, public IEffectsUI {
     Q_OBJECT
 
   public:
+    struct ToolWidget {
+        std::unique_ptr<IViewerTool> tool;
+        QPushButton *button;
+    };
+
     explicit ViewerToolbar(QWidget *parent = nullptr);
 
     /**
@@ -27,17 +32,24 @@ class ViewerToolbar : public QFrame, public IEffectsUI {
     /// @brief Updates the enabled/disabled state of all tools.
     void updateToolStates();
 
+    /**
+     * @brief Activates or toggles a tool by its name.
+     * @param name The name of the tool to activate.
+     */
+    void activateTool(const QString& name);
+
+    /**
+     * @brief Returns the list of tools managed by the toolbar.
+     */
+    const std::vector<ToolWidget>& tools() const { return m_tools; }
+
     // IEffectsUI implementation
     void setGrayscaleChecked(bool checked) override;
     void setMirrorChecked(bool checked) override;
     bool grayscaleChecked() const override;
     bool mirrorChecked() const override;
+    bool colorPickerChecked() const;
 
   private:
-    struct ToolWidget {
-        std::unique_ptr<IViewerTool> tool;
-        QPushButton *button;
-    };
-
     std::vector<ToolWidget> m_tools;
 };

@@ -1,4 +1,11 @@
 #include "ui/viewertools/viewertool.h"
 
-// IViewerTool is an interface, so we only need this file to ensure it's 
-// compiled and its vtable is generated if required by the linker.
+QString IViewerTool::fullTooltip() const {
+    QKeySequence s = shortcut();
+    if (s.isEmpty())
+        return tooltip();
+
+    QString shortcutStr = s.toString();
+    shortcutStr.replace("+", " + ");
+    return QString("%1\n-\n%2").arg(tooltip(), shortcutStr);
+}

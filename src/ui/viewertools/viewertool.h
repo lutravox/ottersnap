@@ -1,8 +1,9 @@
 #pragma once
 
 #include <QIcon>
-#include <QString>
+#include <QKeySequence>
 #include <QObject>
+#include <QString>
 
 /**
  * @brief Interface for a toolbar tool in the viewer.
@@ -25,8 +26,18 @@ class IViewerTool : public QObject {
     /// @brief Whether the tool is a toggle (checkable).
     virtual bool isCheckable() const = 0;
 
+    /// @brief Returns the keyboard shortcut for the tool, if any.
+    virtual QKeySequence shortcut() const {
+        return QKeySequence();
+    }
+
+    /// @brief Returns the formatted tooltip including the shortcut.
+    QString fullTooltip() const;
+
     /// @brief Whether the tool is currently enabled.
-    virtual bool isEnabled() const { return true; }
+    virtual bool isEnabled() const {
+        return true;
+    }
 
     /// @brief Called when the tool is toggled or triggered.
     virtual void onToggled(bool checked) = 0;

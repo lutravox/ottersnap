@@ -9,7 +9,9 @@
         <file alias="icons/grayscale.svg">icons/grayscale.svg</file>
         <file alias="icons/mirror.svg">icons/mirror.svg</file>
         <file alias="icons/swap.svg">icons/swap.svg</file>
+        <file alias="icons/colorpicker.svg">icons/colorpicker.svg</file>
         <file>../ui/qml/notification.qml</file>
+        <file>../ui/qml/colorinfo.qml</file>
         <file>shaders/snapshot_reconstruct.comp</file>
         <file>shaders/snapshot_downsample.comp</file>
     </qresource>

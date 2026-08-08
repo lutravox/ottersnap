@@ -57,6 +57,16 @@ void main()
     // Bilinear filtering with mipmaps
     vec4 color = textureLod(tex, imgUV, lod);
 
+    // Checkerboard background for transparency
+    float checkSize = 16.0;
+    vec2 checkPos = screen / checkSize;
+    float check = mod(floor(checkPos.x) + floor(checkPos.y), 2.0);
+    vec3 bgColor = mix(vec3(0.8), vec3(1.0), check);
+
+    // Blend image with background based on alpha
+    color.rgb = mix(bgColor, color.rgb, color.a);
+    color.a = 1.0;
+
     // Grayscale (ITU-R BT.709 luminance)
     if (u.uGrayscale) {
         float lum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));

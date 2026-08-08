@@ -8,8 +8,10 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql ShaderTools QuickWidgets)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
+
+
 
 configure_file(src/config/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/version.h)
 
@@ -68,10 +70,14 @@ endforeach()
 set(SHADER_RCC_QRC ${CMAKE_CURRENT_BINARY_DIR}/shaders.qrc)
 set(SHADER_RCC_SRC ${CMAKE_CURRENT_BINARY_DIR}/qrc_shaders.cpp)
 
+# We exclude colorwheel.frag from the .spv pipeline as it's handled by qt6_add_shaders for QML
 file(WRITE ${SHADER_RCC_QRC} "<RCC>\n    <qresource prefix=\"/\">\n")
 foreach(_shader IN LISTS ALL_SHADERS)
     get_filename_component(_name ${_shader} NAME_WE)
     get_filename_component(_ext ${_shader} EXT)
+    if(_name STREQUAL "colorwheel")
+        continue()
+    endif()
     string(SUBSTRING "${_ext}" 1 -1 _ext)
     file(APPEND ${SHADER_RCC_QRC}
         "        <file alias=\"shaders/${_name}.${_ext}.spv\">${SPIRV_DIR}/${_name}.${_ext}.spv</file>\n"
@@ -104,6 +110,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/controllers/snapshottimelinecontroller.cpp
     src/ui/notification.cpp
     src/ui/notificationmanager.cpp
+    src/ui/colorinfo.cpp
     src/ui/snapshottimeline.cpp
     src/core/snapshottimelinemodel.cpp
     src/ui/snapshottimelinedelegate.cpp
@@ -120,6 +127,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/viewertools/grayscaletool.cpp
     src/ui/viewertools/mirrortool.cpp
     src/ui/viewertools/swaptool.cpp
+    src/ui/viewertools/colorpickertool.cpp
 
     # Core logic
     src/core/diskutils.cpp
@@ -142,9 +150,10 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql)
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets)
 
 add_executable(${PROJECT_NAME}
+
     # Entry point
     src/main.cpp
 
@@ -159,8 +168,16 @@ add_executable(${PROJECT_NAME}
 # executable links, since ${SHADER_RCC_SRC} is part of the source list.
 add_dependencies(${PROJECT_NAME} shader_rcc)
 
+# ── QT6 Shaders ──────────────────────────────────────────────────────────
+qt6_add_shaders(${PROJECT_NAME} "color_shaders"
+    PREFIX "/shaders"
+    BASE "src/resources/shaders"
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+    FILES "src/resources/shaders/colorwheel.frag"
+)
+
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql)
+target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets)
 
 qt_add_translations(${PROJECT_NAME}
     RESOURCE_PREFIX "/translations"

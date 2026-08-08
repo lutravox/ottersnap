@@ -85,6 +85,10 @@ class VkSnapshotReconstructor {
     /// @return The VkBuffer handle of the current state.
     VkBuffer stateBuffer() const;
 
+    /// @brief Returns the size of the current state buffer.
+    /// @return The size in bytes.
+    VkDeviceSize stateBufferSize() const;
+
     /// @brief Returns the width of the current reconstructed image in pixels.
     uint32_t width() const;
 
@@ -95,8 +99,12 @@ class VkSnapshotReconstructor {
     /// renderer.
     bool isDirty() const;
 
-    /// @brief Returns the total size of the current state buffer in bytes.
-    VkDeviceSize stateBufferSize() const;
+    /// @brief Samples a single pixel from the current reconstructed state.
+    /// @param x X coordinate in image pixels.
+    /// @param y Y coordinate in image pixels.
+    /// @return The color of the pixel, or an empty color on failure.
+    QRgb samplePixel(int x, int y);
+
 
   private:
     struct DownsampledBuffer {
@@ -187,7 +195,13 @@ class VkSnapshotReconstructor {
         uint32_t numTiles;
     };
 
-    VkCommandBuffer m_computeCmdBuffer = VK_NULL_HANDLE;
+    VkCommandBuffer m_uploadCmdBuffer = VK_NULL_HANDLE;
+    VkCommandBuffer m_deltaCmdBuffer = VK_NULL_HANDLE;
+    VkCommandBuffer m_sampleCmdBuffer = VK_NULL_HANDLE;
+
+    // Persistent staging buffer for sampling single pixels
+    VkBuffer       m_sampleStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_sampleStagingMemory = VK_NULL_HANDLE;
 
     // Downsample Resources
     VkBuffer        m_downsampleBuffer = VK_NULL_HANDLE;

@@ -55,6 +55,8 @@ void VkImageViewerRenderer::initResources() {
     if (!createVertexBuffer())
         return;
 
+    m_activeSampler = m_samplerLinear;
+
     // Update descriptor set now if a texture view already exists
     if (m_textureView != VK_NULL_HANDLE)
         updateDescriptors(m_descriptorSet, m_uniformBuffer, m_samplerLinear, m_textureView);
@@ -355,7 +357,8 @@ void VkImageViewerRenderer::createViewAndUpdateDescriptors(int mipLevels) {
         qCritical() << "[VkImageViewer] vkCreateImageView failed:" << result;
         return;
     }
-    updateDescriptors(m_descriptorSet, m_uniformBuffer, m_samplerLinear, m_textureView);
+    VkSampler sampler = (m_activeSampler != VK_NULL_HANDLE) ? m_activeSampler : m_samplerLinear;
+    updateDescriptors(m_descriptorSet, m_uniformBuffer, sampler, m_textureView);
 }
 
 void VkImageViewerRenderer::releaseResources() {

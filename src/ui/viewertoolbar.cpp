@@ -1,6 +1,7 @@
 #include "ui/viewertoolbar.h"
 #include "controllers/effectscontroller.h"
 #include "controllers/viewercontroller.h"
+#include "ui/viewertools/colorpickertool.h"
 #include "ui/viewertools/grayscaletool.h"
 #include "ui/viewertools/mirrortool.h"
 #include "ui/viewertools/swaptool.h"
@@ -56,12 +57,20 @@ ViewerToolbar::ViewerToolbar(QWidget *parent) : QFrame(parent) {
     tools.push_back(std::make_unique<SwapTool>());
     tools.push_back(std::make_unique<GrayscaleTool>());
     tools.push_back(std::make_unique<MirrorTool>());
+    tools.push_back(std::make_unique<ColorPickerTool>());
 
     for (auto& tool : tools) {
+        if (tool->name() == "Color Picker") {
+            QWidget *separator = new QWidget(this);
+            separator->setFixedHeight(1);
+            separator->setObjectName("toolbarSeparator");
+            layout->addWidget(separator);
+        }
+
         QPushButton *btn = new QPushButton(this);
         btn->setCheckable(tool->isCheckable());
         btn->setFixedSize(32, 32);
-        btn->setToolTip(tool->tooltip());
+        btn->setToolTip(tool->fullTooltip());
 
         // Use themed icon
         btn->setIcon(themedIcon(tool->iconPath()));
@@ -92,6 +101,17 @@ ViewerToolbar::ViewerToolbar(QWidget *parent) : QFrame(parent) {
 
     this->setFixedWidth(36);
     this->setObjectName("viewerToolbar");
+}
+
+void ViewerToolbar::activateTool(const QString& name) {
+    for (auto& tw : m_tools) {
+        if (tw.tool->name() == name) {
+            bool newState = !tw.button->isChecked();
+            tw.button->setChecked(newState);
+            tw.tool->onToggled(newState);
+            return;
+        }
+    }
 }
 
 void ViewerToolbar::setup(EffectsController *effects, ViewerController *viewer) {
@@ -142,6 +162,15 @@ bool ViewerToolbar::grayscaleChecked() const {
 bool ViewerToolbar::mirrorChecked() const {
     for (auto& tw : m_tools) {
         if (tw.tool->name() == "Mirror") {
+            return tw.button->isChecked();
+        }
+    }
+    return false;
+}
+
+bool ViewerToolbar::colorPickerChecked() const {
+    for (auto& tw : m_tools) {
+        if (tw.tool->name() == "Color Picker") {
             return tw.button->isChecked();
         }
     }

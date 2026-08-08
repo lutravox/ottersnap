@@ -3,36 +3,35 @@
 #include "ui/viewertools/viewertool.h"
 
 /**
- * @class SwapTool
- * @brief A tool that swaps the primary and secondary snapshots for comparison.
+ * @brief Tool for picking colors from the viewer.
  */
-class SwapTool : public IViewerTool {
+class ColorPickerTool : public IViewerTool {
     Q_OBJECT
 
   public:
-    explicit SwapTool();
+    explicit ColorPickerTool();
 
     QString name() const override {
-        return tr("Swap");
+        return tr("Color Picker");
     }
     QString tooltip() const override {
-        return tr("Swap Comparison");
+        return tr("Color Picker");
     }
     QString iconPath() const override {
-        return QString(":/icons/swap.svg");
+        return QString(":/icons/colorpicker.svg");
     }
     QKeySequence shortcut() const override {
-        return QKeySequence(Qt::CTRL | Qt::Key_P);
+        return QKeySequence(Qt::CTRL | Qt::Key_I);
     }
     bool isCheckable() const override {
-        return false;
+        return true;
     }
 
     void onToggled(bool checked) override;
     void syncState(bool state) override;
-    void setup(EffectsController *effects, ViewerController *viewer) override;
-    bool isEnabled() const override;
+    void setup(class EffectsController *effects, class ViewerController *viewer) override;
 
   private:
     class ViewerController *m_viewerController = nullptr;
+    bool                    m_checked = false;
 };

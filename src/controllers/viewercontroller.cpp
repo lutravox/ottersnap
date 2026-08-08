@@ -118,6 +118,17 @@ bool ViewerController::isToolbarVisible() const {
     return m_settings->toolbarVisible();
 }
 
+void ViewerController::setPickingEnabled(bool enabled) {
+    m_pickingEnabled = enabled;
+    if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
+        vkViewer->setPickingEnabled(enabled);
+    }
+}
+
+bool ViewerController::isPickingEnabled() const {
+    return m_pickingEnabled;
+}
+
 void ViewerController::setSecondarySnapshot(int index) {
     if (m_session) {
         m_session->setSecondarySnapshotIndex(index);

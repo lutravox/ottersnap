@@ -70,6 +70,12 @@ void SnapshotTimelineController::clearNewStatus(int dbId) {
 }
 
 void SnapshotTimelineController::setSecondarySnapshot(int dbId) {
+    if (secondarySnapshotDbId() == dbId)
+        return;
+
+    if (m_session) {
+        m_session->setSecondarySnapshotIndex(dbId);
+    }
     emit secondarySnapshotSelected(dbId);
 }
 

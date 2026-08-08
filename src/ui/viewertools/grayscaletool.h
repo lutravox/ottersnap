@@ -8,6 +8,9 @@ class GrayscaleTool : public IViewerTool {
     QString name() const override { return "Grayscale"; }
     QString tooltip() const override { return "Grayscale"; }
     QString iconPath() const override;
+    QKeySequence shortcut() const override {
+        return QKeySequence(Qt::CTRL | Qt::Key_G);
+    }
     bool isCheckable() const override { return true; }
     void onToggled(bool checked) override;
     void syncState(bool state) override;

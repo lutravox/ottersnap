@@ -18,14 +18,18 @@ private slots:
 
 private:
     SnapshotTimelineController *m_controller = nullptr;
+    ImageSession               *m_session = nullptr;
 };
 
 void TestSnapshotTimelineController::init() {
     m_controller = new SnapshotTimelineController();
+    m_session = new ImageSession();
+    m_controller->setSession(m_session);
 }
 
 void TestSnapshotTimelineController::cleanup() {
     delete m_controller;
+    delete m_session;
 }
 
 void TestSnapshotTimelineController::testSelection() {

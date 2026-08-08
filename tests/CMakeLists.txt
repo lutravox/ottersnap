@@ -3,7 +3,7 @@
 # SRC:  relative source file under src/
 # DEPS: additional Qt modules beyond Qt6::Test
 function(add_unit_test NAME SRC)
-    add_executable(test_${NAME} test_${NAME}.cpp ${SHADER_RCC_SRC})
+    add_executable(test_${NAME} test_${NAME}.cpp ${SHADER_RCC_SRC} ${CMAKE_SOURCE_DIR}/src/resources/resources.qrc)
     target_include_directories(test_${NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_${NAME} PRIVATE ottersnap_core Qt6::Test ${ARGN})
     add_test(NAME test_${NAME} COMMAND test_${NAME})

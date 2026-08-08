@@ -31,6 +31,12 @@ class TestViewState : public QObject {
     void testPanDelta();
     void testPanZoomIndependent();
 
+    // Screen to Pixel
+    void testScreenToPixelBasic();
+    void testScreenToPixelZoomed();
+    void testScreenToPixelPanned();
+    void testScreenToPixelOutOfBounds();
+
     // Fit / Reset
     void testFitToWindow();
     void testFitResetsPan();
@@ -212,6 +218,53 @@ void TestViewState::testPanZoomIndependent() {
     // At 2x zoom, same 10px drag moves half the image-space distance
     QVERIFY(qFuzzyCompare(static_cast<float>(zs2.pan().rx()),
                           static_cast<float>(zs1.pan().rx()) * 0.5f));
+}
+
+void TestViewState::testScreenToPixelBasic() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100); // fitScale = 1.0, zoom = 1.0, pan = (0,0)
+
+    QCOMPARE(zs.screenToPixel(QPointF(50, 50)), QPoint(50, 50));
+    QCOMPARE(zs.screenToPixel(QPointF(0, 0)), QPoint(0, 0));
+    QCOMPARE(zs.screenToPixel(QPointF(99, 99)), QPoint(99, 99));
+}
+
+void TestViewState::testScreenToPixelZoomed() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+    zs.setPercentage(200.0); // zoom = 2.0, fitScale = 1.0
+
+    // center remains center
+    QCOMPARE(zs.screenToPixel(QPointF(50, 50)), QPoint(50, 50));
+    // (0,0) screen -> 0.25 image UV -> pixel 25
+    QCOMPARE(zs.screenToPixel(QPointF(0, 0)), QPoint(25, 25));
+    // (100,100) screen -> 0.75 image UV -> pixel 75
+    QCOMPARE(zs.screenToPixel(QPointF(100, 100)), QPoint(75, 75));
+}
+
+void TestViewState::testScreenToPixelPanned() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+    // pan = (0.1, 0.1)
+    // we can't set pan directly, so we applyPanDelta
+    // applyPanDelta(dx, dy) -> pan -= dx * invImgW / zoom
+    // To get pan = (0.1, 0.1), we need -dx * (1/100) / 1.0 = 0.1 => dx = -10
+    zs.applyPanDelta(-10, -10);
+
+    // Screen (50,50) -> UV 0.5 -> 0.5 + 0.1 = 0.6 -> pixel 60
+    QCOMPARE(zs.screenToPixel(QPointF(50, 50)), QPoint(60, 60));
+}
+
+void TestViewState::testScreenToPixelOutOfBounds() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+
+    QCOMPARE(zs.screenToPixel(QPointF(-1, -1)), QPoint(-1, -1));
+    QCOMPARE(zs.screenToPixel(QPointF(101, 101)), QPoint(-1, -1));
 }
 
 // Fit / Reset

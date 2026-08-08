@@ -38,6 +38,12 @@ class ViewerController : public QObject {
     /// @brief Return whether the viewer toolbar is currently visible.
     bool isToolbarVisible() const;
 
+    /// @brief Set whether color picking is enabled.
+    void setPickingEnabled(bool enabled);
+
+    /// @brief Return whether color picking is enabled.
+    bool isPickingEnabled() const;
+
     /// @brief Set the secondary snapshot for comparison.
     void setSecondarySnapshot(int index);
 
@@ -69,4 +75,5 @@ class ViewerController : public QObject {
     ImageSession          *m_session = nullptr;
     IViewer               *m_viewer = nullptr;
     QSize                  m_lastViewportSize;
+    bool                   m_pickingEnabled = false;
 };

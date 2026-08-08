@@ -2,14 +2,14 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
-#include "ui/vkimageviewer.h"
 #include "ui/viewertoolbar.h"
+#include "ui/vkimageviewer.h"
 
 ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     {
@@ -67,5 +67,14 @@ ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
 void ViewerState::setSnapshotOnlyIndicator(bool visible) {
     if (m_snapshotOnlyLabel) {
         m_snapshotOnlyLabel->setVisible(visible);
+    }
+}
+
+void ViewerState::setColorInfoVisible(bool visible) {
+    if (!m_colorInfo) {
+        m_colorInfo = new ColorInfo(m_viewer);
+    }
+    if (m_colorInfo) {
+        m_colorInfo->setVisibleState(visible);
     }
 }

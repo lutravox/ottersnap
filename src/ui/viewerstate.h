@@ -8,7 +8,9 @@
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
 #include "ui/vkimageviewer.h"
+#include "ui/vkimageviewer.h"
 #include "ui/viewertoolbar.h"
+#include "ui/colorinfo.h"
 
 /**
  * @brief Image viewer stage.
@@ -58,6 +60,16 @@ class ViewerState : public QWidget {
     /// @brief Toggles the visibility of the snapshot-only indicator.
     void setSnapshotOnlyIndicator(bool visible);
 
+    /// @brief Update the picked color in the color info overlay.
+    void setPickedColor(const QColor& color) {
+        if (m_colorInfo) {
+            m_colorInfo->setPickedColor(color);
+        }
+    }
+
+    /// @brief Set the visibility of the color info overlay.
+    void setColorInfoVisible(bool visible);
+
   signals:
     void zoomRequested(double pct);
     void fitRequested();
@@ -68,4 +80,5 @@ class ViewerState : public QWidget {
     StatusBar        *m_statusBar = nullptr;
     ViewerToolbar    *m_viewerToolbar = nullptr;
     QLabel           *m_snapshotOnlyLabel = nullptr;
+    ColorInfo       *m_colorInfo = nullptr;
 };

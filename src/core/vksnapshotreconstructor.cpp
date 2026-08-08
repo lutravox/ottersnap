@@ -72,9 +72,24 @@ void VkSnapshotReconstructor::cleanup() {
         m_tileIndexMapped = nullptr;
     }
 
-    if (m_computeCmdBuffer) {
-        df->vkFreeCommandBuffers(dev, m_handles.commandPool, 1, &m_computeCmdBuffer);
-        m_computeCmdBuffer = VK_NULL_HANDLE;
+    if (m_uploadCmdBuffer) {
+        df->vkFreeCommandBuffers(dev, m_handles.commandPool, 1, &m_uploadCmdBuffer);
+        m_uploadCmdBuffer = VK_NULL_HANDLE;
+    }
+    if (m_deltaCmdBuffer) {
+        df->vkFreeCommandBuffers(dev, m_handles.commandPool, 1, &m_deltaCmdBuffer);
+        m_deltaCmdBuffer = VK_NULL_HANDLE;
+    }
+    if (m_sampleCmdBuffer) {
+        df->vkFreeCommandBuffers(dev, m_handles.commandPool, 1, &m_sampleCmdBuffer);
+        m_sampleCmdBuffer = VK_NULL_HANDLE;
+    }
+
+    if (m_sampleStagingBuffer) {
+        VulkanUtils::destroyResource(df, dev, m_sampleStagingBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
+        VulkanUtils::freeMemory(df, dev, m_sampleStagingMemory);
+        m_sampleStagingBuffer = VK_NULL_HANDLE;
+        m_sampleStagingMemory = VK_NULL_HANDLE;
     }
 
     if (m_descriptorSet != VK_NULL_HANDLE) {
@@ -145,7 +160,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
 
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_computeCmdBuffer;
+    submitInfo.pCommandBuffers = &m_uploadCmdBuffer;
     df->vkQueueSubmit(m_handles.queue, 1, &submitInfo, m_uploadFence);
 
     m_isUploadingBase = true;
@@ -418,20 +433,38 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
     auto df = m_handles.deviceFunctions;
     auto dev = m_handles.device;
 
-    if (!m_computeCmdBuffer) {
+    if (!m_deltaCmdBuffer) {
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocInfo.commandPool = m_handles.commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
-        df->vkAllocateCommandBuffers(dev, &allocInfo, &m_computeCmdBuffer);
+        df->vkAllocateCommandBuffers(dev, &allocInfo, &m_deltaCmdBuffer);
     }
 
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    df->vkBeginCommandBuffer(m_computeCmdBuffer, &beginInfo);
+    df->vkBeginCommandBuffer(m_deltaCmdBuffer, &beginInfo);
+
+    VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.buffer = m_stateBuffer;
+    barrier.offset = 0;
+    barrier.size = m_stateBufferSize;
+
+    df->vkCmdPipelineBarrier(m_deltaCmdBuffer,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             1,
+                             &barrier,
+                             0,
+                             nullptr);
 
     df->vkCmdBindPipeline(
-        m_computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_context->getComputePipeline(dev));
-    df->vkCmdBindDescriptorSets(m_computeCmdBuffer,
+        m_deltaCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_context->getComputePipeline(dev));
+    df->vkCmdBindDescriptorSets(m_deltaCmdBuffer,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
                                 m_context->getComputePipelineLayout(dev),
                                 0,
@@ -446,7 +479,7 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
     pcs.imageW = m_width;
     pcs.imageH = m_height;
     pcs.numTiles = numTiles;
-    df->vkCmdPushConstants(m_computeCmdBuffer,
+    df->vkCmdPushConstants(m_deltaCmdBuffer,
                            m_context->getComputePipelineLayout(dev),
                            VK_SHADER_STAGE_COMPUTE_BIT,
                            0,
@@ -455,8 +488,8 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
 
     uint32_t totalPixels = numTiles * tileW * tileH;
     uint32_t groupCount = (totalPixels + 255) / 256;
-    df->vkCmdDispatch(m_computeCmdBuffer, groupCount, 1, 1);
-    df->vkEndCommandBuffer(m_computeCmdBuffer);
+    df->vkCmdDispatch(m_deltaCmdBuffer, groupCount, 1, 1);
+    df->vkEndCommandBuffer(m_deltaCmdBuffer);
 
     if (!m_deltaFence) {
         VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
@@ -465,7 +498,7 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
 
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_computeCmdBuffer;
+    submitInfo.pCommandBuffers = &m_deltaCmdBuffer;
     df->vkQueueSubmit(m_handles.queue, 1, &submitInfo, m_deltaFence);
 
     m_isApplyingDelta = true;
@@ -885,14 +918,14 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
     if (!df || !dev || !m_handles.commandPool)
         return false;
 
-    if (!m_computeCmdBuffer) {
+    if (!m_uploadCmdBuffer) {
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocInfo.commandPool = m_handles.commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
-        df->vkAllocateCommandBuffers(dev, &allocInfo, &m_computeCmdBuffer);
-        if (m_computeCmdBuffer == VK_NULL_HANDLE) {
-            qCritical() << "[VkSnapshotReconstructor] Failed to allocate compute command buffer";
+        df->vkAllocateCommandBuffers(dev, &allocInfo, &m_uploadCmdBuffer);
+        if (m_uploadCmdBuffer == VK_NULL_HANDLE) {
+            qCritical() << "[VkSnapshotReconstructor] Failed to allocate upload command buffer";
             return false;
         }
     }
@@ -909,18 +942,18 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
         df->vkResetFences(dev, 1, &m_uploadFence);
 
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    df->vkBeginCommandBuffer(m_computeCmdBuffer, &beginInfo);
+    df->vkBeginCommandBuffer(m_uploadCmdBuffer, &beginInfo);
 
     VkBufferCopy copyRegion{};
     copyRegion.size = size;
 
     if (isCached) {
         df->vkCmdCopyBuffer(
-            m_computeCmdBuffer, m_cachedBaseBuffer, m_pendingStateBuffer, 1, &copyRegion);
+            m_uploadCmdBuffer, m_cachedBaseBuffer, m_pendingStateBuffer, 1, &copyRegion);
     } else {
         qDebug() << "[VkSnapshotReconstructor] Base cache MISS";
         df->vkCmdCopyBuffer(
-            m_computeCmdBuffer, m_baseStagingBuffer, m_pendingStateBuffer, 1, &copyRegion);
+            m_uploadCmdBuffer, m_baseStagingBuffer, m_pendingStateBuffer, 1, &copyRegion);
 
         VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -928,7 +961,7 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
         barrier.buffer = m_pendingStateBuffer;
         barrier.offset = 0;
         barrier.size = size;
-        df->vkCmdPipelineBarrier(m_computeCmdBuffer,
+        df->vkCmdPipelineBarrier(m_uploadCmdBuffer,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    0,
@@ -940,10 +973,10 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
                                    nullptr);
 
         df->vkCmdCopyBuffer(
-            m_computeCmdBuffer, m_pendingStateBuffer, m_cachedBaseBuffer, 1, &copyRegion);
+            m_uploadCmdBuffer, m_pendingStateBuffer, m_cachedBaseBuffer, 1, &copyRegion);
     }
 
-    df->vkEndCommandBuffer(m_computeCmdBuffer);
+    df->vkEndCommandBuffer(m_uploadCmdBuffer);
     return true;
 }
 
@@ -1174,6 +1207,24 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     df->vkBeginCommandBuffer(copyCmd, &beginInfo);
 
+    VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.buffer = buffer;
+    barrier.offset = 0;
+    barrier.size = size;
+
+    df->vkCmdPipelineBarrier(copyCmd,
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             1,
+                             &barrier,
+                             0,
+                             nullptr);
+
     VkBufferCopy copyRegion = {0, 0, size};
     df->vkCmdCopyBuffer(copyCmd, buffer, stagingAlloc.buffer, 1, &copyRegion);
     df->vkEndCommandBuffer(copyCmd);
@@ -1251,4 +1302,92 @@ QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence&
                                  downsample.height);
 
     return result;
+}
+
+QRgb VkSnapshotReconstructor::samplePixel(int x, int y) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    if (!m_stateBuffer || x < 0 || x >= (int)m_width || y < 0 || y >= (int)m_height) {
+        return 0;
+    }
+
+    auto df = m_handles.deviceFunctions;
+    auto dev = m_handles.device;
+
+    VkDeviceSize offset = static_cast<VkDeviceSize>(y) * m_width * 4 + static_cast<VkDeviceSize>(x) * 4;
+    VkDeviceSize size = 4;
+
+    if (!m_sampleStagingBuffer) {
+        auto alloc = VulkanUtils::createBuffer(m_context->getInstance(),
+                                               df,
+                                               dev,
+                                               m_handles.physicalDevice,
+                                               size,
+                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (alloc.buffer == VK_NULL_HANDLE) {
+            return 0;
+        }
+        m_sampleStagingBuffer = alloc.buffer;
+        m_sampleStagingMemory = alloc.memory;
+    }
+
+    if (!m_sampleCmdBuffer) {
+        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocInfo.commandPool = m_handles.commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        df->vkAllocateCommandBuffers(dev, &allocInfo, &m_sampleCmdBuffer);
+    }
+
+    VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.buffer = m_stateBuffer;
+    barrier.offset = offset;
+    barrier.size = size;
+
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    df->vkBeginCommandBuffer(m_sampleCmdBuffer, &beginInfo);
+
+    df->vkCmdPipelineBarrier(m_sampleCmdBuffer,
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             1,
+                             &barrier,
+                             0,
+                             nullptr);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = offset;
+    copyRegion.dstOffset = 0;
+    copyRegion.size = size;
+    df->vkCmdCopyBuffer(m_sampleCmdBuffer, m_stateBuffer, m_sampleStagingBuffer, 1, &copyRegion);
+    df->vkEndCommandBuffer(m_sampleCmdBuffer);
+
+    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &m_sampleCmdBuffer;
+
+    VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VkFence fence = VK_NULL_HANDLE;
+    df->vkCreateFence(dev, &fci, nullptr, &fence);
+    df->vkQueueSubmit(m_handles.queue, 1, &submit, fence);
+
+    VkResult res = df->vkWaitForFences(dev, 1, &fence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS);
+    df->vkDestroyFence(dev, fence, nullptr);
+
+    QRgb color = 0;
+    if (res == VK_SUCCESS) {
+        void *data = nullptr;
+        df->vkMapMemory(dev, m_sampleStagingMemory, 0, size, 0, &data);
+        color = *static_cast<uint32_t *>(data);
+        df->vkUnmapMemory(dev, m_sampleStagingMemory);
+    }
+
+    return color;
 }

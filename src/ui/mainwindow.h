@@ -67,6 +67,8 @@ class MainWindow : public QMainWindow {
     void onToggleToolbar();
     void onSwap();
     void onAbout();
+    void onColorPicked(const QColor& color);
+    void onColorInfoToggled(bool checked);
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
@@ -138,6 +140,8 @@ class MainWindow : public QMainWindow {
     QAction *m_actionGrayscale;
     QAction *m_actionMirror;
     QAction *m_actionResetEffects;
+
+    QList<QShortcut *> m_toolShortcuts;
     QAction *m_actionSettings;
     QAction *m_actionManageSnapshots;
     QAction *m_actionToggleToolbar;

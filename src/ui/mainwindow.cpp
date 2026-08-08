@@ -23,6 +23,7 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
+#include <QShortcut>
 #include <QtConcurrent>
 
 #include "config/appsettings.h"
@@ -64,7 +65,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_session.load();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    qDeleteAll(m_toolShortcuts);
+}
 
 void MainWindow::closeEvent(QCloseEvent *event) {
     QStringList openPaths;
@@ -225,6 +228,13 @@ void MainWindow::setupUi() {
             m_viewerController,
             &ViewerController::handleViewportResize);
 
+    connect(m_viewerState->viewer(), &VkImageViewer::colorPicked, this, &MainWindow::onColorPicked);
+
+    connect(m_viewerState->statusBar(),
+            &StatusBar::colorInfoToggled,
+            this,
+            &MainWindow::onColorInfoToggled);
+
     connect(m_viewerController,
             &ViewerController::toolbarVisibilityToggled,
             m_viewerState,
@@ -244,6 +254,22 @@ void MainWindow::setupUi() {
             &ViewerController::secondarySnapshotChanged,
             this,
             &MainWindow::updateMenuBar);
+
+    // Register shortcuts for toolbar tools
+    if (m_viewerState && m_viewerState->toolbar()) {
+        for (const auto& tw : m_viewerState->toolbar()->tools()) {
+            QKeySequence shortcut = tw.tool->shortcut();
+            if (!shortcut.isEmpty()) {
+                QShortcut *s = new QShortcut(shortcut, this);
+                connect(s, &QShortcut::activated, this, [this, name = tw.tool->name()]() {
+                    if (m_viewerState && m_viewerState->toolbar()) {
+                        m_viewerState->toolbar()->activateTool(name);
+                    }
+                });
+                m_toolShortcuts.append(s);
+            }
+        }
+    }
 
     // Connect image drop and drop on viewer
     connect(m_viewerState->viewer(),
@@ -321,7 +347,6 @@ void MainWindow::setupMenu() {
     connect(m_actionToggleToolbar, &QAction::triggered, this, &MainWindow::onToggleToolbar);
 
     m_actionSwap = m_viewMenu->addAction(tr("&Swap Comparison"));
-    m_actionSwap->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_P));
     connect(m_actionSwap, &QAction::triggered, this, &MainWindow::onSwap);
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
@@ -352,14 +377,12 @@ void MainWindow::setupMenu() {
     m_effectsMenu = menuBar()->addMenu(tr("&Effects"));
     m_actionGrayscale = m_effectsMenu->addAction(tr("&Grayscale"));
     m_actionGrayscale->setCheckable(true);
-    m_actionGrayscale->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
     connect(m_actionGrayscale, &QAction::triggered, this, [this]() {
         m_effectsController->toggleGrayscale();
     });
 
     m_actionMirror = m_effectsMenu->addAction(tr("&Mirror"));
     m_actionMirror->setCheckable(true);
-    m_actionMirror->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(m_actionMirror, &QAction::triggered, this, [this]() {
         m_effectsController->toggleMirror();
     });
@@ -475,6 +498,15 @@ void MainWindow::onSwap() {
 void MainWindow::onAbout() {
     AboutDialog dialog(this);
     dialog.exec();
+}
+
+void MainWindow::onColorPicked(const QColor& color) {
+    m_viewerState->statusBar()->setColor(color);
+    m_viewerState->setPickedColor(color);
+}
+
+void MainWindow::onColorInfoToggled(bool checked) {
+    m_viewerState->setColorInfoVisible(checked);
 }
 
 void MainWindow::onResetView() {

@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QWidget>
+#include <QColor>
 
 /// @brief status bar with controls.
 class StatusBar : public QWidget {
@@ -32,6 +33,10 @@ class StatusBar : public QWidget {
     /// @param timestamp The formatted timestamp string.
     void setTimestamp(const QString& timestamp);
 
+    /// @brief Set the picked color to display.
+    /// @param color The color to display.
+    void setColor(const QColor& color);
+
     /// @brief Handle the custom context menu request for the zoom spinbox.
     void onZoomSpinboxContextMenuRequested(const QPoint& pos);
 
@@ -43,9 +48,15 @@ class StatusBar : public QWidget {
     /// @brief Emitted when the user clicks the fit button.
     void fitRequested();
 
+    /// @brief Emitted when the color info toggle button is clicked.
+    /// @param checked True if the info should be shown.
+    void colorInfoToggled(bool checked);
+
   private:
     QLabel         *m_timestampLabel;
     QLabel         *m_dimensionsLabel;
     QDoubleSpinBox *zoomSpinbox;
     QPushButton    *resetButton;
+    QPushButton    *m_colorButton;
+    bool           m_colorInfoVisible = false;
 };

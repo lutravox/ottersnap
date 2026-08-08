@@ -107,6 +107,36 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
             if (obj == m_vulkanWindow) {
                 auto *me = static_cast<QMouseEvent *>(event);
                 if (me->button() == Qt::LeftButton) {
+                    if (m_pickingEnabled) {
+                        if (m_hasImage && m_session) {
+                            ViewState state = getViewState();
+                            QPoint    pixelPos = state.screenToPixel(me->position());
+                            int       px = pixelPos.x();
+                            int       py = pixelPos.y();
+
+                            if (px >= 0 && py >= 0) {
+                                QRgb color = 0;
+
+                                if (m_session->isCurrentImageSelected()) {
+                                    QImage img = m_session->diskImage();
+                                    if (!img.isNull()) {
+                                        color = img.pixel(px, py);
+                                    }
+                                } else if (m_session->uiReconstructor()) {
+                                    color = m_session->uiReconstructor()->samplePixel(px, py);
+                                }
+
+                                emit colorPicked(QColor::fromRgba(color));
+                            }
+                        }
+                        return true;
+                    }
+
+                    m_isDragging = true;
+                    m_lastMousePos = me->position().toPoint();
+                    setFocus();
+                    return true;
+                } else if (me->button() == Qt::MiddleButton) {
                     m_isDragging = true;
                     m_lastMousePos = me->position().toPoint();
                     setFocus();
@@ -176,7 +206,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         }
         case QEvent::MouseButtonRelease: {
             auto *me = static_cast<QMouseEvent *>(event);
-            if (me->button() == Qt::LeftButton) {
+            if (me->button() == Qt::LeftButton || me->button() == Qt::MiddleButton) {
                 if (m_isDragging) {
                     m_isDragging = false;
                 } else {
@@ -189,7 +219,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         // Pan
         case QEvent::MouseMove: {
             auto *me = static_cast<QMouseEvent *>(event);
-            if (!(me->buttons() & Qt::LeftButton)) {
+            if (!(me->buttons() & (Qt::LeftButton | Qt::MiddleButton))) {
                 m_isDragging = false;
             }
 
@@ -259,8 +289,16 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
 }
 
 void VkImageViewer::setSession(ImageSession *session) {
+    m_session = session;
     if (m_renderer) {
         m_renderer->setSession(session);
+    }
+}
+
+void VkImageViewer::setPickingEnabled(bool enabled) {
+    m_pickingEnabled = enabled;
+    if (m_vulkanWindow) {
+        m_vulkanWindow->setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
     }
 }
 

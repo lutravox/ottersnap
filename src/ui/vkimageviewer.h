@@ -70,6 +70,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @param checked True if scaling with window should be enabled.
     void setScaleWithWindowChecked(bool checked);
 
+    /// @brief Set whether color picking is enabled.
+    void setPickingEnabled(bool enabled);
+
     /// @brief Trigger a redraw of the viewer.
     void update() override {
         QWidget::update();
@@ -81,6 +84,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
   signals:
     /// @brief Emitted when the user clicks the image.
     void imageClicked();
+
+    /// @brief Emitted when a color is picked from the image.
+    void colorPicked(const QColor& color);
 
     /// @brief Emitted whenever the viewport size changes.
     /// @param width The new width of the viewport.
@@ -162,6 +168,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     bool      m_isDragging = false;
     QPoint    m_lastMousePos;
     bool      m_scaleWithWindow = false;
+    bool      m_pickingEnabled = false;
+    class ImageSession *m_session = nullptr;
 };
 
 using ImageViewer = VkImageViewer;

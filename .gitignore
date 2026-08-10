@@ -1,6 +1,7 @@
 # ── CMake build artifacts ───────────────────────────────────────
 build/
 compile_commands.json
+Testing/
 
 # ── Flatpak build artifacts ─────────────────────────────────────
 build-flatpak/

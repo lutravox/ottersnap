@@ -1,5 +1,7 @@
 #include <QtTest>
 #include <QSignalSpy>
+#include "controllers/imagesessioncontroller.h"
+#include "controllers/appsettingscontroller.h"
 #include "controllers/snapshottimelinecontroller.h"
 #include "core/imagesession.h"
 #include "core/snapshottimelinemodel.h"
@@ -18,18 +20,24 @@ private slots:
 
 private:
     SnapshotTimelineController *m_controller = nullptr;
+    ImageSessionController     *m_sessionController = nullptr;
     ImageSession               *m_session = nullptr;
 };
 
 void TestSnapshotTimelineController::init() {
+    AppSettingsController settings;
+    m_sessionController = new ImageSessionController(&settings);
     m_controller = new SnapshotTimelineController();
     m_session = new ImageSession();
-    m_controller->setSession(m_session);
+
+    m_controller->setSessionController(m_sessionController);
+    m_sessionController->setActiveSession(m_session);
 }
 
 void TestSnapshotTimelineController::cleanup() {
     delete m_controller;
     delete m_session;
+    delete m_sessionController;
 }
 
 void TestSnapshotTimelineController::testSelection() {

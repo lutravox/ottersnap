@@ -1,4 +1,5 @@
 #include "ui/vkimageviewer.h"
+#include "controllers/imagesessioncontroller.h"
 #include "core/viewstate.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewerrenderer.h"
@@ -108,7 +109,9 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                 auto *me = static_cast<QMouseEvent *>(event);
                 if (me->button() == Qt::LeftButton) {
                     if (m_pickingEnabled) {
-                        if (m_hasImage && m_session) {
+                        auto *session =
+                            m_sessionController ? m_sessionController->activeSession() : nullptr;
+                        if (m_hasImage && session) {
                             ViewState state = getViewState();
                             QPoint    pixelPos = state.screenToPixel(me->position());
                             int       px = pixelPos.x();
@@ -117,13 +120,13 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                             if (px >= 0 && py >= 0) {
                                 QRgb color = 0;
 
-                                if (m_session->isCurrentImageSelected()) {
-                                    QImage img = m_session->diskImage();
+                                if (session->isCurrentImageSelected()) {
+                                    QImage img = session->diskImage();
                                     if (!img.isNull()) {
                                         color = img.pixel(px, py);
                                     }
-                                } else if (m_session->uiReconstructor()) {
-                                    color = m_session->uiReconstructor()->samplePixel(px, py);
+                                } else if (session->uiReconstructor()) {
+                                    color = session->uiReconstructor()->samplePixel(px, py);
                                 }
 
                                 emit colorPicked(QColor::fromRgba(color));
@@ -242,12 +245,21 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
     return QObject::eventFilter(obj, event);
 }
 
-void VkImageViewer::setViewState(const ViewState& state) {
-    m_currentViewState = state;
-    emit zoomChanged(state.percentage());
+RenderState VkImageViewer::renderState() const {
+    return m_renderer ? m_renderer->renderState() : RenderState::Empty;
+}
+
+void VkImageViewer::setIndicator(QPoint pos, QColor color, bool visible) {
     if (m_renderer) {
-        m_renderer->markUboDirty();
+        m_renderer->setIndicator(pos, color, visible);
     }
+}
+
+void VkImageViewer::notifyViewStateChanged() {
+    if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
+        emit zoomChanged(s->viewState().percentage());
+    }
+    update();
 }
 
 void VkImageViewer::showEvent(QShowEvent *event) {
@@ -261,22 +273,23 @@ void VkImageViewer::showEvent(QShowEvent *event) {
     m_vulkanWindow->requestUpdate();
 }
 
-void VkImageViewer::setImage(const QImage& image, bool preserveView) {
+void VkImageViewer::setImage(const QImage& image) {
     m_hasImage = !image.isNull();
     if (!m_hasImage)
         return;
 
-    m_renderer->setImage(image);
+    m_renderer->setImage(image, ++m_generation);
 }
 
 void VkImageViewer::reconstruct(const ReconstructionSequence& seq) {
     m_hasImage = true;
-    m_renderer->reconstruct(seq);
+    m_renderer->reconstruct(seq, ++m_generation);
 }
 
 void VkImageViewer::clear() {
     m_hasImage = false;
     m_renderer->clear();
+    m_generation++;
 }
 
 void VkImageViewer::resizeEvent(QResizeEvent *event) {
@@ -288,10 +301,10 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
     emit viewportResized(sz.width(), sz.height());
 }
 
-void VkImageViewer::setSession(ImageSession *session) {
-    m_session = session;
+void VkImageViewer::setSessionController(ImageSessionController *controller) {
+    m_sessionController = controller;
     if (m_renderer) {
-        m_renderer->setSession(session);
+        m_renderer->setSessionController(controller);
     }
 }
 

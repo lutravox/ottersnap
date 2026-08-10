@@ -1,19 +1,19 @@
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Rubber Body: Scaled by 1.2, shifted up for better vertical centering -->
+  <!-- Rubber Body  -->
   <path d="M14.25 8.3L19.05 3.5L21.45 5.9L16.65 10.7Z" fill="black" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Rubber Top Line: Scaled by 1.2, shifted up -->
+
+  <!-- Rubber Top Line  -->
   <path d="M13.05 7.1L17.85 11.9" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Glass Tube: Scaled by 1.2, shifted up -->
-  <!-- Line 1: From bottom of body to tip -->
+
+  <!-- Glass Tube -->
+  <!-- Line 1 -->
   <path d="M14.25 8.3L4.65 17.9" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- Line 2: Parallel to Line 1 -->
+  <!-- Line 2 -->
   <path d="M16.65 10.7L7.05 20.3" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Tube Bottom: Closing line perpendicular to the tube lines -->
+
+  <!-- Tube Bottom -->
   <path d="M4.65 17.9L7.05 20.3" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Nozzle Tip: Small diamond scaled by 1.2, shifted up -->
+
+  <!-- Nozzle Tip -->
   <path d="M4.65 19.7L5.25 20.3L4.65 20.9L4.05 20.3Z" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -108,6 +108,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/controllers/appsettingscontroller.cpp
     src/controllers/viewercontroller.cpp
     src/controllers/snapshottimelinecontroller.cpp
+    src/controllers/colorinfocontroller.cpp
     src/ui/notification.cpp
     src/ui/notificationmanager.cpp
     src/ui/colorinfo.cpp
@@ -143,6 +144,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/imagesession.cpp
     src/core/thumbnailmanager.cpp
     src/core/imagemonitor.cpp
+    src/core/coloranalyzer.cpp
 
     # Configuration
     src/config/appsettings.cpp

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include "controllers/appsettingscontroller.h"
+#include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
 
@@ -11,17 +12,17 @@ class ViewerController : public QObject {
   public:
     explicit ViewerController(AppSettingsController *settings, QObject *parent = nullptr);
 
-    /// @brief Set the active session to track.
-    void setActiveSession(ImageSession *session);
+    /// @brief Link the controller to the session coordinator.
+    void setSessionController(ImageSessionController *controller);
 
     /// @brief Set the viewer to control.
     void setViewer(IViewer *viewer);
 
+    /// @brief Request a change of the active session and current snapshot.
+    void requestSessionChange(ImageSession *session, int index);
+
     /// @brief Sync the session's ViewState to the viewer.
     void syncSessionToViewer();
-
-    /// @brief Sync the viewer's current ViewState back to the session.
-    void syncViewerToSession();
 
     /// @brief Command the viewer to fit the image to the window.
     void fitToWindow();
@@ -59,10 +60,16 @@ class ViewerController : public QObject {
     /// @brief Notify the controller that the viewport size has changed.
     void handleViewportResize(int width, int height);
 
+    /// @brief Handle a pan request from the viewer.
+    void handlePanRequested(int dx, int dy);
+
   public slots:
     void handleZoomRequested(bool zoomIn, bool ctrlHeld);
-    void handlePanRequested(int dx, int dy);
     void setZoomPercentage(double pct);
+
+  private slots:
+    void onActiveSessionChanged(ImageSession *session);
+    void onSessionImageChanged();
 
   signals:
     void grayscaleToggled(bool enabled);
@@ -71,9 +78,11 @@ class ViewerController : public QObject {
     void secondarySnapshotChanged(int index);
 
   private:
-    AppSettingsController *m_settings;
-    ImageSession          *m_session = nullptr;
-    IViewer               *m_viewer = nullptr;
-    QSize                  m_lastViewportSize;
-    bool                   m_pickingEnabled = false;
+    AppSettingsController  *m_settings;
+    ImageSessionController *m_sessionController = nullptr;
+    IViewer                *m_viewer = nullptr;
+    QSize                   m_lastViewportSize;
+    bool                    m_pickingEnabled = false;
+    QMetaObject::Connection m_effectsConnection;
+    QMetaObject::Connection m_imageChangedConnection;
 };

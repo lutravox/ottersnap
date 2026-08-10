@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Shapes 2.15
 
 Item {
     id: root
@@ -9,14 +10,16 @@ Item {
     property string hexColor: "#FFFFFF"
     property real alphaValue: 1.0
     property bool visibleState: false
+    property var colorClusters: []
+    property int selectedClusterId: -1
     signal fadeOutFinished()
 
     // Layout constants
-    readonly property int overlayWidth: 260
-    readonly property int overlayHeight: 150
-    readonly property int containerWidth: 250
-    readonly property int containerHeight: 140
-    readonly property int wheelSize: 80
+    readonly property int overlayWidth: 310
+    readonly property int overlayHeight: 190
+    readonly property int containerWidth: 300
+    readonly property int containerHeight: 180
+    readonly property int wheelSize: 120
     readonly property int wheelMarginLeft: 20
     readonly property int indicatorSize: 8
     readonly property int infoWidth: 140
@@ -63,6 +66,14 @@ Item {
         };
     }
 
+    function getLuminosity(hex) {
+        var r = parseInt(hex.slice(1, 3), 16) / 255;
+        var g = parseInt(hex.slice(3, 5), 16) / 255;
+        var b = parseInt(hex.slice(5, 7), 16) / 255;
+        var l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return Math.round(l * 100).toString().padStart(3, '0');
+    }
+
     function getHSVForIndicator(hex) {
         var r = parseInt(hex.slice(1, 3), 16) / 255;
         var g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -89,11 +100,13 @@ Item {
     property var currentHSVIndicator: getHSVForIndicator(hexColor)
     property var rgbValues: getRGB(hexColor, alphaValue)
     property var hsvValues: getHSV(hexColor)
+    property string luminosityValue: getLuminosity(hexColor)
 
     onHexColorChanged: {
         currentHSVIndicator = getHSVForIndicator(hexColor);
         rgbValues = getRGB(hexColor, alphaValue);
         hsvValues = getHSV(hexColor);
+        luminosityValue = getLuminosity(hexColor);
     }
 
     onAlphaValueChanged: {
@@ -137,6 +150,7 @@ Item {
     // Main container for the overlay
     Item {
         id: container
+        objectName: "container"
         anchors.centerIn: parent
         width: containerWidth
         height: containerHeight
@@ -182,19 +196,62 @@ Item {
                 anchors.fill: parent
                 fragmentShader: "qrc:/shaders/colorwheel.frag.qsb"
             }
+        }
 
-            // Indicator for the current color
-            Rectangle {
-                id: indicator
-                width: indicatorSize
-                height: indicatorSize
-                radius: indicatorSize / 2
-                color: "white"
-                border.color: "black"
+        // Indicator for the current color
+        Rectangle {
+            id: indicator
+            width: indicatorSize
+            height: indicatorSize
+            radius: indicatorSize / 2
+            color: "white"
+            border.color: "black"
+            border.width: 1
+
+            x: (wheelMarginLeft + wheelSize / 2) + Math.cos((root.currentHSVIndicator.h - 0.5) * Math.PI * 2) * (root.currentHSVIndicator.s * (wheelSize / 2)) - (indicatorSize / 2)
+            y: (containerHeight / 2) + Math.sin((root.currentHSVIndicator.h - 0.5) * Math.PI * 2) * (root.currentHSVIndicator.s * (wheelSize / 2)) - (indicatorSize / 2)
+            z: 200
+            opacity: container.opacity
+        }
+
+        Repeater {
+            model: root.colorClusters
+            delegate: Rectangle {
+                id: clusterDot
+                property bool isHovered: false
+                readonly property int clusterId: Number(modelData.id)
+
+                width: {
+                    var c = modelData["count"] !== undefined ? modelData["count"] : 1;
+                    return Math.min(5 + Math.sqrt(c) * 0.6, wheelSize / 2);
+                }
+                height: width
+                radius: width / 2
+                color: modelData.color
+                border.color: "white"
                 border.width: 1
+                scale: (clusterDot.isHovered || root.selectedClusterId === clusterDot.clusterId) ? 1.5 : 1.0
 
-                x: (wheelSize / 2) + Math.cos((root.currentHSVIndicator.h - 0.5) * Math.PI * 2) * (root.currentHSVIndicator.s * (wheelSize / 2)) - (indicatorSize / 2)
-                y: (wheelSize / 2) + Math.sin((root.currentHSVIndicator.h - 0.5) * Math.PI * 2) * (root.currentHSVIndicator.s * (wheelSize / 2)) - (indicatorSize / 2)
+                Behavior on scale {
+                    NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: clusterDot.isHovered = true
+                    onExited: clusterDot.isHovered = false
+                    onClicked: {
+                        root.selectedClusterId = clusterDot.clusterId;
+                        colorInfo.handleClusterSelected(modelData);
+                    }
+                }
+
+                x: wheelMarginLeft + (wheelSize / 2) + modelData.center.x * (wheelSize / 2) - (width / 2)
+                y: (containerHeight / 2) + modelData.center.y * (wheelSize / 2) - (height / 2)
+                opacity: container.opacity
+                z: 100
             }
         }
 
@@ -235,6 +292,7 @@ Item {
                                 {label: "H: ", value: root.hsvValues.h},
                                 {label: "S: ", value: root.hsvValues.s},
                                 {label: "V: ", value: root.hsvValues.v},
+                                {label: "L: ", value: root.luminosityValue},
                             ]
                             delegate: valueFieldComponent
                         }

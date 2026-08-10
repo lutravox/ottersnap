@@ -18,6 +18,12 @@ void ViewState::resetState(int width, int height) {
 void ViewState::updateImageSize(int width, int height) {
     m_imageWidth = width;
     m_imageHeight = height;
+
+    if (m_viewportWidth > 0 || m_viewportHeight > 0) {
+        float newFit = std::min(static_cast<float>(m_viewportWidth) / m_imageWidth,
+                                static_cast<float>(m_viewportHeight) / m_imageHeight);
+        m_fitScale = newFit;
+    }
 }
 
 void ViewState::setViewportSize(int viewWidth, int viewHeight) {
@@ -87,39 +93,73 @@ QPoint ViewState::screenToPixel(const QPointF& screenPos) const {
         return QPoint(-1, -1);
     }
 
-    float screenX = screenPos.x();
-    float screenY = screenPos.y();
+    // Offset from viewport center
+    float screenOffsetX = screenPos.x() - (m_viewportWidth * 0.5f);
+    float screenOffsetY = screenPos.y() - (m_viewportHeight * 0.5f);
 
-    float fitImgW = m_fitScale * m_imageWidth;
-    float fitImgH = m_fitScale * m_imageHeight;
-    float originX = (m_viewportWidth - fitImgW) * 0.5f;
-    float originY = (m_viewportHeight - fitImgH) * 0.5f;
+    // Normalize by current rendered dimensions
+    float renderedW = m_zoom * m_imageWidth;
+    float renderedH = m_zoom * m_imageHeight;
 
-    // Normalise to [0,1] image-space UV, then shift to [-0.5, 0.5].
-    float imgUVX = (screenX - originX) / std::max(fitImgW, 0.001f) - 0.5f;
-    float imgUVY = (screenY - originY) / std::max(fitImgH, 0.001f) - 0.5f;
+    float normX = screenOffsetX / std::max(renderedW, 0.001f);
+    float normY = screenOffsetY / std::max(renderedH, 0.001f);
 
-    // UV zoom multiplier: fitScale / zoomLevel.
-    float zoomFactor = m_fitScale / std::max(m_zoom, 0.001f);
-    imgUVX *= zoomFactor;
-    imgUVY *= zoomFactor;
+    // Apply pan (pan is normalized)
+    normX += m_pan.x();
+    normY += m_pan.y();
 
-    // Apply pan
-    imgUVX += m_pan.x();
-    imgUVY += m_pan.y();
-
-    // Shift back to [0,1]
-    imgUVX += 0.5f;
-    imgUVY += 0.5f;
+    // Shift to [0, 1] range
+    float imgUVX = normX + 0.5f;
+    float imgUVY = normY + 0.5f;
 
     if (imgUVX < 0.0f || imgUVX >= 1.0f || imgUVY < 0.0f || imgUVY >= 1.0f) {
         return QPoint(-1, -1);
     }
 
-    int px = static_cast<int>(imgUVX * m_imageWidth);
-    int py = static_cast<int>(imgUVY * m_imageHeight);
+    int px = std::clamp(qRound(imgUVX * m_imageWidth), 0, m_imageWidth - 1);
+    int py = std::clamp(qRound(imgUVY * m_imageHeight), 0, m_imageHeight - 1);
 
     return QPoint(px, py);
+}
+
+QPointF ViewState::normalizedToScreen(const QPointF& normPos) const {
+    if (!hasImage()) {
+        return QPointF(-1, -1);
+    }
+
+    // Convert absolute normalized [0, 1] to relative normalized [-0.5, 0.5]
+    return relativeToScreen(normPos.x() - 0.5f, normPos.y() - 0.5f);
+}
+
+QPointF ViewState::pixelToScreen(const QPoint& pixelPos) const {
+    if (!hasImage()) {
+        return QPointF(-1, -1);
+    }
+
+    // Normalized offset from center in image space
+    float relX = (static_cast<float>(pixelPos.x()) / m_imageWidth) - 0.5f;
+    float relY = (static_cast<float>(pixelPos.y()) / m_imageHeight) - 0.5f;
+
+    return relativeToScreen(relX, relY);
+}
+
+QPointF ViewState::relativeToScreen(float relX, float relY) const {
+    // Apply pan
+    relX -= m_pan.x();
+    relY -= m_pan.y();
+
+    // Scale by current rendered dimensions
+    float renderedW = m_zoom * m_imageWidth;
+    float renderedH = m_zoom * m_imageHeight;
+
+    float screenOffsetX = relX * renderedW;
+    float screenOffsetY = relY * renderedH;
+
+    // Position relative to viewport center
+    float screenX = (m_viewportWidth * 0.5f) + screenOffsetX;
+    float screenY = (m_viewportHeight * 0.5f) + screenOffsetY;
+
+    return QPointF(screenX, screenY);
 }
 
 void ViewState::fitToWindow() {

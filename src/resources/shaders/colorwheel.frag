@@ -26,7 +26,7 @@ void main() {
     // We use a radius of 0.49 to avoid any possible clipping at the edges of the item
     // and a wider smoothing range (0.02) for visible anti-aliasing.
     float radius = 0.49;
-    float smoothing = 0.02;
+    float smoothing = 0.005;
     float alpha = smoothstep(radius + smoothing, radius - smoothing, dist);
 
     if (alpha <= 0.0) {

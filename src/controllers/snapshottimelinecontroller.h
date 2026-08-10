@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <memory>
+#include "controllers/imagesessioncontroller.h"
 #include "core/snapshottimelinemodel.h"
 
 class ImageSession;
@@ -12,16 +13,19 @@ class SnapshotTimelineController : public QObject {
     Q_OBJECT
 
   public:
+    static constexpr int ThumbnailSize = 48;
+
     explicit SnapshotTimelineController(QObject *parent = nullptr);
     ~SnapshotTimelineController() override = default;
 
-    /// @brief Associate a session with this controller.
-    /// @param session The image session to manage.
-    void setSession(ImageSession *session);
+    /// @brief Link the controller to the session coordinator.
+    void setSessionController(ImageSessionController *controller);
 
     /// @brief Provide the model to be used by the view.
     /// @return The underlying snapshot timeline model.
-    SnapshotTimelineModel* model() const { return m_model.get(); }
+    SnapshotTimelineModel *model() const {
+        return m_model.get();
+    }
 
     /// @brief Select a snapshot by its row index in the timeline.
     /// @param row The row index of the snapshot to select.
@@ -37,7 +41,9 @@ class SnapshotTimelineController : public QObject {
 
     /// @brief Return the current primary selection index.
     /// @return The index of the currently selected snapshot, or -1 if none.
-    int currentSelectedIndex() const { return m_currentIndex; }
+    int currentSelectedIndex() const {
+        return m_currentIndex;
+    }
 
     /// @brief Return the current secondary selection database ID.
     /// @return The database ID of the secondary snapshot, or ImageSession::SecondaryNone if none.
@@ -67,9 +73,10 @@ class SnapshotTimelineController : public QObject {
     void snapshotDeletionRequested(int row);
 
   private:
+    void onActiveSessionChanged(ImageSession *session);
     void onSessionChanged();
 
     std::unique_ptr<SnapshotTimelineModel> m_model;
-    ImageSession*                  m_session = nullptr;
-    int                            m_currentIndex = -1;
+    ImageSessionController                *m_sessionController = nullptr;
+    int                                    m_currentIndex = -1;
 };

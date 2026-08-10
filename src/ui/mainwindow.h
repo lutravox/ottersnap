@@ -10,6 +10,7 @@
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/snapshottimelinecontroller.h"
 #include "controllers/viewercontroller.h"
+#include "controllers/colorinfocontroller.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
 #include "ui/notificationmanager.h"
@@ -69,6 +70,7 @@ class MainWindow : public QMainWindow {
     void onAbout();
     void onColorPicked(const QColor& color);
     void onColorInfoToggled(bool checked);
+    void onSessionColorClustersChanged();
     void onTabChanged(int index);
     void onSnapshotSelected(int index);
     void onSnapshotDeletionRequested(int index);
@@ -113,6 +115,7 @@ class MainWindow : public QMainWindow {
     ViewerController      *m_viewerController;
     SnapshotTimelineController *m_snapshotController;
     AppSettingsController *m_settingsController;
+    ColorInfoController    *m_colorInfoController;
     QMenu                 *m_fileMenu;
     QMenu                 *m_recentFilesMenu;
     QMenu                 *m_editMenu;
@@ -147,10 +150,6 @@ class MainWindow : public QMainWindow {
     QAction *m_actionToggleToolbar;
     QAction *m_actionSwap;
     QAction *m_actionAbout;
-
-    ImageTab *m_currentTabInView = nullptr;
-    int       m_currentVersionInView = -1;
-    int       m_lastBaseIdx = -1;
 
     QMap<QString, ImageTab *> m_tabPaths;
     ImageSessionController   *m_sessionController;

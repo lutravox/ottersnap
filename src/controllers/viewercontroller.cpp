@@ -1,48 +1,94 @@
 #include <QDebug>
 #include "controllers/viewercontroller.h"
 #include "controllers/appsettingscontroller.h"
+#include "core/vulkancontext.h"
 #include "ui/vkimageviewer.h"
 
 ViewerController::ViewerController(AppSettingsController *settings, QObject *parent)
     : QObject(parent), m_settings(settings) {
 }
 
-void ViewerController::setActiveSession(ImageSession *session) {
-    if (m_session) {
+void ViewerController::setSessionController(ImageSessionController *controller) {
+    if (m_sessionController == controller)
+        return;
+
+    if (m_sessionController) {
+        disconnect(m_sessionController,
+                   &ImageSessionController::activeSessionChanged,
+                   this,
+                   &ViewerController::onActiveSessionChanged);
+    }
+
+    m_sessionController = controller;
+
+    if (m_sessionController) {
+        connect(m_sessionController,
+                &ImageSessionController::activeSessionChanged,
+                this,
+                &ViewerController::onActiveSessionChanged);
+    }
+}
+
+void ViewerController::onActiveSessionChanged(ImageSession *session) {
+    if (!session) {
+        if (m_viewer) {
+            m_viewer->clear();
+        }
+        return;
+    }
+
+    if (m_viewer) {
+        // Sync current viewport size to the new session's view state
+        QSize sz = m_viewer->getViewportSize();
+        session->viewState().setViewportSize(sz.width(), sz.height());
+        session->viewState().updateZoomRatio();
+
         if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
-            disconnect(m_session,
-                       &ImageSession::effectsChanged,
-                       vkViewer,
-                       &VkImageViewer::onEffectsChanged);
+            QObject::disconnect(m_effectsConnection);
+            m_effectsConnection = QObject::connect(
+                session, &ImageSession::effectsChanged, vkViewer, &VkImageViewer::onEffectsChanged);
         }
     }
 
-    m_session = session;
+    // Connect to imageChanged to handle snapshot selection
+    QObject::disconnect(m_imageChangedConnection);
+    m_imageChangedConnection = QObject::connect(
+        session, &ImageSession::imageChanged, this, &ViewerController::onSessionImageChanged);
 
-    if (m_session && m_viewer) {
-        m_viewer->setSession(m_session);
+    if (session && m_viewer) {
+        // Ensure the session is initialized with Vulkan handles before using its reconstructor
+        session->setUIReconstructorHandles(VulkanContext::instance().getUIHandles());
+        m_viewer->setReconstructor(session->uiReconstructor());
 
-        if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
-            connect(m_session,
-                    &ImageSession::effectsChanged,
-                    vkViewer,
-                    &VkImageViewer::onEffectsChanged);
-        }
-
-        if (m_session->isCurrentImageSelected()) {
-            // It's the disk image - use regular upload
-            m_viewer->setImage(m_session->diskImage(), false);
-        } else if (auto seq = m_session->getReconstructionSequence()) {
-            // It's a snapshot - use reconstruction path
+        if (session->isCurrentImageSelected()) {
+            m_viewer->setImage(session->diskImage());
+        } else if (auto seq = session->getReconstructionSequence()) {
             m_viewer->reconstruct(*seq);
         }
     }
 
-    emit secondarySnapshotChanged(m_session ? m_session->secondarySnapshotIndex() : ImageSession::SecondaryNone);
+    syncSessionToViewer();
+
+    emit secondarySnapshotChanged(session->secondarySnapshotIndex());
+}
+
+void ViewerController::onSessionImageChanged() {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
+        return;
+
+    if (session->isCurrentImageSelected()) {
+        m_viewer->setImage(session->diskImage());
+    } else if (auto seq = session->getReconstructionSequence()) {
+        m_viewer->reconstruct(*seq);
+    }
 }
 
 void ViewerController::setViewer(IViewer *viewer) {
     m_viewer = viewer;
+    if (m_viewer) {
+        m_viewer->setSessionController(m_sessionController);
+    }
     if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
         connect(
             vkViewer, &VkImageViewer::zoomRequested, this, &ViewerController::handleZoomRequested);
@@ -57,44 +103,67 @@ void ViewerController::setViewer(IViewer *viewer) {
     }
 }
 
-void ViewerController::syncSessionToViewer() {
-    if (!m_session || !m_viewer)
-        return;
+void ViewerController::requestSessionChange(ImageSession *session, int index) {
+    // Check if we are already viewing this session and snapshot
+    ImageSession *currentSession = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    int currentIdx = currentSession ? currentSession->currentSnapshotIndex() : -1;
 
-    m_viewer->setViewState(m_session->viewState());
-    m_viewer->update();
+    if (session == currentSession && index == currentIdx) {
+        return; // No change needed
+    }
+
+    if (session != currentSession) {
+        if (m_viewer) {
+            m_viewer->clear();
+        }
+        if (m_sessionController) {
+            m_sessionController->setActiveSession(session);
+        }
+    }
+
+    // If the session is now active, we might need to trigger a refresh if the index changed
+    // or if it was just set for the first time.
+    if (session && m_viewer) {
+        // We use the session's index to ensure we are loading the requested version
+        session->selectSnapshot(index);
+        onSessionImageChanged();
+    }
+
+    syncSessionToViewer();
 }
 
-void ViewerController::syncViewerToSession() {
-    if (!m_session || !m_viewer)
+void ViewerController::syncSessionToViewer() {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
-    m_session->viewState() = m_viewer->getViewState();
+
+    m_viewer->notifyViewStateChanged();
 }
 
 void ViewerController::fitToWindow() {
-    if (!m_session || !m_viewer)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
 
     // Ensure we have the current viewport size before fitting
     QSize      sz = m_viewer->getViewportSize();
-    ViewState& state = m_session->viewState();
+    ViewState& state = session->viewState();
     state.setViewportSize(sz.width(), sz.height());
 
     state.fitToWindow();
 
-    m_viewer->setViewState(state);
-    m_viewer->update();
+    m_viewer->notifyViewStateChanged();
 }
 
 void ViewerController::setZoomPercentage(double pct) {
-    if (!m_session || !m_viewer)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
 
-    ViewState& state = m_session->viewState();
+    ViewState& state = session->viewState();
     state.setPercentage(pct);
 
-    m_viewer->setViewState(state);
-    m_viewer->update();
+    m_viewer->notifyViewStateChanged();
 }
 
 void ViewerController::setScaleWithWindowEnabled(bool enabled) {
@@ -130,31 +199,34 @@ bool ViewerController::isPickingEnabled() const {
 }
 
 void ViewerController::setSecondarySnapshot(int index) {
-    if (m_session) {
-        m_session->setSecondarySnapshotIndex(index);
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (session) {
+        session->setSecondarySnapshotIndex(index);
     }
     emit secondarySnapshotChanged(index);
 }
 
 int ViewerController::secondarySnapshotIndex() const {
-    return m_session ? m_session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    return session ? session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
 }
 
 bool ViewerController::canSwap() const {
-    if (!m_session)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session)
         return false;
 
-    int secondary = m_session->secondarySnapshotIndex();
+    int secondary = session->secondarySnapshotIndex();
     if (secondary == ImageSession::SecondaryNone)
         return false;
 
-    int primaryRow = m_session->currentSnapshotIndex();
-    int primaryDbId = -1;
-    const auto& snapshots = m_session->snapshots();
+    int         primaryRow = session->currentSnapshotIndex();
+    int         primaryDbId = -1;
+    const auto& snapshots = session->snapshots();
 
     if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
         primaryDbId = snapshots[primaryRow].snapshotIndex;
-    } else if (primaryRow == static_cast<int>(snapshots.size()) && !m_session->isSnapshotOnly()) {
+    } else if (primaryRow == static_cast<int>(snapshots.size()) && !session->isSnapshotOnly()) {
         primaryDbId = ImageSession::SecondaryCurrent;
     }
 
@@ -162,55 +234,57 @@ bool ViewerController::canSwap() const {
 }
 
 void ViewerController::swapPrimaryAndSecondary() {
-    if (!m_session)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session)
         return;
 
-    int primaryRow = m_session->currentSnapshotIndex();
-    int secondaryDbId = m_session->secondarySnapshotIndex();
+    int primaryRow = session->currentSnapshotIndex();
+    int secondaryDbId = session->secondarySnapshotIndex();
 
     if (secondaryDbId == ImageSession::SecondaryNone)
         return; // No secondary snapshot selected
 
-    if (secondaryDbId == ImageSession::SecondaryCurrent && m_session->isSnapshotOnly())
+    if (secondaryDbId == ImageSession::SecondaryCurrent && session->isSnapshotOnly())
         return; // Secondary cannot be 'current' in snapshot-only mode
 
     // Determine the row of the secondary snapshot
     int secondaryRow = -1;
     if (secondaryDbId == ImageSession::SecondaryCurrent) {
         // Secondary is the current disk image
-        secondaryRow = static_cast<int>(m_session->snapshots().size());
+        secondaryRow = static_cast<int>(session->snapshots().size());
     } else {
-        int relVer = m_session->getRelativeVersion(secondaryDbId);
+        int relVer = session->getRelativeVersion(secondaryDbId);
         if (relVer != -1) {
             secondaryRow = relVer - 1;
         }
     }
 
-    if (secondaryRow < 0 || secondaryRow > m_session->maxValidIndex())
+    if (secondaryRow < 0 || secondaryRow > session->maxValidIndex())
         return;
 
     // Determine the database ID of the current primary
-    int primaryDbId = -1;
-    const auto& snapshots = m_session->snapshots();
+    int         primaryDbId = -1;
+    const auto& snapshots = session->snapshots();
     if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
         primaryDbId = snapshots[primaryRow].snapshotIndex;
-    } else if (primaryRow == static_cast<int>(snapshots.size()) && !m_session->isSnapshotOnly()) {
+    } else if (primaryRow == static_cast<int>(snapshots.size()) && !session->isSnapshotOnly()) {
         primaryDbId = -1; // Primary is the current image
     }
 
     // Perform swap
-    m_session->selectSnapshot(secondaryRow);
-    m_session->setSecondarySnapshotIndex(primaryDbId);
+    session->selectSnapshot(secondaryRow);
+    session->setSecondarySnapshotIndex(primaryDbId);
 
     emit secondarySnapshotChanged(primaryDbId);
     syncSessionToViewer();
 }
 
 void ViewerController::handleViewportResize(int width, int height) {
-    if (!m_session || !m_viewer)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
 
-    ViewState& state = m_session->viewState();
+    ViewState& state = session->viewState();
 
     state.setViewportSize(width, height);
 
@@ -221,28 +295,27 @@ void ViewerController::handleViewportResize(int width, int height) {
         state.updateZoomRatio();
     }
 
-    m_viewer->setViewState(state);
-    m_viewer->update();
+    m_viewer->notifyViewStateChanged();
 }
 
 void ViewerController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
-    if (!m_session || !m_viewer)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
 
-    ViewState& state = m_session->viewState();
+    ViewState& state = session->viewState();
     state.applyWheelZoom(zoomIn, ctrlHeld);
 
-    m_viewer->setViewState(state);
-    m_viewer->update();
+    m_viewer->notifyViewStateChanged();
 }
 
 void ViewerController::handlePanRequested(int dx, int dy) {
-    if (!m_session || !m_viewer)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
         return;
 
-    ViewState& state = m_session->viewState();
+    ViewState& state = session->viewState();
     state.applyPanDelta(dx, dy);
 
-    m_viewer->setViewState(state);
-    m_viewer->update();
+    m_viewer->notifyViewStateChanged();
 }

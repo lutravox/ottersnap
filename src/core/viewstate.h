@@ -99,12 +99,23 @@ class ViewState {
     /// Used for absolute scaling during viewport resizes.
     void updateZoomRatio();
 
+    /// @brief Maps a normalized image position (0.0 to 1.0) to a viewport-relative screen position.
+    QPointF normalizedToScreen(const QPointF& normPos) const;
+
     /// @brief Maps a screen position to a pixel coordinate in the image.
     /// @param screenPos The screen position in logical pixels.
     /// @return The pixel coordinate in the image, or QPoint(-1, -1) if out of bounds.
     QPoint screenToPixel(const QPointF& screenPos) const;
 
+    /// @brief Maps a pixel coordinate in the image to a screen position.
+    /// @param pixelPos The pixel coordinate in the image.
+    /// @return The screen position in logical pixels.
+    QPointF pixelToScreen(const QPoint& pixelPos) const;
+
   private:
+    /// @brief Maps a relative normalized position ([-0.5, 0.5]) to a screen position.
+    QPointF relativeToScreen(float relX, float relY) const;
+
     float   m_zoom = 1.0f;
     float   m_fitScale = 0.0f;
     float   m_zoomRatio = 1.0f;

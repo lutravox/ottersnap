@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QString>
 #include <QVector>
+#include "core/coloranalyzer.h"
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
@@ -21,11 +22,11 @@ class ImageSession : public QObject, public IEffectsState {
   public:
     static constexpr int SecondaryNone = -2;
     static constexpr int SecondaryCurrent = -1;
+    static constexpr int MaxClusterCacheSize = 50;
 
     explicit ImageSession(QObject *parent = nullptr);
     ~ImageSession();
 
-    // IEffectsState implementation
     void setGrayscale(bool enabled) override;
     void setMirror(bool enabled) override;
     bool grayscaleEnabled() const override {
@@ -35,7 +36,6 @@ class ImageSession : public QObject, public IEffectsState {
         return m_effects.mirror;
     }
 
-    // ViewState access
     ViewState& viewState() {
         return m_viewState;
     }
@@ -79,7 +79,7 @@ class ImageSession : public QObject, public IEffectsState {
     void deleteSnapshot(int index);
 
     /// @brief Generate and cache a thumbnail for a specific snapshot.
-    QImage generateThumbnail(int index, int size);
+    QImage generateThumbnail(int index, int size, bool padded = true);
 
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
     std::tuple<QVector<QImage>, QVector<QString>, QVector<int>>
@@ -120,6 +120,15 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Return the maximum valid index for the current session mode.
     int maxValidIndex() const;
 
+    /// @brief Returns the color clusters for the currently selected image.
+    /// @return A list of clusters containing their center, average color, and count.
+    QList<ColorAnalyzer::ColorCluster> colorClusters() const {
+        return m_colorClusters;
+    }
+
+    /// @brief Calculates the color clusters using the thumbnail.
+    void updateColorClusters();
+
     /// @brief Return the relative version of a snapshot on the timeline (1-based).
     int getRelativeVersion(int snapshotIndex) const;
 
@@ -127,6 +136,9 @@ class ImageSession : public QObject, public IEffectsState {
     std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
         return m_uiReconstructor;
     }
+
+    /// @brief Returns a formatted timestamp string for the currently selected image.
+    QString currentImageTimestamp() const;
 
     /// @brief Initializes the UI reconstructor with the provided device handles.
     void setUIReconstructorHandles(const VulkanHandles& handles);
@@ -148,11 +160,12 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Emitted when a specific thumbnail has been updated.
     void thumbnailChanged(int index);
     void effectsChanged();
+    void colorClustersChanged();
     /// @brief Emitted with a status message to show to the user.
     void statusMessage(const QString& message, int timeoutMs = -1);
 
   private slots:
-    void handleThumbnailGenerated(const QString& path, int index, const QImage& img);
+    void handleThumbnailGenerated(const QString& path, int index);
     void onFileChanged();
     void onDeviceChanged();
 
@@ -184,6 +197,8 @@ class ImageSession : public QObject, public IEffectsState {
     EffectsState m_effects;
     ViewState    m_viewState;
 
-    ImageMonitor                            *m_monitor;
-    std::shared_ptr<VkSnapshotReconstructor> m_uiReconstructor;
+    ImageMonitor                                   *m_monitor;
+    std::shared_ptr<VkSnapshotReconstructor>        m_uiReconstructor;
+    QList<ColorAnalyzer::ColorCluster>              m_colorClusters;
+    QCache<int, QList<ColorAnalyzer::ColorCluster>> m_clusterCache;
 };

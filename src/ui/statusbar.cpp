@@ -44,7 +44,7 @@ StatusBar::StatusBar(QWidget *parent)
 
     m_colorButton->setFixedSize(32, 32);
     m_colorButton->setObjectName("colorButton");
-    m_colorButton->setEnabled(false);
+    m_colorButton->setEnabled(true);
     m_colorButton->setToolTip(tr("Show color information"));
 
     QFile qss(":/qss/statusbar.qss");
@@ -70,7 +70,8 @@ StatusBar::StatusBar(QWidget *parent)
     connect(resetButton, &QPushButton::clicked, this, &StatusBar::fitRequested);
     connect(m_colorButton, &QPushButton::clicked, this, [this]() {
         m_colorInfoVisible = !m_colorInfoVisible;
-        m_colorButton->setToolTip(m_colorInfoVisible ? tr("Hide color information") : tr("Show color information"));
+        m_colorButton->setToolTip(m_colorInfoVisible ? tr("Hide color information")
+                                                     : tr("Show color information"));
         emit colorInfoToggled(m_colorInfoVisible);
     });
 }
@@ -96,8 +97,8 @@ void StatusBar::setTimestamp(const QString& timestamp) {
 }
 
 void StatusBar::setColor(const QColor& color) {
-    m_colorButton->setEnabled(true);
-    m_colorButton->setStyleSheet(QString("QPushButton#colorButton { background-color: %1; }").arg(color.name()));
+    m_colorButton->setStyleSheet(
+        QString("QPushButton#colorButton { background-color: %1; }").arg(color.name()));
 }
 
 void StatusBar::onZoomSpinboxContextMenuRequested(const QPoint& pos) {

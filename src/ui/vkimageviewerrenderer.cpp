@@ -9,6 +9,13 @@
 #include <algorithm>
 #include <cstring>
 
+// Push constant structure for the indicator
+struct IndicatorConstants {
+    float offset[2];
+    float size[2];
+    float color[4];
+};
+
 void VkImageViewerRenderer::setReconstructor(
     const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
     std::lock_guard<std::mutex> lock(m_reconstructorMutex);
@@ -18,27 +25,24 @@ void VkImageViewerRenderer::setReconstructor(
 
     m_activeReconstructor = reconstructor;
 
-    if (reconstructor) {
-        // Force an upload for the new session
-        m_uploadPending = true;
-        m_reconstructionPending = true;
-    } else {
-        m_uploadPending = false;
-        m_reconstructionPending = false;
-    }
-
-    m_hasImage = false;
+    setRenderState(RenderState::Empty, m_currentGeneration);
     m_textureView = VK_NULL_HANDLE;
     m_uboDirty = true;
 }
 
 void VkImageViewerRenderer::clear() {
-    m_hasImage = false;
+    std::lock_guard<std::mutex> lock(m_reconstructorMutex);
+    m_activeReconstructor = nullptr;
+    setRenderState(RenderState::Empty, m_currentGeneration);
     m_sourceImage = QImage();
     m_textureView = VK_NULL_HANDLE;
-    m_uploadPending = false;
-    m_reconstructionPending = false;
     m_uboDirty = true;
+}
+
+void VkImageViewerRenderer::setIndicator(QPoint pos, QColor color, bool visible) {
+    m_indicatorPos = pos;
+    m_indicatorColor = color;
+    m_indicatorVisible = visible;
 }
 
 void VkImageViewerRenderer::initResources() {
@@ -55,6 +59,9 @@ void VkImageViewerRenderer::initResources() {
     if (!createVertexBuffer())
         return;
 
+    // Create indicator pipeline
+    createIndicatorPipeline();
+
     m_activeSampler = m_samplerLinear;
 
     // Update descriptor set now if a texture view already exists
@@ -67,14 +74,159 @@ void VkImageViewerRenderer::initResources() {
 
     // If a session was set before the window was ready, initialize handles
     // and trigger the initial render.
-    if (m_session) {
-        setSession(m_session);
-        if (m_session->isCurrentImageSelected()) {
-            setImage(m_session->diskImage());
-        } else if (auto seq = m_session->getReconstructionSequence()) {
-            reconstruct(*seq);
+    if (m_sessionController) {
+        ImageSession *session = m_sessionController->activeSession();
+        if (session) {
+            VulkanContext::instance().setUIDevice(
+                m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
+
+            VulkanHandles handles = VulkanContext::instance().getUIHandles();
+            session->setUIReconstructorHandles(handles);
+            setReconstructor(session->uiReconstructor());
+
+            if (session->isCurrentImageSelected()) {
+                setImage(session->diskImage(), 0);
+            } else if (auto seq = session->getReconstructionSequence()) {
+                reconstruct(*seq, 0);
+            }
         }
     }
+
+    // Execute any reconstruction that was deferred because m_vkWindow was null
+    if (m_pendingReconstruction) {
+        reconstruct(*m_pendingReconstruction, m_pendingGeneration);
+        m_pendingReconstruction.reset();
+    }
+}
+
+void VkImageViewerRenderer::createIndicatorPipeline() {
+    VkDevice                dev = m_vkWindow->device();
+    QVulkanDeviceFunctions *df = m_devFuncs;
+
+    auto loadShader = [](const QString& path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qCritical() << "[VkImageViewer] Failed to open shader file:" << path;
+            return QByteArray();
+        }
+        return file.readAll();
+    };
+
+    QByteArray vertCode = loadShader(":/shaders/cluster_indicator.vert.spv");
+    QByteArray fragCode = loadShader(":/shaders/cluster_indicator.frag.spv");
+
+    if (vertCode.isEmpty() || fragCode.isEmpty()) {
+        qCritical() << "[VkImageViewer] Failed to load indicator shaders";
+        return;
+    }
+
+    VkShaderModuleCreateInfo vci{};
+    vci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    vci.codeSize = vertCode.size();
+    vci.pCode = reinterpret_cast<const uint32_t *>(vertCode.data());
+    VkShaderModule vertMod;
+    df->vkCreateShaderModule(dev, &vci, nullptr, &vertMod);
+
+    vci.codeSize = fragCode.size();
+    vci.pCode = reinterpret_cast<const uint32_t *>(fragCode.data());
+    VkShaderModule fragMod;
+    df->vkCreateShaderModule(dev, &vci, nullptr, &fragMod);
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName = "main";
+
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    VkVertexInputBindingDescription binding{};
+    binding.binding = 0;
+    binding.stride = sizeof(float) * 4;
+    VkVertexInputAttributeDescription attr[2]{};
+    attr[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, 0};
+    attr[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 2};
+    vi.vertexBindingDescriptionCount = 1;
+    vi.pVertexBindingDescriptions = &binding;
+    vi.vertexAttributeDescriptionCount = 2;
+    vi.pVertexAttributeDescriptions = attr;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vs{};
+    vs.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vs.viewportCount = 1;
+    vs.scissorCount = 1;
+
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dynamicStates;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.lineWidth = 1.0f;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cb[1]{};
+    cb[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    cb[0].blendEnable = VK_TRUE;
+    cb[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    cb[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cb[0].colorBlendOp = VK_BLEND_OP_ADD;
+    cb[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cb[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cb[0].alphaBlendOp = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo cbs{};
+    cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cbs.logicOpEnable = VK_FALSE;
+    cbs.attachmentCount = 1;
+    cbs.pAttachments = cb;
+
+    VkPipelineLayoutCreateInfo pli{};
+    pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pli.pushConstantRangeCount = 1;
+    VkPushConstantRange pcr{};
+    pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    pcr.offset = 0;
+    pcr.size = sizeof(IndicatorConstants);
+    pli.pPushConstantRanges = &pcr;
+    df->vkCreatePipelineLayout(dev, &pli, nullptr, &m_indicatorPipelineLayout);
+
+    VkGraphicsPipelineCreateInfo gp{};
+    gp.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gp.stageCount = 2;
+    gp.pStages = stages;
+    gp.pVertexInputState = &vi;
+    gp.pInputAssemblyState = &ia;
+    gp.pViewportState = &vs;
+    gp.pRasterizationState = &rs;
+    gp.pMultisampleState = &ms;
+    gp.pColorBlendState = &cbs;
+    gp.pDynamicState = &ds;
+    gp.layout = m_indicatorPipelineLayout;
+    gp.renderPass = m_vkWindow->defaultRenderPass();
+    gp.subpass = 0;
+
+    df->vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gp, nullptr, &m_indicatorPipeline);
+
+    df->vkDestroyShaderModule(dev, vertMod, nullptr);
+    df->vkDestroyShaderModule(dev, fragMod, nullptr);
 }
 
 bool VkImageViewerRenderer::createSamplers() {
@@ -258,7 +410,7 @@ bool VkImageViewerRenderer::createVertexBuffer() {
 
 void VkImageViewerRenderer::initSwapChainResources() {
     if (m_textureView == VK_NULL_HANDLE && !m_sourceImage.isNull()) {
-        m_uploadPending = true;
+        setRenderState(RenderState::Loading, m_currentGeneration);
     }
 }
 
@@ -391,6 +543,14 @@ void VkImageViewerRenderer::releaseResources() {
     VulkanUtils::destroyResource(
         m_devFuncs, dev, m_samplerNearest, &QVulkanDeviceFunctions::vkDestroySampler);
 
+    // Indicator resources
+    VulkanUtils::destroyResource(
+        m_devFuncs, dev, m_indicatorPipeline, &QVulkanDeviceFunctions::vkDestroyPipeline);
+    VulkanUtils::destroyResource(m_devFuncs,
+                                 dev,
+                                 m_indicatorPipelineLayout,
+                                 &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
+
     // Cleanup reconstructor resources
     std::lock_guard<std::mutex> lock(m_reconstructorMutex);
     if (m_activeReconstructor) {
@@ -398,24 +558,28 @@ void VkImageViewerRenderer::releaseResources() {
     }
 }
 
-void VkImageViewerRenderer::setSession(ImageSession *session) {
-    m_session = session;
-    if (!m_session || !m_vkWindow)
-        return;
+void VkImageViewerRenderer::setSessionController(ImageSessionController *controller) {
+    m_sessionController = controller;
+    if (m_sessionController) {
+        ImageSession *session = m_sessionController->activeSession();
+        if (session && m_vkWindow) {
+            // Initialize session-specific resources
+            VulkanContext::instance().setUIDevice(
+                m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
 
-    VulkanContext::instance().setUIDevice(
-        m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
-
-    VulkanHandles handles = VulkanContext::instance().getUIHandles();
-    m_session->setUIReconstructorHandles(handles);
-    setReconstructor(m_session->uiReconstructor());
+            VulkanHandles handles = VulkanContext::instance().getUIHandles();
+            session->setUIReconstructorHandles(handles);
+            setReconstructor(session->uiReconstructor());
+        }
+    }
 }
 
 void VkImageViewerRenderer::updateUniformBuffer() {
-    if (!m_uniformMapped || !m_session)
+    ImageSession *activeSession = session();
+    if (!m_uniformMapped || !activeSession)
         return;
 
-    const ViewState& state = m_session->viewState();
+    const ViewState& state = activeSession->viewState();
 
     float vpW = static_cast<float>(m_viewportSize.width());
     float vpH = static_cast<float>(m_viewportSize.height());
@@ -712,11 +876,12 @@ bool VkImageViewerRenderer::createAndUploadTexture(VkCommandBuffer cmd, const QI
     return true;
 }
 
-void VkImageViewerRenderer::setImage(const QImage& img) {
+void VkImageViewerRenderer::setImage(const QImage& img, uint32_t generation) {
     if (img.isNull())
         return;
 
-    m_hasImage = true;
+    if (!setRenderState(RenderState::Loading, generation))
+        return;
 
     // Invalidate old texture view
     m_textureView = VK_NULL_HANDLE;
@@ -730,20 +895,29 @@ void VkImageViewerRenderer::setImage(const QImage& img) {
     // Store a persistent copy so the image can be re-uploaded after resources
     // are released
     m_sourceImage = std::move(rgba);
-    m_uploadPending = true;
     m_uboDirty = true;
-    m_reconstructionPending = false;
 }
 
-void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq) {
+void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint32_t generation) {
+    // Defer reconstruction until the Vulkan window is ready (e.g. during session restore)
+    if (!m_vkWindow) {
+        m_pendingReconstruction = seq;
+        m_pendingGeneration = generation;
+        return;
+    }
+
+    if (!setRenderState(RenderState::Reconstructing, generation))
+        return;
+
     std::shared_ptr<VkSnapshotReconstructor> reconstructor;
     {
         std::lock_guard<std::mutex> lock(m_reconstructorMutex);
         reconstructor = m_activeReconstructor;
     }
 
-    if (!reconstructor || !m_vkWindow) {
-        qWarning() << "[VkImageViewerRenderer] reconstuct: Null reconstructor or m_vkWindow";
+    if (!reconstructor) {
+        qWarning() << "[VkImageViewerRenderer] reconstruct: Null reconstructor";
+        setRenderState(RenderState::Empty, m_currentGeneration);
         return;
     }
 
@@ -751,11 +925,7 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq) {
     timer.start();
 
     m_sourceImage = seq.base;
-    m_hasImage = true;
     m_uboDirty = true;
-
-    m_uploadPending = true;
-    m_reconstructionPending = true;
 
     reconstructor->reconstruct(seq);
 
@@ -765,15 +935,14 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq) {
 
 void VkImageViewerRenderer::performUploads(
     VkCommandBuffer cmd, const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
-    if (!m_uploadPending)
+    if (m_state == RenderState::Empty || m_state == RenderState::Ready)
         return;
 
-    if (m_reconstructionPending) {
+    if (m_state == RenderState::Reconstructing) {
         if (!reconstructor) {
             qCritical() << "[VkImageViewerRenderer] Reconstruction pending but no "
                            "reconstructor active!";
-            m_uploadPending = false;
-            m_reconstructionPending = false;
+            setRenderState(RenderState::Empty, m_currentGeneration);
             return;
         }
 
@@ -792,15 +961,15 @@ void VkImageViewerRenderer::performUploads(
         }
 
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        ImageSession *activeSession = session();
         if (m_textureImage == VK_NULL_HANDLE || m_textureView == VK_NULL_HANDLE ||
-            (m_session && (m_session->viewState().imageWidth() != m_currentTextureWidth ||
-                           m_session->viewState().imageHeight() != m_currentTextureHeight))) {
-            if (createTexture(m_session ? m_session->viewState().imageWidth() : 0,
-                              m_session ? m_session->viewState().imageHeight() : 0) == 0) {
+            (activeSession && (activeSession->viewState().imageWidth() != m_currentTextureWidth ||
+                               activeSession->viewState().imageHeight() != m_currentTextureHeight))) {
+            if (createTexture(activeSession ? activeSession->viewState().imageWidth() : 0,
+                              activeSession ? activeSession->viewState().imageHeight() : 0) == 0) {
                 qCritical()
                     << "[VkImageViewerRenderer] Failed to create texture for reconstruction";
-                m_uploadPending = false;
-                m_reconstructionPending = false;
+                setRenderState(RenderState::Empty, m_currentGeneration);
                 return;
             }
             oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -814,8 +983,7 @@ void VkImageViewerRenderer::performUploads(
 
         if (!reconstructor->waitForDeltas()) {
             qWarning() << "[VkImageViewerRenderer] Timeout waiting for deltas during upload";
-            m_uploadPending = false;
-            m_reconstructionPending = false;
+            setRenderState(RenderState::Empty, m_currentGeneration);
             return;
         }
 
@@ -844,12 +1012,12 @@ void VkImageViewerRenderer::performUploads(
         // Copy reconstructed buffer to image
         reconstructor->copyToVulkanImage(cmd,
                                          m_textureImage,
-                                         m_session ? m_session->viewState().imageWidth() : 0,
-                                         m_session ? m_session->viewState().imageHeight() : 0);
+                                         activeSession ? activeSession->viewState().imageWidth() : 0,
+                                         activeSession ? activeSession->viewState().imageHeight() : 0);
 
         // Regenerate mip chain from the updated level 0
-        int maxDim = std::max(m_session ? m_session->viewState().imageWidth() : 0,
-                              m_session ? m_session->viewState().imageHeight() : 0);
+        int maxDim = std::max(activeSession ? activeSession->viewState().imageWidth() : 0,
+                              activeSession ? activeSession->viewState().imageHeight() : 0);
         int mipLevels = 0;
         while ((1u << mipLevels) <= static_cast<unsigned>(maxDim)) {
             mipLevels++;
@@ -857,8 +1025,8 @@ void VkImageViewerRenderer::performUploads(
         mipLevels = std::max(1, mipLevels);
         recordMipChainGeneration(cmd,
                                  mipLevels,
-                                 m_session ? m_session->viewState().imageWidth() : 0,
-                                 m_session ? m_session->viewState().imageHeight() : 0);
+                                 activeSession ? activeSession->viewState().imageWidth() : 0,
+                                 activeSession ? activeSession->viewState().imageHeight() : 0);
 
         // Final transition to SHADER_READ_ONLY_OPTIMAL
         if (mipLevels > 1) {
@@ -910,29 +1078,26 @@ void VkImageViewerRenderer::performUploads(
                                              1,
                                              &imgBarrier);
         }
-    } else {
+    } else if (m_state == RenderState::Loading) {
         if (!createAndUploadTexture(cmd, m_sourceImage)) {
             qCritical() << "[VkImageViewerRenderer] Regular upload failed (OOM?)";
+            setRenderState(RenderState::Empty, m_currentGeneration);
+            return;
         }
     }
 
-    m_uploadPending = false;
-    m_reconstructionPending = false;
-
     if (m_textureView != VK_NULL_HANDLE) {
-        m_hasImage = true;
+        setRenderState(RenderState::Ready, m_currentGeneration);
+    } else {
+        setRenderState(RenderState::Empty, m_currentGeneration);
     }
 }
 
 void VkImageViewerRenderer::startNextFrame() {
-    // Resources may have been destroyed by releaseResources() if
-    // this was a pending requestUpdate() that arrived after window destruction.
     if (!m_vkWindow || VulkanContext::instance().getGraphicsPipeline() == VK_NULL_HANDLE) {
-        qDebug() << "[VkImageViewerRenderer] startNextFrame: Null resources";
         return;
     }
 
-    // Check for completed base image uploads or updated reconstruction state
     std::shared_ptr<VkSnapshotReconstructor> reconstructor;
     {
         std::lock_guard<std::mutex> lock(m_reconstructorMutex);
@@ -941,8 +1106,7 @@ void VkImageViewerRenderer::startNextFrame() {
 
     if (reconstructor) {
         if (reconstructor->checkAndSwapBase() || reconstructor->isDirty()) {
-            m_uploadPending = true;
-            m_reconstructionPending = true;
+            setRenderState(RenderState::Reconstructing, m_currentGeneration);
         }
     }
 
@@ -950,30 +1114,22 @@ void VkImageViewerRenderer::startNextFrame() {
 
     performUploads(cmd, reconstructor);
 
-    // Update uniform buffer
     updateUniformBuffer();
 
-    // Skip rendering when there's no image to display, but still present
-    // an empty frame so Qt's swapchain lifecycle stays in sync.
-    if (!m_hasImage) {
-        qDebug() << "[VkImageViewerRenderer] Skipping render, m_hasImage is false";
+    if (m_state != RenderState::Ready) {
         m_vkWindow->frameReady();
         m_vkWindow->requestUpdate();
         return;
     }
 
     if (m_textureView == VK_NULL_HANDLE) {
-        qDebug() << "[VkImageViewerRenderer] Skipping render, texture view not yet created";
         m_vkWindow->frameReady();
         m_vkWindow->requestUpdate();
         return;
     }
 
-    // Viewport
     QSize sz = m_vkWindow->swapChainImageSize();
-
-    // Switch sampler: nearest-neighbor when zoom >= 1:1
-    float     currentZoom = m_session ? m_session->viewState().zoom() : 1.0f;
+    float     currentZoom = session() ? session()->viewState().zoom() : 1.0f;
     VkSampler activeSampler = (currentZoom >= 1.0f) ? m_samplerNearest : m_samplerLinear;
     if (activeSampler != m_activeSampler) {
         updateDescriptors(m_descriptorSet, m_uniformBuffer, activeSampler, m_textureView);
@@ -991,7 +1147,6 @@ void VkImageViewerRenderer::startNextFrame() {
     sc.extent = {static_cast<uint32_t>(sz.width()), static_cast<uint32_t>(sz.height())};
     m_devFuncs->vkCmdSetScissor(cmd, 0, 1, &sc);
 
-    // Begin render pass
     VkClearValue cv[2]{};
     QColor       bgColor = AppSettings::backgroundColor();
     cv[0].color.float32[0] = bgColor.redF();
@@ -1010,7 +1165,6 @@ void VkImageViewerRenderer::startNextFrame() {
 
     m_devFuncs->vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Bind pipeline & descriptors
     m_devFuncs->vkCmdBindPipeline(
         cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, VulkanContext::instance().getGraphicsPipeline());
     m_devFuncs->vkCmdBindDescriptorSets(cmd,
@@ -1022,16 +1176,34 @@ void VkImageViewerRenderer::startNextFrame() {
                                         0,
                                         nullptr);
 
-    // Bind vertex buffer
     VkDeviceSize vbOffset = 0;
     m_devFuncs->vkCmdBindVertexBuffers(cmd, 0, 1, &m_vertexBuffer, &vbOffset);
-
-    // Draw fullscreen quad
     m_devFuncs->vkCmdDraw(cmd, 6, 1, 0, 0);
 
-    m_devFuncs->vkCmdEndRenderPass(cmd);
+    if (m_indicatorVisible && m_indicatorPipeline != VK_NULL_HANDLE) {
+        m_devFuncs->vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_indicatorPipeline);
+        float ndcX = (2.0f * m_indicatorPos.x() / sz.width()) - 1.0f;
+        float ndcy = (2.0f * m_indicatorPos.y() / sz.height()) - 1.0f;
+        IndicatorConstants constants{};
+        constants.offset[0] = ndcX;
+        constants.offset[1] = ndcy;
+        constants.size[0] = m_indicatorSize / (2.0f * sz.width());
+        constants.size[1] = m_indicatorSize / (2.0f * sz.height());
+        constants.color[0] = m_indicatorColor.redF();
+        constants.color[1] = m_indicatorColor.greenF();
+        constants.color[2] = m_indicatorColor.blueF();
+        constants.color[3] = m_indicatorColor.alphaF();
+        m_devFuncs->vkCmdPushConstants(cmd,
+                                       m_indicatorPipelineLayout,
+                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       0,
+                                       sizeof(IndicatorConstants),
+                                       &constants);
+        m_devFuncs->vkCmdBindVertexBuffers(cmd, 0, 1, &m_vertexBuffer, &vbOffset);
+        m_devFuncs->vkCmdDraw(cmd, 6, 1, 0, 0);
+    }
 
-    // Present the frame and schedule the next one.
+    m_devFuncs->vkCmdEndRenderPass(cmd);
     m_vkWindow->frameReady();
     m_vkWindow->requestUpdate();
 }

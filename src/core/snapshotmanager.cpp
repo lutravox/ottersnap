@@ -289,7 +289,7 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
     }
 
     if (!shouldBeBase && !prevImg.isNull()) {
-        if (prevImg.size() != image.size() || prevImg.format() != image.format()) {
+        if (prevImg.size() != image.size()) {
             shouldBeBase = true;
         }
     }

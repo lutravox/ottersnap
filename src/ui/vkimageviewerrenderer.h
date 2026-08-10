@@ -7,7 +7,10 @@
 #include <QVulkanDeviceFunctions>
 #include <QVulkanWindowRenderer>
 #include <mutex>
+#include <optional>
 #include <vulkan/vulkan.h>
+#include "core/viewer_interfaces.h"
+#include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
 #include "core/vksnapshotreconstructor.h"
 
@@ -33,12 +36,28 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     /// @brief The window associated with this renderer.
     QVulkanWindow *m_vkWindow = nullptr;
 
+    /// @brief Updates the render state.
+    /// @param state The new state.
+    /// @param generation The request ID associated with this state change.
+    /// @return True if the state was updated, false if the request was stale.
+    bool setRenderState(RenderState state, uint32_t generation) {
+        if (generation < m_currentGeneration) {
+            return false;
+        }
+        m_currentGeneration = generation;
+        m_state = state;
+        return true;
+    }
+
     /// @brief Sets the source image to be displayed.
     /// @param img The image to display.
-    void setImage(const QImage& img);
+    /// @param generation The request ID associated with this image.
+    void setImage(const QImage& img, uint32_t generation);
 
     /// @brief Triggers a reconstruction of the image from a snapshot sequence.
-    void reconstruct(const ReconstructionSequence& seq);
+    /// @param seq The sequence to reconstruct.
+    /// @param generation The request ID associated with this reconstruction.
+    void reconstruct(const ReconstructionSequence& seq, uint32_t generation);
 
     /// @brief Marks the uniform buffer as dirty, triggering an update on the next frame.
     void markUboDirty() {
@@ -46,12 +65,18 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     }
 
     bool grayscaleEnabled() const {
-        return m_session ? m_session->grayscaleEnabled() : false;
+        return session() ? session()->grayscaleEnabled() : false;
     }
+
+    /// @brief Sets the indicator's state.
+    /// @param pos Position in pixels relative to the viewer.
+    /// @param color Color of the indicator.
+    /// @param visible Whether it should be rendered.
+    void setIndicator(QPoint pos, QColor color, bool visible);
 
     /// @brief Returns whether horizontal mirroring is enabled.
     bool mirrorEnabled() const {
-        return m_session ? m_session->mirrorEnabled() : false;
+        return session() ? session()->mirrorEnabled() : false;
     }
 
     /// @brief Updates the renderer's viewport size.
@@ -61,17 +86,22 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
         m_uboDirty = true;
     }
 
+    /// @brief Returns the current rendering state.
+    RenderState renderState() const {
+        return m_state;
+    }
+
     /// @brief Clears the current image and resets the viewer state.
     void clear();
 
     /// @brief Sets the active reconstructor to use for rendering.
     void setReconstructor(const std::shared_ptr<VkSnapshotReconstructor>& reconstructor);
-    /// @brief Associates the renderer with an image session.
-    void setSession(ImageSession *session);
+    /// @brief Associates the renderer with the session coordinator.
+    void setSessionController(ImageSessionController *controller);
 
     /// @brief Get the currently associated session.
     ImageSession *session() const {
-        return m_session;
+        return m_sessionController ? m_sessionController->activeSession() : nullptr;
     }
 
   protected:
@@ -138,13 +168,15 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     /// @brief Cleans up the old texture and its associated memory.
     void cleanupOldTexture();
 
-    // Image state
-    bool   m_hasImage = false;
-    bool   m_uploadPending = false;         ///< Set when image needs upload to GPU
-    bool   m_reconstructionPending = false; ///< Set when reconstruction is pending
-    QImage m_sourceImage;
+    /// @brief Creates the pipeline for rendering the cluster indicator.
+    void createIndicatorPipeline();
 
-    QPointer<ImageSession> m_session = nullptr;
+    // Render state
+    RenderState m_state = RenderState::Empty;
+    uint32_t    m_currentGeneration = 0;
+    QImage      m_sourceImage;
+
+    ImageSessionController *m_sessionController = nullptr;
 
     // Qt Vulkan function wrappers
     QVulkanDeviceFunctions *m_devFuncs = nullptr;
@@ -173,6 +205,16 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     VkBuffer       m_vertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_vertexMemory = VK_NULL_HANDLE;
 
+    // Indicator state
+    static constexpr float m_indicatorSize = 40.0f;
+    QPoint                 m_indicatorPos;
+    QColor                 m_indicatorColor;
+    bool                   m_indicatorVisible = false;
+
+    // Indicator pipeline
+    VkPipeline       m_indicatorPipeline = VK_NULL_HANDLE;
+    VkPipelineLayout m_indicatorPipelineLayout = VK_NULL_HANDLE;
+
     // Widget/container size
     QSize m_viewportSize;
 
@@ -185,4 +227,8 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     /// @brief The reconstructor currently being used by this renderer.
     std::shared_ptr<VkSnapshotReconstructor> m_activeReconstructor;
     std::mutex                               m_reconstructorMutex;
+
+    /// @brief Reconstruction sequence deferred until m_vkWindow is ready.
+    std::optional<ReconstructionSequence> m_pendingReconstruction;
+    uint32_t                              m_pendingGeneration = 0;
 };

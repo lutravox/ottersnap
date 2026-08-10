@@ -1,24 +1,43 @@
+#include <QPixmap>
 #include "controllers/snapshottimelinecontroller.h"
 #include "core/imagesession.h"
 #include "core/snapshottimelinemodel.h"
-#include <QPixmap>
 
-SnapshotTimelineController::SnapshotTimelineController(QObject *parent)
-    : QObject(parent) {
+SnapshotTimelineController::SnapshotTimelineController(QObject *parent) : QObject(parent) {
     m_model = std::make_unique<SnapshotTimelineModel>();
 }
 
-void SnapshotTimelineController::setSession(ImageSession *session) {
-    if (m_session == session)
+void SnapshotTimelineController::setSessionController(ImageSessionController *controller) {
+    if (m_sessionController == controller)
         return;
 
-    if (m_session) {
-        disconnect(m_session, &ImageSession::snapshotsChanged, this, &SnapshotTimelineController::onSessionChanged);
+    if (m_sessionController) {
+        disconnect(m_sessionController,
+                   &ImageSessionController::activeSessionChanged,
+                   this,
+                   &SnapshotTimelineController::onActiveSessionChanged);
+        disconnect(m_sessionController,
+                   &ImageSessionController::activeSessionSnapshotsChanged,
+                   this,
+                   &SnapshotTimelineController::onSessionChanged);
     }
 
-    m_session = session;
-    if (m_session) {
-        connect(m_session, &ImageSession::snapshotsChanged, this, &SnapshotTimelineController::onSessionChanged);
+    m_sessionController = controller;
+
+    if (m_sessionController) {
+        connect(m_sessionController,
+                &ImageSessionController::activeSessionChanged,
+                this,
+                &SnapshotTimelineController::onActiveSessionChanged);
+        connect(m_sessionController,
+                &ImageSessionController::activeSessionSnapshotsChanged,
+                this,
+                &SnapshotTimelineController::onSessionChanged);
+    }
+}
+
+void SnapshotTimelineController::onActiveSessionChanged(ImageSession *session) {
+    if (session) {
         updateModel();
     } else {
         m_model->setThumbnails({}, {}, {});
@@ -26,10 +45,12 @@ void SnapshotTimelineController::setSession(ImageSession *session) {
 }
 
 void SnapshotTimelineController::updateModel() {
-    if (!m_session)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session)
         return;
 
-    auto [images, labels, indices] = m_session->snapshotTimelineThumbnails(48); // Using 48 as default size
+    auto [images, labels, indices] =
+        session->snapshotTimelineThumbnails(ThumbnailSize);
     QVector<QPixmap> thumbs;
     thumbs.reserve(images.size());
 
@@ -42,7 +63,7 @@ void SnapshotTimelineController::updateModel() {
     }
 
     m_model->setThumbnails(thumbs, labels, indices);
-    m_model->setSnapshotOnly(m_session->isSnapshotOnly());
+    m_model->setSnapshotOnly(session->isSnapshotOnly());
 }
 
 void SnapshotTimelineController::onSessionChanged() {
@@ -56,7 +77,8 @@ void SnapshotTimelineController::selectSnapshot(int row) {
     m_currentIndex = row;
 
     if (m_model && row >= 0 && row < m_model->rowCount()) {
-        int snapshotIdx = m_model->data(m_model->index(row), SnapshotTimelineModel::IndexRole).toInt();
+        int snapshotIdx =
+            m_model->data(m_model->index(row), SnapshotTimelineModel::IndexRole).toInt();
         m_model->clearNewStatus(snapshotIdx);
     }
 
@@ -73,14 +95,16 @@ void SnapshotTimelineController::setSecondarySnapshot(int dbId) {
     if (secondarySnapshotDbId() == dbId)
         return;
 
-    if (m_session) {
-        m_session->setSecondarySnapshotIndex(dbId);
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (session) {
+        session->setSecondarySnapshotIndex(dbId);
     }
     emit secondarySnapshotSelected(dbId);
 }
 
 int SnapshotTimelineController::secondarySnapshotDbId() const {
-    return m_session ? m_session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    return session ? session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
 }
 
 int SnapshotTimelineController::rowForDbId(int dbId) const {
@@ -99,4 +123,3 @@ void SnapshotTimelineController::updateThumbnail(int index, const QPixmap& pixma
         return;
     m_model->updateThumbnail(index, pixmap);
 }
-

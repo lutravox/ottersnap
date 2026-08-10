@@ -44,9 +44,6 @@ class ThumbnailCache {
     /// @brief Invalidate a thumbnail from both memory and disk cache.
     static void invalidate(const QString& imageKey, int version);
 
-    /// @brief Formats a thumbnail of the image, centered on a transparent canvas.
-    static QImage formatThumbnail(const QImage& image, int size);
-
     /// @brief Retrieves a thumbnail from the disk cache.
     static QImage loadThumbnail(const QString& imageKey, int version, const QSize& size);
 

@@ -19,11 +19,11 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QShortcut>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QStyleHints>
 #include <QVBoxLayout>
-#include <QShortcut>
 #include <QtConcurrent>
 
 #include "config/appsettings.h"
@@ -50,6 +50,12 @@ MainWindow::MainWindow(QWidget *parent)
     m_effectsController = new EffectsController(this);
     m_viewerController = new ViewerController(m_settingsController, this);
     m_snapshotController = new SnapshotTimelineController(this);
+    m_colorInfoController = new ColorInfoController(this);
+
+    // Link controllers to session coordinator
+    m_snapshotController->setSessionController(m_sessionController);
+    m_colorInfoController->setSessionController(m_sessionController);
+    m_viewerController->setSessionController(m_sessionController);
 
     connect(m_viewerController,
             &ViewerController::grayscaleToggled,
@@ -235,6 +241,11 @@ void MainWindow::setupUi() {
             this,
             &MainWindow::onColorInfoToggled);
 
+    connect(m_colorInfoController,
+            &ColorInfoController::colorSelected,
+            this,
+            &MainWindow::onColorPicked);
+
     connect(m_viewerController,
             &ViewerController::toolbarVisibilityToggled,
             m_viewerState,
@@ -361,7 +372,7 @@ void MainWindow::setupMenu() {
     m_viewMenu->addSeparator();
 
     m_actionZoomIn = m_viewMenu->addAction(tr("Zoom &In"));
-    m_actionZoomIn->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
+    m_actionZoomIn->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
     connect(m_actionZoomIn, &QAction::triggered, this, &MainWindow::onZoomIn);
 
     m_actionZoomOut = m_viewMenu->addAction(tr("Zoom &Out"));
@@ -475,7 +486,6 @@ void MainWindow::onCloseAllTabs() {
     while (m_tabBar->count() > 0) {
         onCloseTab(0);
     }
-    m_currentVersionInView = -1;
 }
 
 void MainWindow::onToggleScaleWithWindow() {
@@ -502,11 +512,19 @@ void MainWindow::onAbout() {
 
 void MainWindow::onColorPicked(const QColor& color) {
     m_viewerState->statusBar()->setColor(color);
-    m_viewerState->setPickedColor(color);
+    if (sender() != m_colorInfoController) {
+        m_colorInfoController->setPickedColor(color);
+    }
 }
 
 void MainWindow::onColorInfoToggled(bool checked) {
-    m_viewerState->setColorInfoVisible(checked);
+    m_colorInfoController->setVisible(checked);
+}
+
+void MainWindow::onSessionColorClustersChanged() {
+    if (auto *tab = currentTab()) {
+        m_colorInfoController->setClusters(tab->session()->colorClusters());
+    }
 }
 
 void MainWindow::onResetView() {
@@ -578,9 +596,10 @@ void MainWindow::onExportSnapshot() {
         return;
 
     QString baseName = QFileInfo(tab->filePath()).baseName();
+    int snapshotIdx = tab->session()->currentSnapshotIndex();
     QString suggestedName;
-    if (m_currentVersionInView >= 0) {
-        suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(m_currentVersionInView + 1);
+    if (snapshotIdx >= 0) {
+        suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(snapshotIdx + 1);
     } else {
         suggestedName = baseName;
     }
@@ -599,11 +618,11 @@ void MainWindow::onExportSnapshot() {
 
     ExportParams params;
     params.path = path;
-    if (m_currentVersionInView >= 0) {
+    if (snapshotIdx >= 0) {
         params.isSnapshot = true;
         auto session = tab->session();
         params.seq =
-            session ? session->getReconstructionSequence(m_currentVersionInView) : std::nullopt;
+            session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;
         if (!params.seq) {
             notify(tr("Failed to export snapshot."));
             qDebug() << "[MainWindow] Failed to retrieve reconstruction sequence for export.";
@@ -685,6 +704,11 @@ void MainWindow::setupTabConnections(ImageTab *tab) {
             m_snapshotController->clearNewStatus(snapshotIdx);
         }
     });
+
+    connect(tab->session(),
+            &ImageSession::colorClustersChanged,
+            this,
+            &MainWindow::onSessionColorClustersChanged);
 }
 
 ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
@@ -733,11 +757,6 @@ void MainWindow::onCloseTab(int index) {
 
     auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
     if (tab) {
-        if (tab == currentTab()) {
-            m_viewerController->setActiveSession(nullptr);
-            m_snapshotController->setSession(nullptr);
-        }
-
         QString path = tab->filePath();
         m_tabPaths.remove(path);
         m_sessionController->closeSession(path);
@@ -749,9 +768,15 @@ void MainWindow::onCloseTab(int index) {
 
     m_tabBar->removeTab(index);
 
-    updateSnapshotTimeline();
-    updateViewer();
     updateState();
+    auto *nextTab = currentTab();
+    if (nextTab) {
+        m_viewerController->requestSessionChange(nextTab->session(), nextTab->session()->currentSnapshotIndex());
+        updateViewer(nextTab);
+    } else {
+        m_viewerController->requestSessionChange(nullptr, -1);
+        updateViewer();
+    }
 }
 
 void MainWindow::applyEffects() {
@@ -768,11 +793,14 @@ void MainWindow::onTabChanged(int index) {
         return;
     }
 
-    m_currentVersionInView = -1;
-    updateSnapshotTimeline();
-    updateViewer();
-    updateState();
-    updateMenuBar();
+    auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
+    if (tab) {
+        m_viewerController->requestSessionChange(tab->session(), tab->session()->currentSnapshotIndex());
+        updateViewer(tab);
+        updateState();
+        updateMenuBar();
+    }
+
     setTabThumbnail(index);
 }
 
@@ -830,11 +858,10 @@ void MainWindow::updateSnapshotTimeline() {
 
     auto *tab = currentTab();
     if (!tab) {
-        m_snapshotController->setSession(nullptr);
+        m_sessionController->setActiveSession(nullptr);
         return;
     }
 
-    m_snapshotController->setSession(tab->session());
     m_snapshotController->updateModel();
     m_snapshotController->selectSnapshot(tab->session()->currentSnapshotIndex());
     m_viewerState->snapshotTimeline()->setCreateButtonEnabled(!tab->session()->isSnapshotOnly());
@@ -925,7 +952,7 @@ void MainWindow::onOpenSnapshotRequested(const QString& path, int index) {
         ImageTab *tab = m_tabPaths.value(path);
         tab->session()->selectSnapshot(index);
         m_tabBar->setCurrentWidget(tab);
-        updateState();
+        m_viewerController->requestSessionChange(tab->session(), index);
         updateViewer(tab);
         m_viewerController->fitToWindow();
         return;
@@ -936,17 +963,13 @@ void MainWindow::onOpenSnapshotRequested(const QString& path, int index) {
         return;
 
     tab->session()->selectSnapshot(index);
-
-    updateState();
+    m_viewerController->requestSessionChange(tab->session(), index);
     updateViewer(tab);
     m_viewerController->fitToWindow();
 }
 
 void MainWindow::updateViewer(ImageTab *tab) {
     if (m_currentState == ContentState::Empty) {
-        // Clear the viewer so there's no stale content
-        m_viewerState->viewer()->clear();
-        m_currentTabInView = nullptr;
         return;
     }
 
@@ -954,61 +977,22 @@ void MainWindow::updateViewer(ImageTab *tab) {
         tab = currentTab();
     }
 
-    if (!tab)
+    if (!tab) {
         return;
+    }
 
     int snapshotIdx = tab->session()->currentSnapshotIndex();
-    if (m_currentTabInView == tab && m_currentVersionInView == snapshotIdx) {
-        return; // Already rendering this snapshot
-    }
-
-    // Save state of the current tab
-    if (m_currentTabInView) {
-        m_viewerController->syncViewerToSession();
-    }
-
-    if (m_currentTabInView != tab) {
-        m_viewerState->viewer()->clear();
-    }
-
-    // Restore state for the new tab
-    m_viewerController->setActiveSession(tab->session());
-    m_snapshotController->setSession(tab->session());
-    m_viewerController->syncSessionToViewer();
-
-    bool isSnapshot = false;
-    if (!tab->session()->isCurrentImageSelected()) {
-        if (auto seq = tab->session()->getReconstructionSequence()) {
-            m_lastBaseIdx = seq->baseIdx;
-            isSnapshot = true;
-        }
-    }
-
-    if (!isSnapshot) {
-        const auto& image = tab->diskImage();
-        if (!image.isNull()) {
-            m_viewerState->viewer()->setImage(image, true);
-        }
-        m_lastBaseIdx = -1;
-    }
-
+    
     m_effectsController->setTargetState(tab->session());
     QSize dims = tab->session()->dimensions();
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
 
-    // Update timestamp in status bar
-    int idx = tab->session()->currentSnapshotIndex();
-    if (idx >= 0 && idx < static_cast<int>(tab->session()->snapshots().size()) &&
-        !tab->session()->isCurrentImage(idx)) {
-        const auto& snapshots = tab->session()->snapshots();
-        m_viewerState->statusBar()->setTimestamp(
-            snapshots[idx].timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
-    } else {
-        m_viewerState->statusBar()->setTimestamp(tr("Current"));
-    }
+    m_colorInfoController->setSessionController(m_sessionController);
+    m_colorInfoController->setViewerState(m_viewerState);
+    m_colorInfoController->setClusters(tab->session()->colorClusters());
 
+    m_viewerState->statusBar()->setTimestamp(tab->session()->currentImageTimestamp());
     m_viewerState->statusBar()->setZoom(m_viewerState->viewer()->zoomPercentage());
-    m_currentTabInView = tab;
 }
 
 void MainWindow::updateState() {
@@ -1029,14 +1013,8 @@ void MainWindow::onSnapshotSelected(int index) {
     auto *tab = currentTab();
     if (!tab)
         return;
-    tab->selectSnapshot(index);
 
-    // Update the version tracker AFTER updateViewer so it doesn't return early
-    if (index == static_cast<int>(tab->session()->snapshots().size())) {
-        m_currentVersionInView = -1;
-    } else {
-        m_currentVersionInView = index;
-    }
+    tab->selectSnapshot(index);
 
     updateMenuBar();
 }

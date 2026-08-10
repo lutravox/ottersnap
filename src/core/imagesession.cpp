@@ -1,3 +1,5 @@
+#include <QApplication>
+#include <QCache>
 #include <QDateTime>
 #include <QFileInfo>
 #include <QThreadPool>
@@ -6,9 +8,9 @@
 #include <qlogging.h>
 #include <qnamespace.h>
 #include <qobject.h>
-#include <QApplication>
 #include "core/imagesession.h"
 #include "config/appsettings.h"
+#include "core/coloranalyzer.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
 #include "core/thumbnailmanager.h"
@@ -16,6 +18,7 @@
 #include "core/vulkancontext.h"
 
 ImageSession::ImageSession(QObject *parent) : QObject(parent), m_monitor(new ImageMonitor(this)) {
+    m_clusterCache.setMaxCost(MaxClusterCacheSize);
     connect(m_monitor, &ImageMonitor::fileChanged, this, &ImageSession::onFileChanged);
     connect(&VulkanContext::instance(),
             &VulkanContext::deviceChanged,
@@ -55,6 +58,7 @@ bool ImageSession::openImage(const QString& filePath) {
     }
 
     m_selectedIndex = m_isSnapshotOnly ? 0 : static_cast<int>(m_snapshots.size());
+    updateColorClusters();
 
     // Initialize view state with image dimensions
     QSize dims = m_diskImage.size();
@@ -83,6 +87,7 @@ void ImageSession::close() {
     m_selectedIndex = 0;
     m_secondarySnapshotIndex = SecondaryNone;
     m_baseCache = {-1, QImage()};
+    m_clusterCache.clear();
 
     if (m_uiReconstructor) {
         m_uiReconstructor->cleanup();
@@ -95,6 +100,14 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() 
 }
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
+    if (!m_isSnapshotOnly && index == static_cast<int>(m_snapshots.size())) {
+        ReconstructionSequence seq;
+        seq.baseIdx = -1;
+        seq.base = m_diskImage;
+        seq.baseChecksum = QString("%1:%2").arg(m_filePath, m_lastModified.toString(Qt::ISODate));
+        return seq;
+    }
+
     if (index < 0 || index >= static_cast<int>(m_snapshots.size())) {
         return std::nullopt;
     }
@@ -119,17 +132,13 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     if (m_baseCache.index == baseSnapshotIdx && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;
         seq.baseChecksum = m_snapshots[baseIdx].checksum;
-    } else if (baseSnapshotIdx == -1) {
-        seq.base = m_diskImage;
-        seq.baseChecksum = m_snapshots[baseIdx].checksum;
-        m_baseCache = {baseSnapshotIdx, seq.base};
     } else {
         auto optBase = SnapshotManager::loadBaseImage(m_filePath, baseSnapshotIdx);
         if (!optBase)
             return std::nullopt;
 
         seq.base = std::move(optBase->image);
-        seq.baseChecksum = optBase->checksum;
+        seq.baseChecksum = m_snapshots[baseIdx].checksum;
         m_baseCache = {baseSnapshotIdx, seq.base};
     }
 
@@ -153,6 +162,7 @@ void ImageSession::selectSnapshot(int index) {
     if (index < 0 || index > maxValidIndex())
         return;
     m_selectedIndex = index;
+    updateColorClusters();
     emit imageChanged();
 }
 
@@ -179,6 +189,7 @@ void ImageSession::deleteSnapshot(int index) {
             m_secondarySnapshotIndex = SecondaryNone;
         }
 
+        m_clusterCache.remove(snapshotId);
         rebuildSnapshotList();
 
         if (oldIndex == index) {
@@ -239,6 +250,8 @@ void ImageSession::reloadImage() {
 
         m_diskImage = newImage;
         m_lastModified = QFileInfo(m_filePath).lastModified();
+        m_clusterCache.remove(-1);
+        updateColorClusters();
         emit statusMessage(tr("Current image reloaded."));
         emit imageChanged();
     });
@@ -248,6 +261,44 @@ void ImageSession::reloadImage() {
 
 void ImageSession::autosaveSnapshot(const QImage& img) {
     performSave(img, true);
+}
+
+void ImageSession::updateColorClusters() {
+    QImage thumb = ThumbnailManager::instance().getThumbnail(m_selectedIndex,
+                                                             256,
+                                                             m_filePath,
+                                                             isCurrentImage(m_selectedIndex),
+                                                             m_snapshots,
+                                                             m_diskImage);
+    if (thumb.isNull()) {
+        // Thumbnail not yet available, we'll be notified via handleThumbnailGenerated
+        return;
+    }
+
+    int clusterId =
+        isCurrentImage(m_selectedIndex) ? -1 : m_snapshots[m_selectedIndex].snapshotIndex;
+
+    if (auto *cached = m_clusterCache.object(clusterId)) {
+        m_colorClusters = *cached;
+        emit colorClustersChanged();
+        return;
+    }
+
+    // Calculate clusters
+    auto watcher = new QFutureWatcher<QList<ColorAnalyzer::ColorCluster>>(this);
+    connect(watcher,
+            &QFutureWatcher<QList<ColorAnalyzer::ColorCluster>>::finished,
+            this,
+            [this, watcher, clusterId]() {
+                QList<ColorAnalyzer::ColorCluster> result = watcher->result();
+                m_clusterCache.insert(clusterId, new QList<ColorAnalyzer::ColorCluster>(result));
+                m_colorClusters = result;
+                watcher->deleteLater();
+                emit colorClustersChanged();
+            });
+
+    watcher->setFuture(
+        QtConcurrent::run([thumb]() { return ColorAnalyzer::calculateClusters(thumb); }));
 }
 
 void ImageSession::performSave(const QImage& img, bool isAutosave) {
@@ -360,13 +411,16 @@ QImage ImageSession::getPlaceholder(int size) {
     return placeholder;
 }
 
-void ImageSession::handleThumbnailGenerated(const QString& path, int index, const QImage& img) {
+void ImageSession::handleThumbnailGenerated(const QString& path, int index) {
     if (path == m_filePath) {
         emit thumbnailChanged(index);
+        if (index == m_selectedIndex) {
+            updateColorClusters();
+        }
     }
 }
 
-QImage ImageSession::generateThumbnail(int index, int size) {
+QImage ImageSession::generateThumbnail(int index, int size, bool padded) {
     if (index < 0 || index > static_cast<int>(m_snapshots.size())) {
         qDebug() << "[ImageSession] generateThumbnail: index out of bounds";
         return getPlaceholder(size);
@@ -384,7 +438,10 @@ QImage ImageSession::generateThumbnail(int index, int size) {
         return getPlaceholder(size);
     }
 
-    return ThumbnailCache::formatThumbnail(result, size);
+    if (padded) {
+        return ThumbnailManager::formatThumbnail(result, size);
+    }
+    return result;
 }
 
 void ImageSession::onDeviceChanged() {
@@ -401,6 +458,18 @@ QSize ImageSession::dimensions() const {
         return seq->base.size();
     }
     return m_diskImage.size();
+}
+
+QString ImageSession::currentImageTimestamp() const {
+    if (isCurrentImageSelected()) {
+        return tr("Current");
+    }
+
+    if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_snapshots.size())) {
+        return m_snapshots[m_selectedIndex].timestamp.toString("MMMM d, yyyy h:mm:ss AP");
+    }
+
+    return tr("Current");
 }
 
 void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {

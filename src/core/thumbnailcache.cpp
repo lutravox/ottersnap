@@ -111,21 +111,3 @@ QImage ThumbnailCache::loadThumbnail(const QString& imageKey, int version, const
 
     return {};
 }
-
-QImage ThumbnailCache::formatThumbnail(const QImage& image, int size) {
-    if (image.isNull()) {
-        qWarning() << "[ThumbnailCache] Null image provided for thumbnail";
-        return QImage(size, size, QImage::Format_ARGB32);
-    }
-
-    QImage scaled = image.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    QImage canvas(size, size, QImage::Format_ARGB32);
-    canvas.fill(Qt::transparent);
-
-    QPainter painter(&canvas);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    QPoint dest((canvas.width() - scaled.width()) / 2, (canvas.height() - scaled.height()) / 2);
-    painter.drawImage(dest, scaled);
-    return canvas;
-}

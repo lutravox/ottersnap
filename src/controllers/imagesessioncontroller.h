@@ -31,7 +31,38 @@ class ImageSessionController : public QObject {
     /// @brief Return a list of all currently open image paths.
     QStringList openPaths() const;
 
+    /// @brief Set the currently active session.
+    void setActiveSession(ImageSession *session);
+
+    /// @brief Return the currently active session.
+    ImageSession *activeSession() const {
+        return m_activeSession;
+    }
+
+    /// @brief Check if mirroring is enabled for the active session.
+    bool isMirrorEnabled() const {
+        return m_activeSession ? m_activeSession->mirrorEnabled() : false;
+    }
+
+  signals:
+    /// @brief Emitted when the active session changes.
+    void activeSessionChanged(ImageSession *session);
+
+    /// @brief Emitted when the active session's effects are changed.
+    void activeSessionEffectsChanged();
+
+    /// @brief Emitted when the active session's snapshots are changed.
+    void activeSessionSnapshotsChanged();
+
+    /// @brief Emitted when the active session's color clusters are changed.
+    void activeSessionColorClustersChanged();
+
   private:
+    void handleEffectsChanged();
+    void handleSnapshotsChanged();
+    void handleColorClustersChanged();
+
     AppSettingsController        *m_settings;
     QMap<QString, ImageSession *> m_sessions;
+    ImageSession                *m_activeSession = nullptr;
 };

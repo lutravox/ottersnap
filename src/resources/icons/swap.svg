@@ -1,13 +1,13 @@
 <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <!-- Top Arrow (Right) -->
-    <!-- Shaft: y from 7 to 9, x from 4 to 18 -->
+    <!-- Shaft -->
     <path d="M4 7h14v2h-14z" fill="black"/>
-    <!-- Head: Triangle from x=18 to x=23, height from 5 to 11 (centered at y=8) -->
+    <!-- Head -->
     <path d="M18 5l5 3l-5 3z" fill="black"/>
 
     <!-- Bottom Arrow (Left) -->
-    <!-- Shaft: y from 15 to 17, x from 6 to 20 -->
+    <!-- Shaft -->
     <path d="M6 15h14v2h-14z" fill="black"/>
-    <!-- Head: Triangle from x=6 to x=1, height from 13 to 19 (centered at y=16) -->
+    <!-- Head -->
     <path d="M6 13l-5 3l5 3z" fill="black"/>
 </svg>

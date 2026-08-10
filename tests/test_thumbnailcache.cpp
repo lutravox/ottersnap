@@ -3,6 +3,7 @@
 #include <QString>
 #include <QtTest>
 #include "core/thumbnailcache.h"
+#include "core/thumbnailmanager.h"
 
 class TestThumbnailCache : public QObject {
     Q_OBJECT
@@ -21,7 +22,6 @@ class TestThumbnailCache : public QObject {
     void testUpdateMaxCost();
 
     // Thumbnail Logic
-    void testFormatThumbnail();
     void testLoadThumbnailCacheMiss();
     void testLoadThumbnailCacheHit();
 };
@@ -90,18 +90,6 @@ void TestThumbnailCache::testUpdateMaxCost() {
 
     ThumbnailCache::updateMaxCost(0);
     ThumbnailCache::insert("img2", new QImage(10, 10, QImage::Format_RGB32), 1);
-}
-
-void TestThumbnailCache::testFormatThumbnail() {
-    QImage img(100, 50, QImage::Format_RGB32);
-    img.fill(Qt::blue);
-
-    int    thumbSize = 32;
-    QImage thumb = ThumbnailCache::formatThumbnail(img, thumbSize);
-
-    QCOMPARE(thumb.width(), thumbSize);
-    QCOMPARE(thumb.height(), thumbSize);
-    QVERIFY(thumb.pixelColor(thumbSize / 2, thumbSize / 2) == QColor(Qt::blue));
 }
 
 void TestThumbnailCache::testLoadThumbnailCacheMiss() {

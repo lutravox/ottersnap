@@ -1,7 +1,6 @@
 #include <QFileInfo>
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/appsettingscontroller.h"
-#include "core/diskutils.h"
 
 ImageSessionController::ImageSessionController(AppSettingsController *settings, QObject *parent)
     : QObject(parent), m_settings(settings) {
@@ -41,9 +40,63 @@ ImageSession *ImageSessionController::openImage(const QString& path, bool snapsh
 
 void ImageSessionController::closeSession(const QString& path) {
     if (auto *session = m_sessions.take(path)) {
+        if (m_activeSession == session) {
+            m_activeSession = nullptr;
+        }
         session->close();
         delete session;
     }
+}
+
+void ImageSessionController::setActiveSession(ImageSession *session) {
+    if (m_activeSession == session)
+        return;
+
+    if (m_activeSession) {
+        disconnect(m_activeSession,
+                   &ImageSession::effectsChanged,
+                   this,
+                   &ImageSessionController::handleEffectsChanged);
+        disconnect(m_activeSession,
+                   &ImageSession::snapshotsChanged,
+                   this,
+                   &ImageSessionController::handleSnapshotsChanged);
+        disconnect(m_activeSession,
+                   &ImageSession::colorClustersChanged,
+                   this,
+                   &ImageSessionController::handleColorClustersChanged);
+    }
+
+    m_activeSession = session;
+
+    if (m_activeSession) {
+        connect(m_activeSession,
+                &ImageSession::effectsChanged,
+                this,
+                &ImageSessionController::handleEffectsChanged);
+        connect(m_activeSession,
+                &ImageSession::snapshotsChanged,
+                this,
+                &ImageSessionController::handleSnapshotsChanged);
+        connect(m_activeSession,
+                &ImageSession::colorClustersChanged,
+                this,
+                &ImageSessionController::handleColorClustersChanged);
+    }
+
+    emit activeSessionChanged(m_activeSession);
+}
+
+void ImageSessionController::handleEffectsChanged() {
+    emit activeSessionEffectsChanged();
+}
+
+void ImageSessionController::handleSnapshotsChanged() {
+    emit activeSessionSnapshotsChanged();
+}
+
+void ImageSessionController::handleColorClustersChanged() {
+    emit activeSessionColorClustersChanged();
 }
 
 ImageSession *ImageSessionController::sessionForPath(const QString& path) const {

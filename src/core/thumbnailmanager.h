@@ -44,6 +44,9 @@ class ThumbnailManager : public QObject {
     /// @param request The thumbnail request details.
     void enqueueRequest(const ThumbnailRequest& request);
 
+    /// @brief Formats a thumbnail of the image, centered on a transparent canvas.
+    static QImage formatThumbnail(const QImage& image, int size);
+
   signals:
     void thumbnailGenerated(const QString& filePath, int index, const QImage& img);
 

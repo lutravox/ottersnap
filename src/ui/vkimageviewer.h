@@ -10,6 +10,8 @@
 #include "core/effects_interfaces.h"
 #include "core/viewer_interfaces.h"
 #include "core/viewstate.h"
+#include "core/imagesession.h"
+#include "controllers/imagesessioncontroller.h"
 
 class VkImageViewerRenderer;
 
@@ -25,10 +27,28 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Destructor. Cleans up Vulkan resources.
     ~VkImageViewer() override;
 
+    /// @brief Set the position of the cluster indicator.
+    /// @param pos The normalized position (0.0 to 1.0).
+    void setIndicatorPos(const QPointF& pos) {
+        m_indicatorPos = pos;
+        // updateIndicatorPosition() is removed as it's now handled by ViewerState/ClusterIndicator
+    }
+
+    /// @brief Get the current indicator position.
+    /// @return The normalized position.
+    QPointF indicatorPos() const {
+        return m_indicatorPos;
+    }
+
+    /// @brief Set the indicator rendering state.
+    /// @param pos The screen position.
+    /// @param color The color to render.
+    /// @param visible Whether the indicator should be visible.
+    void setIndicator(QPoint pos, QColor color, bool visible);
+
     /// @brief Display an image in the viewer.
     /// @param image The image to display.
-    /// @param preserveView If true, keep the current zoom and pan. If false, reset to fit.
-    void setImage(const QImage& image, bool preserveView = false) override;
+    void setImage(const QImage& image) override;
 
     /// @brief Reconstructs a snapshot from a base image and a series of deltas.
     void reconstruct(const ReconstructionSequence& seq) override;
@@ -36,7 +56,26 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
     double zoomPercentage() const override {
-        return m_currentViewState.percentage();
+        return getViewState().percentage();
+    }
+
+    /// @brief Get the current view state.
+    /// @return A reference to the current ViewState containing zoom and pan information.
+    ViewState& getViewState() {
+        if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
+            return s->viewState();
+        }
+        static ViewState fallback;
+        return fallback;
+    }
+
+    /// @brief Get the current view state (const version).
+    const ViewState& getViewState() const {
+        if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
+            return s->viewState();
+        }
+        static ViewState fallback;
+        return fallback;
     }
 
     /// @brief Get the viewport size.
@@ -45,26 +84,27 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
         return m_container ? m_container->size() : QSize(0, 0);
     }
 
+    /// @brief Notify the viewer that the viewport state has changed.
+    void notifyViewStateChanged() override;
+
     /// @brief Clear the current image from the viewer.
-    void clear();
-
-    /// @brief Get the current view state.
-    /// @return The current ViewState containing zoom and pan information.
-    ViewState getViewState() const override {
-        return m_currentViewState;
-    }
-
-    /// @brief Set the view state.
-    /// @param state The new view state.
-    void setViewState(const ViewState& state) override;
+    void clear() override;
 
     /// @brief Set the reconstructor to be used for GPU acceleration.
     /// @param reconstructor The reconstructor instance to use.
     void setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor) override;
 
-    /// @brief Set the session associated with this viewer.
-    /// @param session The image session to associate.
-    void setSession(class ImageSession *session);
+    /// @brief Get the current state of the rendering pipeline.
+    RenderState renderState() const override;
+
+    /// @brief Maps a point relative to the image viewport to global screen coordinates.
+    QPoint mapViewportToGlobal(const QPoint& pos) const {
+        return m_container ? m_container->mapToGlobal(pos) : QPoint();
+    }
+
+    /// @brief Set the session coordinator associated with this viewer.
+    /// @param controller The image session controller.
+    void setSessionController(class ImageSessionController *controller) override;
 
     /// @brief Set the checked state of the 'Scale with Window' menu option.
     /// @param checked True if scaling with window should be enabled.
@@ -139,7 +179,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     void imageOpenRequested(const QString& path);
 
   protected:
-    /// @brief Handles the show event.
     void showEvent(QShowEvent *event) override;
 
     /// @brief Handles the resize event.
@@ -163,13 +202,14 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     VkImageViewerRenderer *m_renderer = nullptr;
     QWidget               *m_container = nullptr;
 
-    bool      m_hasImage = false;
-    ViewState m_currentViewState;
-    bool      m_isDragging = false;
-    QPoint    m_lastMousePos;
-    bool      m_scaleWithWindow = false;
-    bool      m_pickingEnabled = false;
-    class ImageSession *m_session = nullptr;
+    bool                    m_hasImage = false;
+    bool                    m_isDragging = false;
+    QPoint                  m_lastMousePos;
+    bool                    m_scaleWithWindow = false;
+    bool                    m_pickingEnabled = false;
+    ImageSessionController *m_sessionController = nullptr;
+    QPointF                 m_indicatorPos;
+    uint32_t                m_generation = 0;
 };
 
 using ImageViewer = VkImageViewer;

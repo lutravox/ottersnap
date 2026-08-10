@@ -36,6 +36,10 @@ class TestViewState : public QObject {
     void testScreenToPixelZoomed();
     void testScreenToPixelPanned();
     void testScreenToPixelOutOfBounds();
+    void testPixelToScreenBasic();
+    void testPixelToScreenZoomed();
+    void testPixelToScreenPanned();
+    void testCoordinateRoundTrip();
 
     // Fit / Reset
     void testFitToWindow();
@@ -47,6 +51,10 @@ class TestViewState : public QObject {
     void testNoImageWheelZoom();
     void testNoImagePan();
     void testNoImageFit();
+    void testUpdateImageSize();
+    void testUpdateZoomRatio();
+    void testNormalizedToScreen();
+    void testViewportGetters();
 };
 
 // Initialization
@@ -267,6 +275,67 @@ void TestViewState::testScreenToPixelOutOfBounds() {
     QCOMPARE(zs.screenToPixel(QPointF(101, 101)), QPoint(-1, -1));
 }
 
+void TestViewState::testPixelToScreenBasic() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100); // fitScale = 1, zoom = 1, pan = (0,0)
+
+    QCOMPARE(zs.pixelToScreen(QPoint(50, 50)), QPointF(50, 50));
+    QCOMPARE(zs.pixelToScreen(QPoint(0, 0)), QPointF(0, 0));
+    QCOMPARE(zs.pixelToScreen(QPoint(99, 99)), QPointF(99, 99));
+}
+
+void TestViewState::testPixelToScreenZoomed() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+    zs.setPercentage(200.0); // zoom = 2.0, fitScale = 1.0
+
+    // center remains center
+    QCOMPARE(zs.pixelToScreen(QPoint(50, 50)), QPointF(50, 50));
+    // pixel 25 -> 0.25 image UV -> screen 0
+    QCOMPARE(zs.pixelToScreen(QPoint(25, 25)), QPointF(0, 0));
+    // pixel 75 -> 0.75 image UV -> screen 100
+    QCOMPARE(zs.pixelToScreen(QPoint(75, 75)), QPointF(100, 100));
+}
+
+void TestViewState::testPixelToScreenPanned() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+    // pan = (0.1, 0.1)
+    zs.applyPanDelta(-10, -10);
+
+    QPointF res = zs.pixelToScreen(QPoint(60, 60));
+    QVERIFY(std::abs(res.x() - 50.0) < 1e-5);
+    QVERIFY(std::abs(res.y() - 50.0) < 1e-5);
+}
+
+void TestViewState::testCoordinateRoundTrip() {
+    ViewState zs;
+    zs.resetState(1920, 1080);
+    zs.setViewportSize(1280, 720);
+
+    auto checkTrip = [&](int px, int py, double zoom, QPointF panDelta) {
+        zs.resetState(1920, 1080);
+        zs.setViewportSize(1280, 720);
+        zs.setPercentage(zoom);
+
+        zs.applyPanDelta(static_cast<int>(panDelta.x()), static_cast<int>(panDelta.y()));
+
+        QPoint  p(px, py);
+        QPointF s = zs.pixelToScreen(p);
+        QPoint  p2 = zs.screenToPixel(s);
+
+        QCOMPARE(p, p2);
+    };
+
+    checkTrip(0, 0, 100.0, QPointF(-100, -150));
+    checkTrip(1919, 1079, 100.0, QPointF(-100, -150));
+    checkTrip(960, 540, 200.0, QPointF(-100, -150));
+    checkTrip(100, 100, 50.0, QPointF(-100, -150));
+}
+
 // Fit / Reset
 
 void TestViewState::testFitToWindow() {
@@ -335,6 +404,58 @@ void TestViewState::testNoImagePan() {
 void TestViewState::testNoImageFit() {
     ViewState zs;
     zs.fitToWindow(); // should not crash, no-op
+}
+
+void TestViewState::testUpdateImageSize() {
+    ViewState zs;
+    zs.resetState(1000, 1000);
+    zs.setViewportSize(500, 500); // fitScale = 0.5
+
+    zs.updateImageSize(2000, 2000);
+    QCOMPARE(zs.imageWidth(), 2000);
+    QCOMPARE(zs.imageHeight(), 2000);
+    // fitScale should be updated: 500/2000 = 0.25
+    QVERIFY(qFuzzyCompare(zs.fitScale(), 0.25f));
+}
+
+void TestViewState::testUpdateZoomRatio() {
+    ViewState zs;
+    zs.resetState(1000, 1000);
+    zs.setViewportSize(500, 500); // fitScale = 0.5
+    zs.setPercentage(200.0);      // zoom = 2.0
+
+    zs.updateZoomRatio();
+    // zoomRatio = zoom / fitScale = 2.0 / 0.5 = 4.0
+    QCOMPARE(zs.zoomRatio(), 4.0f);
+}
+
+void TestViewState::testNormalizedToScreen() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100); // fitScale = 1, zoom = 1, pan = (0,0)
+
+    // (0.5, 0.5) norm -> (50, 50)
+    QCOMPARE(zs.normalizedToScreen(QPointF(0.5, 0.5)), QPointF(50, 50));
+    // (0, 0) norm -> (0, 0) screen
+    QCOMPARE(zs.normalizedToScreen(QPointF(0, 0)), QPointF(0, 0));
+    // (1, 1) norm -> (100, 100) screen
+    QCOMPARE(zs.normalizedToScreen(QPointF(1, 1)), QPointF(100, 100));
+
+    // Test with zoom
+    zs.setPercentage(200.0); // zoom = 2.0, fitScale = 1.0
+    // (0.5, 0.5) norm -> center -> (50, 50)
+    QCOMPARE(zs.normalizedToScreen(QPointF(0.5, 0.5)), QPointF(50, 50));
+    // (0, 0) norm -> relX = -0.5 -> screenOffsetX = -0.5 * (2 * 100) = -100 -> screenX = 50 - 100 =
+    // -50
+    QCOMPARE(zs.normalizedToScreen(QPointF(0, 0)), QPointF(-50, -50));
+}
+
+void TestViewState::testViewportGetters() {
+    ViewState zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(1280, 720);
+    QCOMPARE(zs.viewportWidth(), 1280);
+    QCOMPARE(zs.viewportHeight(), 720);
 }
 
 QTEST_MAIN(TestViewState)

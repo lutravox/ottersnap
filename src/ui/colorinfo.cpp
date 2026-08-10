@@ -7,6 +7,7 @@
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QSurfaceFormat>
+#include <QTimer>
 #include <QWidget>
 
 ColorInfo::ColorInfo(QWidget *parentWidget)
@@ -25,7 +26,11 @@ ColorInfo::ColorInfo(QWidget *parentWidget)
         m_parentWidget->installEventFilter(this);
     }
 
-    connect(rootObject(), SIGNAL(fadeOutFinished()), this, SLOT(onFadeOutFinished()));
+    QTimer::singleShot(0, this, [this]() {
+        if (rootObject()) {
+            connect(rootObject(), SIGNAL(fadeOutFinished()), this, SLOT(onFadeOutFinished()));
+        }
+    });
 
     rootContext()->setContextProperty("colorInfo", this);
 
@@ -39,6 +44,33 @@ void ColorInfo::setPickedColor(const QColor& color) {
     }
 }
 
+void ColorInfo::resetSelection() {
+    if (rootObject()) {
+        rootObject()->setProperty("selectedClusterId", -1);
+    }
+}
+
+void ColorInfo::setClusters(const QList<ColorAnalyzer::ColorCluster>& clusters) {
+    if (rootObject()) {
+        QVariantList allClusters;
+        for (int i = 0; i < clusters.size(); ++i) {
+            const ColorAnalyzer::ColorCluster& cluster = clusters[i];
+
+            QVariantMap clusterData;
+            clusterData.insert("center", cluster.center);
+            clusterData.insert("color", cluster.color);
+            clusterData.insert("count", cluster.count);
+            clusterData.insert("samplePos", cluster.samplePos);
+            clusterData.insert("id", i);
+
+            allClusters.append(clusterData);
+        }
+        rootObject()->setProperty("colorClusters", allClusters);
+    } else {
+        qDebug() << "[ColorInfo] rootObject is null";
+    }
+}
+
 void ColorInfo::setVisibleState(bool visible) {
     if (rootObject()) {
         rootObject()->setProperty("visibleState", visible);
@@ -47,9 +79,9 @@ void ColorInfo::setVisibleState(bool visible) {
             int w = rootObject()->width();
             int h = rootObject()->height();
             if (w <= 0)
-                w = 260;
+                w = 310;
             if (h <= 0)
-                h = 150;
+                h = 190;
             this->resize(w, h);
         }
     }
@@ -96,4 +128,8 @@ void ColorInfo::onFadeOutFinished() {
 
 void ColorInfo::copyToClipboard(const QString& text) {
     QGuiApplication::clipboard()->setText(text);
+}
+
+void ColorInfo::handleClusterSelected(const QVariantMap& clusterData) {
+    emit clusterSelected(clusterData);
 }

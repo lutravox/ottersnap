@@ -11,7 +11,6 @@
 #include <QVector>
 
 #include "core/vksnapshotreconstructor.h"
-#include "core/vulkan_types.h"
 
 /// @brief Metadata for a single saved image snapshot.
 struct ImageSnapshot {

@@ -62,19 +62,14 @@ ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     connect(m_viewer, &ImageViewer::zoomChanged, m_statusBar, [this](double pct) {
         m_statusBar->setZoom(pct);
     });
+
+    connect(m_viewer, &ImageViewer::viewportResized, m_viewer, [this](int w, int h) {
+        m_viewer->getViewState().setViewportSize(w, h);
+    });
 }
 
 void ViewerState::setSnapshotOnlyIndicator(bool visible) {
     if (m_snapshotOnlyLabel) {
         m_snapshotOnlyLabel->setVisible(visible);
-    }
-}
-
-void ViewerState::setColorInfoVisible(bool visible) {
-    if (!m_colorInfo) {
-        m_colorInfo = new ColorInfo(m_viewer);
-    }
-    if (m_colorInfo) {
-        m_colorInfo->setVisibleState(visible);
     }
 }

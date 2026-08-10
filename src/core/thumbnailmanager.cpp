@@ -1,6 +1,7 @@
 #include <QDebug>
 #include <QFutureWatcher>
 #include <QtConcurrent>
+#include <QPainter>
 #include "core/thumbnailmanager.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
@@ -133,6 +134,24 @@ void ThumbnailManager::saveThumbnail(const QString& filePath,
     QString path =
         sd + '/' + QString::asprintf("v%04d", snapshotIndex) + ThumbnailConstants::Extension;
     image.save(path, ThumbnailConstants::Format.toUtf8().constData());
+}
+
+QImage ThumbnailManager::formatThumbnail(const QImage& image, int size) {
+    if (image.isNull()) {
+        qWarning() << "[ThumbnailManager] Null image provided for thumbnail";
+        return QImage(size, size, QImage::Format_ARGB32);
+    }
+
+    QImage scaled = image.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    QImage canvas(size, size, QImage::Format_ARGB32);
+    canvas.fill(Qt::transparent);
+
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    QPoint dest((canvas.width() - scaled.width()) / 2, (canvas.height() - scaled.height()) / 2);
+    painter.drawImage(dest, scaled);
+    return canvas;
 }
 
 std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path,

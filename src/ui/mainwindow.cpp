@@ -290,6 +290,31 @@ void MainWindow::setupUi() {
             this,
             [this](const QString& path) { openImageFile(path); });
 
+    // Navigation shortcuts
+    auto *shortcutLeft = new QShortcut(QKeySequence(Qt::Key_Left), this);
+    connect(shortcutLeft, &QShortcut::activated, this, [this]() {
+        if (m_snapshotController) {
+            int current = m_snapshotController->currentSelectedIndex();
+            int next = qBound(0, current - 1, m_snapshotController->model()->rowCount() - 1);
+            if (next != current) {
+                m_snapshotController->selectSnapshot(next);
+            }
+        }
+    });
+    m_toolShortcuts.append(shortcutLeft);
+
+    auto *shortcutRight = new QShortcut(QKeySequence(Qt::Key_Right), this);
+    connect(shortcutRight, &QShortcut::activated, this, [this]() {
+        if (m_snapshotController) {
+            int current = m_snapshotController->currentSelectedIndex();
+            int next = qBound(0, current + 1, m_snapshotController->model()->rowCount() - 1);
+            if (next != current) {
+                m_snapshotController->selectSnapshot(next);
+            }
+        }
+    });
+    m_toolShortcuts.append(shortcutRight);
+
     setCentralWidget(central);
 
     updateViewer();

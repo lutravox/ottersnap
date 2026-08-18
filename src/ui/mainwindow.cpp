@@ -188,7 +188,6 @@ void MainWindow::setupUi() {
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
-    connect(m_emptyState, &EmptyState::settingsRequested, this, &MainWindow::onSettings);
 
     // Notifications
     m_notificationManager = new NotificationManager(this);

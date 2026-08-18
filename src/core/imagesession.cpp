@@ -46,7 +46,7 @@ bool ImageSession::openImage(const QString& filePath) {
     } else {
         m_diskImage = DiskUtils::loadImage(m_filePath);
         if (m_diskImage.isNull()) {
-            emit statusMessage(QString("Failed to load: %1").arg(m_filePath));
+            emit statusMessage(QString("Failed to load!: %1").arg(m_filePath));
             return false;
         }
     }
@@ -58,8 +58,8 @@ bool ImageSession::openImage(const QString& filePath) {
         return false;
     }
 
-    m_currentUuid = m_isSnapshotOnly ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces)
-                                         : c_currentId;
+    m_currentUuid =
+        m_isSnapshotOnly ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces) : c_currentId;
     updateColorClusters();
 
     // Initialize view state with image dimensions
@@ -265,7 +265,7 @@ void ImageSession::deleteSnapshot(const QUuid& uuid) {
         emit imageChanged();
         emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
     } else {
-        emit statusMessage("Failed to delete snapshot.");
+        emit statusMessage("Failed to delete snapshot!");
     }
 }
 
@@ -390,7 +390,7 @@ void ImageSession::handleSaveFinished(
         emit    statusMessage(msg);
     } else if (!res || (res && res->status != SnapshotManager::SaveStatus::Existing &&
                         res->status != SnapshotManager::SaveStatus::Created)) {
-        emit statusMessage("Save failed.");
+        emit statusMessage("Save failed!");
     }
     watcher->deleteLater();
 }
@@ -436,8 +436,8 @@ void ImageSession::rebuildSnapshotList() {
         }
         if (!stillExists) {
             m_currentUuid = m_isSnapshotOnly && !m_snapshots.isEmpty()
-                               ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces)
-                               : c_currentId;
+                                ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces)
+                                : c_currentId;
             emit imageChanged();
         }
     }

@@ -15,11 +15,5 @@ EmptyState::EmptyState(QWidget *parent) : QWidget(parent) {
     openBtn->setFont({openBtn->font().family(), 12, QFont::Normal});
     connect(openBtn, &QPushButton::clicked, this, &EmptyState::openRequested);
 
-    auto *settingsBtn = new QPushButton(tr("Settings"), this);
-    settingsBtn->setFixedWidth(200);
-    settingsBtn->setFixedHeight(40);
-    connect(settingsBtn, &QPushButton::clicked, this, &EmptyState::settingsRequested);
-
     layout->addWidget(openBtn);
-    layout->addWidget(settingsBtn);
 }

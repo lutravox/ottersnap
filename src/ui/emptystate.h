@@ -14,6 +14,4 @@ class EmptyState : public QWidget {
   signals:
     /// @brief Signal emitted when opening an image is requested.
     void openRequested();
-    /// @brief Signal emitted when settings are requested.
-    void settingsRequested();
 };

@@ -14,6 +14,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -25,7 +27,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     setMinimumWidth(500);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setAlignment(Qt::AlignCenter);
 
     // Create a container for the form to allow it to be centered as a single block
     auto *formContainer = new QWidget(this);
@@ -128,12 +129,23 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
 
     formLayout->addRow(tr("Viewer background color:"), bgWidget);
 
-    // Center the form container within the main layout
+    auto *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    auto *scrollContent = new QWidget();
+    auto *scrollContentLayout = new QVBoxLayout(scrollContent);
+    scrollContentLayout->setAlignment(Qt::AlignCenter);
+
     auto *centerLayout = new QHBoxLayout();
     centerLayout->addStretch();
     centerLayout->addWidget(formContainer);
     centerLayout->addStretch();
-    mainLayout->addLayout(centerLayout);
+    scrollContentLayout->addLayout(centerLayout);
+
+    scrollArea->setWidget(scrollContent);
+    mainLayout->addWidget(scrollArea);
 
     connect(m_cbAutoreload, &QCheckBox::toggled, [this](bool checked) {
         m_rbAutosave->setEnabled(checked);

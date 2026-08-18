@@ -140,6 +140,9 @@ SnapshotManagerDialog::SnapshotManagerDialog(QWidget *parent) : QDialog(parent) 
     m_btnOpenInViewer = new QPushButton(tr("Open"));
     m_btnClearImage = new QPushButton(tr("Delete All Snapshots"));
 
+    m_btnOpenInViewer->setEnabled(false);
+    m_btnClearImage->setEnabled(false);
+
     detailsVBox->addWidget(m_btnOpenInViewer);
     detailsVBox->addWidget(m_btnClearImage);
 
@@ -153,6 +156,10 @@ SnapshotManagerDialog::SnapshotManagerDialog(QWidget *parent) : QDialog(parent) 
 
 void SnapshotManagerDialog::updateImageGrid() {
     m_selectedItem = nullptr;
+    m_selectedImageIndex = -1;
+    m_btnOpenInViewer->setEnabled(false);
+    m_btnClearImage->setEnabled(false);
+
     while (m_imageGrid->count()) {
         auto *item = m_imageGrid->takeAt(0);
         if (item->widget())
@@ -209,8 +216,9 @@ void SnapshotManagerDialog::onImageSelected(int index) {
         }
     }
 
-    const auto& img = images[index];
     updateDetails();
+    m_btnOpenInViewer->setEnabled(true);
+    m_btnClearImage->setEnabled(true);
 }
 
 void SnapshotManagerDialog::updateDetails() {
@@ -219,6 +227,8 @@ void SnapshotManagerDialog::updateDetails() {
         m_pathLabel->setText("-");
         m_countLabel->setText(tr("Snapshots: -"));
         m_storageLabel->setText(tr("Total Storage: -"));
+        m_btnOpenInViewer->setEnabled(false);
+        m_btnClearImage->setEnabled(false);
         return;
     }
 

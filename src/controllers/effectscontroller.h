@@ -44,7 +44,7 @@ class EffectsController : public QObject {
     void addUI(IEffectsUI *ui);
 
     /// @brief Set the current state being managed. Syncs UI and renderer to state.
-    void setTargetState(IEffectsState *state);
+    void setTargetState(IEffectsModel *state);
 
     /// @brief Reset all effects.
     void reset();
@@ -66,6 +66,6 @@ class EffectsController : public QObject {
     void onEffectsChanged(bool grayscale, bool mirror);
 
     IEffectsRenderer *m_renderer = nullptr;
-    IEffectsState    *m_state = nullptr;
+    IEffectsModel    *m_state = nullptr;
     std::vector<IEffectsUI*> m_uis;
 };

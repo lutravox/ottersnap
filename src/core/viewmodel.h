@@ -8,10 +8,10 @@
 ///   - `fitScale` = viewport-to-image ratio at the current viewport size.
 ///   - `zoomRatio` = zoom / fitScale (1.0 = perfectly fitted).  Stays
 ///     constant across window resizes so the user's manual zoom offset is preserved.
-class ViewState {
+class ViewModel {
   public:
-    /// @brief Construct a ViewState with default values.
-    ViewState();
+    /// @brief Construct a ViewModel with default values.
+    ViewModel();
 
     /// @brief Set the image dimensions and reset zoom/pan to defaults.
     /// @param width Image width in pixels.

@@ -5,7 +5,7 @@
 #include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
 #include "ui/colorinfo.h"
-#include "ui/viewerstate.h"
+#include "ui/viewermodel.h"
 
 /// @brief Controller for managing the color analysis overlay and cluster indicator.
 class ColorInfoController : public QObject {
@@ -22,7 +22,7 @@ class ColorInfoController : public QObject {
 
     /// @brief Link the controller to the session coordinator.
     void setSessionController(ImageSessionController *controller);
-    void setViewerState(ViewerState *state);
+    void setViewerModel(ViewerModel *state);
 
     /// @brief Trigger a refresh of the indicator position.
     void updateIndicatorPosition();
@@ -57,7 +57,7 @@ class ColorInfoController : public QObject {
     void resetClusterSelection();
 
     ImageSessionController *m_sessionController = nullptr;
-    ViewerState            *m_viewerState = nullptr;
+    ViewerModel            *m_viewerState = nullptr;
     ColorInfo              *m_colorInfo = nullptr;
 
     QPointF m_currentIndicatorPos;

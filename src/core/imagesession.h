@@ -11,13 +11,13 @@
 #include "core/vulkan_types.h"
 
 #include "core/effects_interfaces.h"
-#include "core/effectsstate.h"
+#include "core/effectsmodel.h"
 #include "core/imagemonitor.h"
 #include "core/snapshotmanager.h"
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 
 /// @brief Manages the state logic for a single opened image.
-class ImageSession : public QObject, public IEffectsState {
+class ImageSession : public QObject, public IEffectsModel {
     Q_OBJECT
   public:
     static constexpr int MaxClusterCacheSize = 50;
@@ -36,10 +36,10 @@ class ImageSession : public QObject, public IEffectsState {
         return m_effects.mirror;
     }
 
-    ViewState& viewState() {
+    ViewModel& viewModel() {
         return m_viewState;
     }
-    const ViewState& viewState() const {
+    const ViewModel& viewModel() const {
         return m_viewState;
     }
 
@@ -211,8 +211,8 @@ class ImageSession : public QObject, public IEffectsState {
 
     static std::mutex s_reconstructorMutex;
 
-    EffectsState m_effects;
-    ViewState    m_viewState;
+    EffectsModel m_effects;
+    ViewModel    m_viewState;
 
     ImageMonitor                                   *m_monitor;
     std::shared_ptr<VkSnapshotReconstructor>        m_uiReconstructor;

@@ -33,7 +33,7 @@ class ViewerController : public QObject {
     /// @param uuid The identity string (UUID or "current") of the snapshot to select.
     void requestSessionChange(ImageSession *session, const QString& uuid);
 
-    /// @brief Sync the session's ViewState to the viewer.
+    /// @brief Sync the session's ViewModel to the viewer.
     void syncSessionToViewer();
 
     /// @brief Command the viewer to fit the image to the window.

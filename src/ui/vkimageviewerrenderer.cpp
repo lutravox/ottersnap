@@ -579,7 +579,7 @@ void VkImageViewerRenderer::updateUniformBuffer() {
     if (!m_uniformMapped || !activeSession)
         return;
 
-    const ViewState& state = activeSession->viewState();
+    const ViewModel& state = activeSession->viewModel();
 
     float vpW = static_cast<float>(m_viewportSize.width());
     float vpH = static_cast<float>(m_viewportSize.height());
@@ -963,10 +963,10 @@ void VkImageViewerRenderer::performUploads(
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         ImageSession *activeSession = session();
         if (m_textureImage == VK_NULL_HANDLE || m_textureView == VK_NULL_HANDLE ||
-            (activeSession && (activeSession->viewState().imageWidth() != m_currentTextureWidth ||
-                               activeSession->viewState().imageHeight() != m_currentTextureHeight))) {
-            if (createTexture(activeSession ? activeSession->viewState().imageWidth() : 0,
-                              activeSession ? activeSession->viewState().imageHeight() : 0) == 0) {
+            (activeSession && (activeSession->viewModel().imageWidth() != m_currentTextureWidth ||
+                               activeSession->viewModel().imageHeight() != m_currentTextureHeight))) {
+            if (createTexture(activeSession ? activeSession->viewModel().imageWidth() : 0,
+                              activeSession ? activeSession->viewModel().imageHeight() : 0) == 0) {
                 qCritical()
                     << "[VkImageViewerRenderer] Failed to create texture for reconstruction";
                 setRenderState(RenderState::Empty, m_currentGeneration);
@@ -1012,12 +1012,12 @@ void VkImageViewerRenderer::performUploads(
         // Copy reconstructed buffer to image
         reconstructor->copyToVulkanImage(cmd,
                                          m_textureImage,
-                                         activeSession ? activeSession->viewState().imageWidth() : 0,
-                                         activeSession ? activeSession->viewState().imageHeight() : 0);
+                                         activeSession ? activeSession->viewModel().imageWidth() : 0,
+                                         activeSession ? activeSession->viewModel().imageHeight() : 0);
 
         // Regenerate mip chain from the updated level 0
-        int maxDim = std::max(activeSession ? activeSession->viewState().imageWidth() : 0,
-                              activeSession ? activeSession->viewState().imageHeight() : 0);
+        int maxDim = std::max(activeSession ? activeSession->viewModel().imageWidth() : 0,
+                              activeSession ? activeSession->viewModel().imageHeight() : 0);
         int mipLevels = 0;
         while ((1u << mipLevels) <= static_cast<unsigned>(maxDim)) {
             mipLevels++;
@@ -1025,8 +1025,8 @@ void VkImageViewerRenderer::performUploads(
         mipLevels = std::max(1, mipLevels);
         recordMipChainGeneration(cmd,
                                  mipLevels,
-                                 activeSession ? activeSession->viewState().imageWidth() : 0,
-                                 activeSession ? activeSession->viewState().imageHeight() : 0);
+                                 activeSession ? activeSession->viewModel().imageWidth() : 0,
+                                 activeSession ? activeSession->viewModel().imageHeight() : 0);
 
         // Final transition to SHADER_READ_ONLY_OPTIMAL
         if (mipLevels > 1) {
@@ -1129,7 +1129,7 @@ void VkImageViewerRenderer::startNextFrame() {
     }
 
     QSize sz = m_vkWindow->swapChainImageSize();
-    float     currentZoom = session() ? session()->viewState().zoom() : 1.0f;
+    float     currentZoom = session() ? session()->viewModel().zoom() : 1.0f;
     VkSampler activeSampler = (currentZoom >= 1.0f) ? m_samplerNearest : m_samplerLinear;
     if (activeSampler != m_activeSampler) {
         updateDescriptors(m_descriptorSet, m_uniformBuffer, activeSampler, m_textureView);

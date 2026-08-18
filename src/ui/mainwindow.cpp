@@ -36,7 +36,7 @@
 #include "ui/imagetab.h"
 #include "ui/snapshottimeline.h"
 #include "ui/tabbar.h"
-#include "ui/viewerstate.h"
+#include "ui/viewermodel.h"
 #include "ui/vkimageviewer.h"
 
 static const int c_defaultWidth = 1000;
@@ -114,7 +114,7 @@ void MainWindow::setupUi() {
     m_contentStack = new QStackedWidget(central);
 
     // Viewer state: thumbnail strip + viewer + nav bar
-    m_viewerState = new ViewerState(m_contentStack);
+    m_viewerState = new ViewerModel(m_contentStack);
 
     // Empty state
     m_emptyState = new EmptyState(m_contentStack);
@@ -134,13 +134,13 @@ void MainWindow::setupUi() {
 
     m_viewerState->snapshotTimeline()->setController(m_snapshotController);
 
-    connect(m_viewerState, &ViewerState::zoomRequested, this, [this](double pct) {
+    connect(m_viewerState, &ViewerModel::zoomRequested, this, [this](double pct) {
         if (m_viewerController) {
             m_viewerController->setZoomPercentage(pct);
         }
     });
 
-    connect(m_viewerState, &ViewerState::fitRequested, this, [this]() {
+    connect(m_viewerState, &ViewerModel::fitRequested, this, [this]() {
         if (m_viewerController) {
             m_viewerController->fitToWindow();
         }
@@ -242,12 +242,12 @@ void MainWindow::setupUi() {
     connect(m_viewerController,
             &ViewerController::toolbarVisibilityToggled,
             m_viewerState,
-            &ViewerState::setToolbarVisible);
+            &ViewerModel::setToolbarVisible);
 
     connect(m_viewerController,
             &ViewerController::secondarySnapshotChanged,
             m_viewerState,
-            &ViewerState::setSecondarySnapshotId);
+            &ViewerModel::setSecondarySnapshotId);
 
     connect(m_viewerController,
             &ViewerController::secondarySnapshotChanged,
@@ -1058,7 +1058,7 @@ void MainWindow::updateViewer(ImageTab *tab) {
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
 
     m_colorInfoController->setSessionController(m_sessionController);
-    m_colorInfoController->setViewerState(m_viewerState);
+    m_colorInfoController->setViewerModel(m_viewerState);
     m_colorInfoController->setClusters(tab->session()->colorClusters());
 
     m_viewerState->statusBar()->setTimestamp(tab->session()->currentImageTimestamp());

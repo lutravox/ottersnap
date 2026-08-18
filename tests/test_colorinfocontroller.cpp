@@ -5,7 +5,7 @@
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/appsettingscontroller.h"
 #include "core/imagesession.h"
-#include "ui/viewerstate.h"
+#include "ui/viewermodel.h"
 
 class TestColorInfoController : public QObject {
     Q_OBJECT
@@ -26,19 +26,19 @@ void TestColorInfoController::testSetup() {
     ImageSessionController sessionController(&settings);
     ColorInfoController    controller;
     ImageSession           session;
-    ViewerState            state;
+    ViewerModel            state;
 
     controller.setSessionController(&sessionController);
     sessionController.setActiveSession(&session);
-    controller.setViewerState(&state);
+    controller.setViewerModel(&state);
 
     // No crash and basic setup done
 }
 
 void TestColorInfoController::testSetVisible() {
     ColorInfoController controller;
-    ViewerState         state;
-    controller.setViewerState(&state);
+    ViewerModel         state;
+    controller.setViewerModel(&state);
 
     controller.setVisible(true);
     // Verify it doesn't crash.
@@ -47,8 +47,8 @@ void TestColorInfoController::testSetVisible() {
 
 void TestColorInfoController::testSetClusters() {
     ColorInfoController controller;
-    ViewerState         state;
-    controller.setViewerState(&state);
+    ViewerModel         state;
+    controller.setViewerModel(&state);
     controller.setVisible(true);
 
     QList<ColorAnalyzer::ColorCluster> clusters;
@@ -63,11 +63,11 @@ void TestColorInfoController::testOnClusterSelected() {
     ImageSessionController sessionController(&settings);
     ColorInfoController    controller;
     ImageSession           session;
-    ViewerState            state;
+    ViewerModel            state;
 
     controller.setSessionController(&sessionController);
     sessionController.setActiveSession(&session);
-    controller.setViewerState(&state);
+    controller.setViewerModel(&state);
 
     QVariantMap data;
     data.insert("samplePos", QPointF(0.5, 0.5));

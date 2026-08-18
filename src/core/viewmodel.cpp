@@ -1,12 +1,12 @@
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 
 #include <QDebug>
 
 #include <algorithm>
 
-ViewState::ViewState() = default;
+ViewModel::ViewModel() = default;
 
-void ViewState::resetState(int width, int height) {
+void ViewModel::resetState(int width, int height) {
     m_imageWidth = width;
     m_imageHeight = height;
     m_zoom = 1.0f;
@@ -15,7 +15,7 @@ void ViewState::resetState(int width, int height) {
     m_pan = QPointF(0, 0);
 }
 
-void ViewState::updateImageSize(int width, int height) {
+void ViewModel::updateImageSize(int width, int height) {
     m_imageWidth = width;
     m_imageHeight = height;
 
@@ -26,7 +26,7 @@ void ViewState::updateImageSize(int width, int height) {
     }
 }
 
-void ViewState::setViewportSize(int viewWidth, int viewHeight) {
+void ViewModel::setViewportSize(int viewWidth, int viewHeight) {
     if (!hasImage()) {
         qDebug() << "[setViewportSize] No image dimensions set";
         return;
@@ -41,7 +41,7 @@ void ViewState::setViewportSize(int viewWidth, int viewHeight) {
     m_fitScale = newFit;
 }
 
-void ViewState::setPercentage(double pct) {
+void ViewModel::setPercentage(double pct) {
     if (!hasImage()) {
         qDebug() << "[setPercentage] No image dimensions set";
         return;
@@ -51,7 +51,7 @@ void ViewState::setPercentage(double pct) {
     updateZoomRatio();
 }
 
-void ViewState::applyWheelZoom(bool zoomIn, bool ctrlHeld) {
+void ViewModel::applyWheelZoom(bool zoomIn, bool ctrlHeld) {
     if (!hasImage()) {
         qDebug() << "[applyWheelZoom] No image dimensions set";
         return;
@@ -66,7 +66,7 @@ void ViewState::applyWheelZoom(bool zoomIn, bool ctrlHeld) {
     updateZoomRatio();
 }
 
-void ViewState::applyPanDelta(int dx, int dy) {
+void ViewModel::applyPanDelta(int dx, int dy) {
     if (!hasImage()) {
         qDebug() << "[applyPanDelta] No image dimensions set";
         return;
@@ -78,7 +78,7 @@ void ViewState::applyPanDelta(int dx, int dy) {
     m_pan.ry() -= dy * invImgH / m_zoom;
 }
 
-void ViewState::updateZoomRatio() {
+void ViewModel::updateZoomRatio() {
     if (!hasImage()) {
         qDebug() << "[updateZoomRatio] No image dimensions set";
         return;
@@ -88,7 +88,7 @@ void ViewState::updateZoomRatio() {
         m_zoomRatio = m_zoom / m_fitScale;
 }
 
-QPoint ViewState::screenToPixel(const QPointF& screenPos) const {
+QPoint ViewModel::screenToPixel(const QPointF& screenPos) const {
     if (!hasImage()) {
         return QPoint(-1, -1);
     }
@@ -122,7 +122,7 @@ QPoint ViewState::screenToPixel(const QPointF& screenPos) const {
     return QPoint(px, py);
 }
 
-QPointF ViewState::normalizedToScreen(const QPointF& normPos) const {
+QPointF ViewModel::normalizedToScreen(const QPointF& normPos) const {
     if (!hasImage()) {
         return QPointF(-1, -1);
     }
@@ -131,7 +131,7 @@ QPointF ViewState::normalizedToScreen(const QPointF& normPos) const {
     return relativeToScreen(normPos.x() - 0.5f, normPos.y() - 0.5f);
 }
 
-QPointF ViewState::pixelToScreen(const QPoint& pixelPos) const {
+QPointF ViewModel::pixelToScreen(const QPoint& pixelPos) const {
     if (!hasImage()) {
         return QPointF(-1, -1);
     }
@@ -143,7 +143,7 @@ QPointF ViewState::pixelToScreen(const QPoint& pixelPos) const {
     return relativeToScreen(relX, relY);
 }
 
-QPointF ViewState::relativeToScreen(float relX, float relY) const {
+QPointF ViewModel::relativeToScreen(float relX, float relY) const {
     // Apply pan
     relX -= m_pan.x();
     relY -= m_pan.y();
@@ -162,7 +162,7 @@ QPointF ViewState::relativeToScreen(float relX, float relY) const {
     return QPointF(screenX, screenY);
 }
 
-void ViewState::fitToWindow() {
+void ViewModel::fitToWindow() {
     if (!hasImage()) {
         qDebug() << "[fitToWindow] No image dimensions set";
         return;
@@ -173,7 +173,7 @@ void ViewState::fitToWindow() {
     m_pan = QPointF(0, 0);
 }
 
-void ViewState::updateZoomForRelativeScaling() {
+void ViewModel::updateZoomForRelativeScaling() {
     if (!hasImage()) {
         qDebug() << "[updateZoomForRelativeScaling] No image dimensions set";
         return;

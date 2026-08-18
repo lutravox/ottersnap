@@ -22,10 +22,10 @@ class TestImageSession : public QObject {
     void testSelectSnapshot();
     void testAutoSaveOnChange();
     void testSnapshotThumbnails();
-    void testEffectsState();
+    void testEffectsModel();
     void testSaveSnapshot();
     void testSnapshotNavigation();
-    void testViewStateAccess();
+    void testViewModelAccess();
     void testSnapshotDeletion();
     void testGetReconstructionSequence();
     void testThumbnailGeneration();
@@ -140,7 +140,7 @@ void TestImageSession::testSnapshotThumbnails() {
     QCOMPARE(labels.last(), QString("Current"));
 }
 
-void TestImageSession::testEffectsState() {
+void TestImageSession::testEffectsModel() {
     ImageSession session;
     QSignalSpy   spy(&session, &ImageSession::effectsChanged);
 
@@ -197,16 +197,16 @@ void TestImageSession::testSnapshotNavigation() {
     QVERIFY(!session.diskImage().isNull());
 }
 
-void TestImageSession::testViewStateAccess() {
+void TestImageSession::testViewModelAccess() {
     ImageSession session;
     session.openImage(m_testFilePath);
 
-    ViewState& vs = session.viewState();
+    ViewModel& vs = session.viewModel();
     // Initialize dimensions so setPercentage works
     vs.updateImageSize(100, 100);
     vs.setPercentage(200.0);
 
-    QCOMPARE(session.viewState().percentage(), 200.0);
+    QCOMPARE(session.viewModel().percentage(), 200.0);
 }
 
 void TestImageSession::testSnapshotDeletion() {

@@ -15,7 +15,7 @@
 #include "ui/emptystate.h"
 #include "ui/notificationmanager.h"
 #include "ui/tabbar.h"
-#include "ui/viewerstate.h"
+#include "ui/viewermodel.h"
 
 class QAction;
 
@@ -109,7 +109,7 @@ class MainWindow : public QMainWindow {
     TabBar                *m_tabBar;
     QStackedWidget        *m_contentStack;
     NotificationManager   *m_notificationManager;
-    ViewerState           *m_viewerState;
+    ViewerModel           *m_viewerState;
     EmptyState            *m_emptyState;
     QSettings              m_settings;
     SessionManager         m_session;

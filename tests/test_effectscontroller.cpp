@@ -5,7 +5,7 @@
 
 // Mocks
 
-class MockEffectsState : public IEffectsState {
+class MockEffectsModel : public IEffectsModel {
   public:
     bool m_grayscale = false;
     bool m_mirror = false;
@@ -68,7 +68,7 @@ class TestEffectsController : public QObject {
   private slots:
     void init() {
         m_controller = new EffectsController();
-        m_state = new MockEffectsState();
+        m_state = new MockEffectsModel();
         m_renderer = new MockEffectsRenderer();
         m_ui = new MockEffectsUI();
 
@@ -168,7 +168,7 @@ class TestEffectsController : public QObject {
 
   private:
     EffectsController   *m_controller = nullptr;
-    MockEffectsState    *m_state = nullptr;
+    MockEffectsModel    *m_state = nullptr;
     MockEffectsRenderer *m_renderer = nullptr;
     MockEffectsUI       *m_ui = nullptr;
 };

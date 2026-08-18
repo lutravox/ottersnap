@@ -9,7 +9,7 @@
 
 #include "core/effects_interfaces.h"
 #include "core/viewer_interfaces.h"
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 #include "core/imagesession.h"
 #include "controllers/imagesessioncontroller.h"
 
@@ -56,25 +56,25 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
     /// @return The zoom percentage.
     double zoomPercentage() const override {
-        return getViewState().percentage();
+        return getViewModel().percentage();
     }
 
-    /// @brief Get the current view state.
-    /// @return A reference to the current ViewState containing zoom and pan information.
-    ViewState& getViewState() {
+    /// @brief Get the current view model.
+    /// @return A reference to the current ViewModel containing zoom and pan information.
+    ViewModel& getViewModel() {
         if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-            return s->viewState();
+            return s->viewModel();
         }
-        static ViewState fallback;
+        static ViewModel fallback;
         return fallback;
     }
 
-    /// @brief Get the current view state (const version).
-    const ViewState& getViewState() const {
+    /// @brief Get the current view model (const version).
+    const ViewModel& getViewModel() const {
         if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-            return s->viewState();
+            return s->viewModel();
         }
-        static ViewState fallback;
+        static ViewModel fallback;
         return fallback;
     }
 
@@ -84,8 +84,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
         return m_container ? m_container->size() : QSize(0, 0);
     }
 
-    /// @brief Notify the viewer that the viewport state has changed.
-    void notifyViewStateChanged() override;
+    /// @brief Notify the viewer that the viewport model has changed.
+    void notifyViewModelChanged() override;
 
     /// @brief Clear the current image from the viewer.
     void clear() override;

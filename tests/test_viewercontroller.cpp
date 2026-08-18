@@ -6,7 +6,7 @@
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 #include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
 
@@ -22,8 +22,8 @@ class MockViewer : public IViewer {
     void setSessionController(ImageSessionController *) override {
     }
 
-    void notifyViewStateChanged() override {
-        m_notifyViewStateCalled = true;
+    void notifyViewModelChanged() override {
+        m_notifyViewModelCalled = true;
     }
 
     void setReconstructor(std::shared_ptr<VkSnapshotReconstructor>) override {
@@ -48,19 +48,19 @@ class MockViewer : public IViewer {
     }
 
     // Helpers for testing
-    void setState(const ViewState& state) {
+    void setState(const ViewModel& state) {
         m_currentState = state;
     }
-    bool notifyViewStateCalled() const {
-        return m_notifyViewStateCalled;
+    bool notifyViewModelCalled() const {
+        return m_notifyViewModelCalled;
     }
     void reset() {
-        m_notifyViewStateCalled = false;
+        m_notifyViewModelCalled = false;
     }
 
   private:
-    ViewState m_currentState;
-    bool      m_notifyViewStateCalled = false;
+    ViewModel m_currentState;
+    bool      m_notifyViewModelCalled = false;
 };
 
 class TestViewerController : public QObject {
@@ -93,17 +93,17 @@ class TestViewerController : public QObject {
         controller.setViewer(&viewer);
 
         // Initialize session with dummy image size so state changes are accepted
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
         // Set a specific state in the session
-        ViewState state;
+        ViewModel state;
         state.resetState(1000, 1000);
         state.setPercentage(150.0);
-        session.viewState() = state;
+        session.viewModel() = state;
 
         controller.syncSessionToViewer();
 
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testFitToWindow() {
@@ -118,11 +118,11 @@ class TestViewerController : public QObject {
         controller.setViewer(&viewer);
 
         // Initialize session with dummy image size
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
         controller.fitToWindow();
 
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testHandleViewportResize() {
@@ -137,13 +137,13 @@ class TestViewerController : public QObject {
         controller.setViewer(&viewer);
 
         // Initialize session with dummy image size
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
         controller.handleViewportResize(1920, 1080);
 
-        QCOMPARE(session.viewState().viewportWidth(), 1920);
-        QCOMPARE(session.viewState().viewportHeight(), 1080);
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QCOMPARE(session.viewModel().viewportWidth(), 1920);
+        QCOMPARE(session.viewModel().viewportHeight(), 1080);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testNullPointers() {
@@ -180,12 +180,12 @@ class TestViewerController : public QObject {
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
         controller.setViewer(&viewer);
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
-        double initialZoom = session.viewState().percentage();
+        double initialZoom = session.viewModel().percentage();
         controller.handleZoomRequested(true, false); // Zoom In
-        QVERIFY(session.viewState().percentage() > initialZoom);
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QVERIFY(session.viewModel().percentage() > initialZoom);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testHandlePanRequested() {
@@ -198,12 +198,12 @@ class TestViewerController : public QObject {
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
         controller.setViewer(&viewer);
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
-        QPointF initialPan = session.viewState().pan();
+        QPointF initialPan = session.viewModel().pan();
         controller.handlePanRequested(10, 20);
-        QVERIFY(session.viewState().pan() != initialPan);
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QVERIFY(session.viewModel().pan() != initialPan);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testSecondarySelectionStability() {
@@ -315,11 +315,11 @@ class TestViewerController : public QObject {
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
         controller.setViewer(&viewer);
-        session.viewState().resetState(1000, 1000);
+        session.viewModel().resetState(1000, 1000);
 
         controller.setZoomPercentage(250.0);
-        QCOMPARE(session.viewState().percentage(), 250.0);
-        QCOMPARE(viewer.notifyViewStateCalled(), true);
+        QCOMPARE(session.viewModel().percentage(), 250.0);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 };
 

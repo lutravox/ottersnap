@@ -24,7 +24,7 @@ void EffectsController::onEffectsChanged(bool grayscale, bool mirror) {
     setMirror(mirror);
 }
 
-void EffectsController::setTargetState(IEffectsState *state) {
+void EffectsController::setTargetState(IEffectsModel *state) {
     m_state = state;
     syncFromState();
 }

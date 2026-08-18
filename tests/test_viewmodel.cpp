@@ -1,7 +1,7 @@
 #include <QtTest>
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 
-class TestViewState : public QObject {
+class TestViewModel : public QObject {
     Q_OBJECT
 
   private slots:
@@ -59,8 +59,8 @@ class TestViewState : public QObject {
 
 // Initialization
 
-void TestViewState::testDefaults() {
-    ViewState zs;
+void TestViewModel::testDefaults() {
+    ViewModel zs;
     QVERIFY(!zs.hasImage());
     QCOMPARE(zs.imageWidth(), 0);
     QCOMPARE(zs.imageHeight(), 0);
@@ -70,8 +70,8 @@ void TestViewState::testDefaults() {
     QCOMPARE(zs.percentage(), 100.0);
 }
 
-void TestViewState::testResetState() {
-    ViewState zs;
+void TestViewModel::testResetState() {
+    ViewModel zs;
     zs.resetState(1920, 1080);
     QVERIFY(zs.hasImage());
     QCOMPARE(zs.imageWidth(), 1920);
@@ -83,29 +83,29 @@ void TestViewState::testResetState() {
 
 // FitScale
 
-void TestViewState::testFitScaleLandscape() {
+void TestViewModel::testFitScaleLandscape() {
     // Image 1920x1080 (16:9), viewport 800x600 (4:3)
     // width ratio: 800/1920 = 0.4167, height ratio: 600/1080 = 0.5556
     // fitScale = min = 0.4167 (width-limited)
-    ViewState zs;
+    ViewModel zs;
     zs.resetState(1920, 1080);
     zs.setViewportSize(800, 600);
     QVERIFY(qFuzzyCompare(zs.fitScale(), 800.0f / 1920.0f));
 }
 
-void TestViewState::testFitScalePortrait() {
+void TestViewModel::testFitScalePortrait() {
     // Image 1080x1920 (9:16), viewport 800x600 (4:3)
     // width ratio: 800/1080 = 0.7407, height ratio: 600/1920 = 0.3125
     // fitScale = min = 0.3125 (height-limited)
-    ViewState zs;
+    ViewModel zs;
     zs.resetState(1080, 1920);
     zs.setViewportSize(800, 600);
     QVERIFY(qFuzzyCompare(zs.fitScale(), 600.0f / 1920.0f));
 }
 
-void TestViewState::testFitScaleSquare() {
+void TestViewModel::testFitScaleSquare() {
     // Image 1000x1000, viewport 800x800 -> fitScale = 0.8
-    ViewState zs;
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(800, 800);
     QVERIFY(qFuzzyCompare(zs.fitScale(), 0.8f));
@@ -113,16 +113,16 @@ void TestViewState::testFitScaleSquare() {
 
 // Zoom percentage
 
-void TestViewState::testPercentage() {
-    ViewState zs;
+void TestViewModel::testPercentage() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(800, 600);
     // fitScale = 0.6, zoom = 0.6, percentage = 60
     QCOMPARE(zs.percentage(), zs.zoom() * 100.0);
 }
 
-void TestViewState::testSetPercentage() {
-    ViewState zs;
+void TestViewModel::testSetPercentage() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(800, 600);
     zs.setPercentage(200.0);
@@ -130,16 +130,16 @@ void TestViewState::testSetPercentage() {
     QCOMPARE(zs.percentage(), 200.0);
 }
 
-void TestViewState::testSetPercentageClampLow() {
-    ViewState zs;
+void TestViewModel::testSetPercentageClampLow() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setPercentage(1.0);
     // Should clamp to 5% (0.05)
     QCOMPARE(zs.zoom(), 0.05f);
 }
 
-void TestViewState::testSetPercentageClampHigh() {
-    ViewState zs;
+void TestViewModel::testSetPercentageClampHigh() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setPercentage(10000.0);
     // Should clamp to 6400% (64.0)
@@ -148,8 +148,8 @@ void TestViewState::testSetPercentageClampHigh() {
 
 // Wheel zoom
 
-void TestViewState::testWheelZoomIn() {
-    ViewState zs;
+void TestViewModel::testWheelZoomIn() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     float initial = zs.zoom();
     zs.applyWheelZoom(true);
@@ -157,8 +157,8 @@ void TestViewState::testWheelZoomIn() {
     QVERIFY(qFuzzyCompare(zs.zoom(), initial * 1.1f));
 }
 
-void TestViewState::testWheelZoomOut() {
-    ViewState zs;
+void TestViewModel::testWheelZoomOut() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     float initial = zs.zoom();
     zs.applyWheelZoom(false);
@@ -166,8 +166,8 @@ void TestViewState::testWheelZoomOut() {
     QVERIFY(qFuzzyCompare(zs.zoom(), initial * 0.9f));
 }
 
-void TestViewState::testWheelZoomCtrl() {
-    ViewState zs;
+void TestViewModel::testWheelZoomCtrl() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     float initial = zs.zoom();
     zs.applyWheelZoom(true, true);
@@ -175,8 +175,8 @@ void TestViewState::testWheelZoomCtrl() {
     QVERIFY(qFuzzyCompare(zs.zoom(), initial * 1.21f));
 }
 
-void TestViewState::testWheelZoomClampLow() {
-    ViewState zs;
+void TestViewModel::testWheelZoomClampLow() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     // Zoom out 100 times — should clamp at 0.05
     for (int i = 0; i < 100; ++i)
@@ -184,8 +184,8 @@ void TestViewState::testWheelZoomClampLow() {
     QCOMPARE(zs.zoom(), 0.05f);
 }
 
-void TestViewState::testWheelZoomClampHigh() {
-    ViewState zs;
+void TestViewModel::testWheelZoomClampHigh() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     // Zoom in 100 times — should clamp at 64.0
     for (int i = 0; i < 100; ++i)
@@ -195,8 +195,8 @@ void TestViewState::testWheelZoomClampHigh() {
 
 // Pan
 
-void TestViewState::testPanDelta() {
-    ViewState zs;
+void TestViewModel::testPanDelta() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(500, 500);
     // fitScale = 0.5, zoom = 1.0
@@ -207,17 +207,17 @@ void TestViewState::testPanDelta() {
     QVERIFY(qFuzzyCompare(static_cast<float>(zs.pan().ry()), -0.02f));
 }
 
-void TestViewState::testPanZoomIndependent() {
+void TestViewModel::testPanZoomIndependent() {
     // Same drag at 1x zoom and 2x zoom should produce
     // different image-space pan (larger at higher zoom),
     // but the visual screen-pixel movement is the same.
-    ViewState zs1;
+    ViewModel zs1;
     zs1.resetState(1000, 1000);
     zs1.setViewportSize(1000, 1000); // fitScale=1, zoom=1
     zs1.setPercentage(100.0);        // zoom = 1.0
     zs1.applyPanDelta(10, 0);
 
-    ViewState zs2;
+    ViewModel zs2;
     zs2.resetState(1000, 1000);
     zs2.setViewportSize(1000, 1000);
     zs2.setPercentage(200.0); // zoom = 2.0
@@ -228,8 +228,8 @@ void TestViewState::testPanZoomIndependent() {
                           static_cast<float>(zs1.pan().rx()) * 0.5f));
 }
 
-void TestViewState::testScreenToPixelBasic() {
-    ViewState zs;
+void TestViewModel::testScreenToPixelBasic() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100); // fitScale = 1.0, zoom = 1.0, pan = (0,0)
 
@@ -238,8 +238,8 @@ void TestViewState::testScreenToPixelBasic() {
     QCOMPARE(zs.screenToPixel(QPointF(99, 99)), QPoint(99, 99));
 }
 
-void TestViewState::testScreenToPixelZoomed() {
-    ViewState zs;
+void TestViewModel::testScreenToPixelZoomed() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100);
     zs.setPercentage(200.0); // zoom = 2.0, fitScale = 1.0
@@ -252,8 +252,8 @@ void TestViewState::testScreenToPixelZoomed() {
     QCOMPARE(zs.screenToPixel(QPointF(100, 100)), QPoint(75, 75));
 }
 
-void TestViewState::testScreenToPixelPanned() {
-    ViewState zs;
+void TestViewModel::testScreenToPixelPanned() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100);
     // pan = (0.1, 0.1)
@@ -266,8 +266,8 @@ void TestViewState::testScreenToPixelPanned() {
     QCOMPARE(zs.screenToPixel(QPointF(50, 50)), QPoint(60, 60));
 }
 
-void TestViewState::testScreenToPixelOutOfBounds() {
-    ViewState zs;
+void TestViewModel::testScreenToPixelOutOfBounds() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100);
 
@@ -275,8 +275,8 @@ void TestViewState::testScreenToPixelOutOfBounds() {
     QCOMPARE(zs.screenToPixel(QPointF(101, 101)), QPoint(-1, -1));
 }
 
-void TestViewState::testPixelToScreenBasic() {
-    ViewState zs;
+void TestViewModel::testPixelToScreenBasic() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100); // fitScale = 1, zoom = 1, pan = (0,0)
 
@@ -285,8 +285,8 @@ void TestViewState::testPixelToScreenBasic() {
     QCOMPARE(zs.pixelToScreen(QPoint(99, 99)), QPointF(99, 99));
 }
 
-void TestViewState::testPixelToScreenZoomed() {
-    ViewState zs;
+void TestViewModel::testPixelToScreenZoomed() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100);
     zs.setPercentage(200.0); // zoom = 2.0, fitScale = 1.0
@@ -299,8 +299,8 @@ void TestViewState::testPixelToScreenZoomed() {
     QCOMPARE(zs.pixelToScreen(QPoint(75, 75)), QPointF(100, 100));
 }
 
-void TestViewState::testPixelToScreenPanned() {
-    ViewState zs;
+void TestViewModel::testPixelToScreenPanned() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100);
     // pan = (0.1, 0.1)
@@ -311,8 +311,8 @@ void TestViewState::testPixelToScreenPanned() {
     QVERIFY(std::abs(res.y() - 50.0) < 1e-5);
 }
 
-void TestViewState::testCoordinateRoundTrip() {
-    ViewState zs;
+void TestViewModel::testCoordinateRoundTrip() {
+    ViewModel zs;
     zs.resetState(1920, 1080);
     zs.setViewportSize(1280, 720);
 
@@ -338,8 +338,8 @@ void TestViewState::testCoordinateRoundTrip() {
 
 // Fit / Reset
 
-void TestViewState::testFitToWindow() {
-    ViewState zs;
+void TestViewModel::testFitToWindow() {
+    ViewModel zs;
     zs.resetState(2000, 1500);
     zs.setViewportSize(800, 600);
     // fitScale = min(800/2000, 600/1500) = 0.4
@@ -349,8 +349,8 @@ void TestViewState::testFitToWindow() {
     QVERIFY(qFuzzyCompare(zs.zoom(), zs.fitScale()));
 }
 
-void TestViewState::testFitResetsPan() {
-    ViewState zs;
+void TestViewModel::testFitResetsPan() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(800, 600);
     zs.applyPanDelta(50, 30);
@@ -359,8 +359,8 @@ void TestViewState::testFitResetsPan() {
     QCOMPARE(zs.pan(), QPointF(0, 0));
 }
 
-void TestViewState::testResizePreservesZoomRatio() {
-    ViewState zs;
+void TestViewModel::testResizePreservesZoomRatio() {
+    ViewModel zs;
     zs.resetState(2000, 1000);     // 2:1
     zs.setViewportSize(1000, 500); // fitScale = 0.5
     zs.setPercentage(200.0);       // zoom = 2.0, zoomRatio = 4.0
@@ -380,34 +380,34 @@ void TestViewState::testResizePreservesZoomRatio() {
 
 // No-image guard
 
-void TestViewState::testNoImageSetPercentage() {
-    ViewState zs;
+void TestViewModel::testNoImageSetPercentage() {
+    ViewModel zs;
     float     before = zs.zoom();
     zs.setPercentage(500.0);
     QCOMPARE(zs.zoom(), before); // no-op
 }
 
-void TestViewState::testNoImageWheelZoom() {
-    ViewState zs;
+void TestViewModel::testNoImageWheelZoom() {
+    ViewModel zs;
     float     before = zs.zoom();
     zs.applyWheelZoom(true);
     QCOMPARE(zs.zoom(), before); // no-op
 }
 
-void TestViewState::testNoImagePan() {
-    ViewState zs;
+void TestViewModel::testNoImagePan() {
+    ViewModel zs;
     QPointF   before = zs.pan();
     zs.applyPanDelta(100, 100);
     QCOMPARE(zs.pan(), before); // no-op
 }
 
-void TestViewState::testNoImageFit() {
-    ViewState zs;
+void TestViewModel::testNoImageFit() {
+    ViewModel zs;
     zs.fitToWindow(); // should not crash, no-op
 }
 
-void TestViewState::testUpdateImageSize() {
-    ViewState zs;
+void TestViewModel::testUpdateImageSize() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(500, 500); // fitScale = 0.5
 
@@ -418,8 +418,8 @@ void TestViewState::testUpdateImageSize() {
     QVERIFY(qFuzzyCompare(zs.fitScale(), 0.25f));
 }
 
-void TestViewState::testUpdateZoomRatio() {
-    ViewState zs;
+void TestViewModel::testUpdateZoomRatio() {
+    ViewModel zs;
     zs.resetState(1000, 1000);
     zs.setViewportSize(500, 500); // fitScale = 0.5
     zs.setPercentage(200.0);      // zoom = 2.0
@@ -429,8 +429,8 @@ void TestViewState::testUpdateZoomRatio() {
     QCOMPARE(zs.zoomRatio(), 4.0f);
 }
 
-void TestViewState::testNormalizedToScreen() {
-    ViewState zs;
+void TestViewModel::testNormalizedToScreen() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(100, 100); // fitScale = 1, zoom = 1, pan = (0,0)
 
@@ -450,13 +450,13 @@ void TestViewState::testNormalizedToScreen() {
     QCOMPARE(zs.normalizedToScreen(QPointF(0, 0)), QPointF(-50, -50));
 }
 
-void TestViewState::testViewportGetters() {
-    ViewState zs;
+void TestViewModel::testViewportGetters() {
+    ViewModel zs;
     zs.resetState(100, 100);
     zs.setViewportSize(1280, 720);
     QCOMPARE(zs.viewportWidth(), 1280);
     QCOMPARE(zs.viewportHeight(), 720);
 }
 
-QTEST_MAIN(TestViewState)
-#include "test_viewstate.moc"
+QTEST_MAIN(TestViewModel)
+#include "test_viewmodel.moc"

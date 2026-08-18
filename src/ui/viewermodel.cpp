@@ -1,4 +1,4 @@
-#include "ui/viewerstate.h"
+#include "ui/viewermodel.h"
 
 #include <QDebug>
 #include <QFile>
@@ -11,7 +11,7 @@
 #include "ui/viewertoolbar.h"
 #include "ui/vkimageviewer.h"
 
-ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
+ViewerModel::ViewerModel(QWidget *parent) : QWidget(parent) {
     {
         QFile qss(":/qss/vkimageviewer.qss");
         if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -54,9 +54,9 @@ ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     layout->addWidget(viewerContainer, 1);
     layout->addWidget(m_statusBar, 0);
 
-    // Wire status bar -> ViewerState signals
-    connect(m_statusBar, &StatusBar::zoomChanged, this, &ViewerState::zoomRequested);
-    connect(m_statusBar, &StatusBar::fitRequested, this, &ViewerState::fitRequested);
+    // Wire status bar -> ViewerModel signals
+    connect(m_statusBar, &StatusBar::zoomChanged, this, &ViewerModel::zoomRequested);
+    connect(m_statusBar, &StatusBar::fitRequested, this, &ViewerModel::fitRequested);
 
     // Wire viewer zoom -> status bar
     connect(m_viewer, &ImageViewer::zoomChanged, m_statusBar, [this](double pct) {
@@ -64,11 +64,11 @@ ViewerState::ViewerState(QWidget *parent) : QWidget(parent) {
     });
 
     connect(m_viewer, &ImageViewer::viewportResized, m_viewer, [this](int w, int h) {
-        m_viewer->getViewState().setViewportSize(w, h);
+        m_viewer->getViewModel().setViewportSize(w, h);
     });
 }
 
-void ViewerState::setSnapshotOnlyIndicator(bool visible) {
+void ViewerModel::setSnapshotOnlyIndicator(bool visible) {
     if (m_snapshotOnlyLabel) {
         m_snapshotOnlyLabel->setVisible(visible);
     }

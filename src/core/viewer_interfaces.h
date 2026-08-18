@@ -33,7 +33,7 @@ class IViewer {
     virtual void reconstruct(const ReconstructionSequence& seq) = 0;
 
     /// @brief Update the viewer's viewport state.
-    virtual void notifyViewStateChanged() = 0;
+    virtual void notifyViewModelChanged() = 0;
 
     /// @brief Trigger a redraw of the viewer.
     virtual void update() = 0;

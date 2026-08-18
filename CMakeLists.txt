@@ -120,7 +120,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/tabbar.cpp
     src/ui/emptystate.cpp
     src/ui/statusbar.cpp
-    src/ui/viewerstate.cpp
+    src/ui/viewermodel.cpp
     src/ui/dialogs/settingsdialog.cpp
     src/ui/dialogs/snapshotmanagerdialog.cpp
     src/ui/dialogs/aboutdialog.cpp
@@ -141,7 +141,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/vksnapshotreconstructor.cpp
     src/core/vulkancontext.cpp
     src/core/vulkanutils.cpp
-    src/core/viewstate.cpp
+    src/core/viewmodel.cpp
     src/core/sessionmanager.cpp
     src/core/imagesession.cpp
     src/core/thumbnailmanager.cpp

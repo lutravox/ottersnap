@@ -1,6 +1,6 @@
 #include "ui/vkimageviewer.h"
 #include "controllers/imagesessioncontroller.h"
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewerrenderer.h"
 
@@ -112,7 +112,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                         auto *session =
                             m_sessionController ? m_sessionController->activeSession() : nullptr;
                         if (m_hasImage && session) {
-                            ViewState state = getViewState();
+                            ViewModel state = getViewModel();
                             QPoint    pixelPos = state.screenToPixel(me->position());
                             int       px = pixelPos.x();
                             int       py = pixelPos.y();
@@ -255,9 +255,9 @@ void VkImageViewer::setIndicator(QPoint pos, QColor color, bool visible) {
     }
 }
 
-void VkImageViewer::notifyViewStateChanged() {
+void VkImageViewer::notifyViewModelChanged() {
     if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-        emit zoomChanged(s->viewState().percentage());
+        emit zoomChanged(s->viewModel().percentage());
     }
     update();
 }

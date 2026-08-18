@@ -13,13 +13,13 @@
 /**
  * @brief Image viewer stage.
  */
-class ViewerState : public QWidget {
+class ViewerModel : public QWidget {
     Q_OBJECT
 
   public:
-    /// @brief Constructs the state
+    /// @brief Constructs the model
     /// @param parent Optional parent widget.
-    explicit ViewerState(QWidget *parent = nullptr);
+    explicit ViewerModel(QWidget *parent = nullptr);
 
     /// @brief Returns the snapshot timeline for version history.
     SnapshotTimeline *snapshotTimeline() {

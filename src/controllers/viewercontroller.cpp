@@ -40,8 +40,8 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
     if (m_viewer) {
         // Sync current viewport size to the new session's view state
         QSize sz = m_viewer->getViewportSize();
-        session->viewState().setViewportSize(sz.width(), sz.height());
-        session->viewState().updateZoomRatio();
+        session->viewModel().setViewportSize(sz.width(), sz.height());
+        session->viewModel().updateZoomRatio();
 
         if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
             QObject::disconnect(m_effectsConnection);
@@ -162,7 +162,7 @@ void ViewerController::syncSessionToViewer() {
     if (!session || !m_viewer)
         return;
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }
 
 void ViewerController::fitToWindow() {
@@ -172,12 +172,12 @@ void ViewerController::fitToWindow() {
 
     // Ensure we have the current viewport size before fitting
     QSize      sz = m_viewer->getViewportSize();
-    ViewState& state = session->viewState();
+    ViewModel& state = session->viewModel();
     state.setViewportSize(sz.width(), sz.height());
 
     state.fitToWindow();
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }
 
 void ViewerController::setZoomPercentage(double pct) {
@@ -185,10 +185,10 @@ void ViewerController::setZoomPercentage(double pct) {
     if (!session || !m_viewer)
         return;
 
-    ViewState& state = session->viewState();
+    ViewModel& state = session->viewModel();
     state.setPercentage(pct);
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }
 
 void ViewerController::setScaleWithWindowEnabled(bool enabled) {
@@ -278,7 +278,7 @@ void ViewerController::handleViewportResize(int width, int height) {
     if (!session || !m_viewer)
         return;
 
-    ViewState& state = session->viewState();
+    ViewModel& state = session->viewModel();
 
     state.setViewportSize(width, height);
 
@@ -289,7 +289,7 @@ void ViewerController::handleViewportResize(int width, int height) {
         state.updateZoomRatio();
     }
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }
 
 void ViewerController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
@@ -297,10 +297,10 @@ void ViewerController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
     if (!session || !m_viewer)
         return;
 
-    ViewState& state = session->viewState();
+    ViewModel& state = session->viewModel();
     state.applyWheelZoom(zoomIn, ctrlHeld);
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }
 
 void ViewerController::handlePanRequested(int dx, int dy) {
@@ -308,8 +308,8 @@ void ViewerController::handlePanRequested(int dx, int dy) {
     if (!session || !m_viewer)
         return;
 
-    ViewState& state = session->viewState();
+    ViewModel& state = session->viewModel();
     state.applyPanDelta(dx, dy);
 
-    m_viewer->notifyViewStateChanged();
+    m_viewer->notifyViewModelChanged();
 }

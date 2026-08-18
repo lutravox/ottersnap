@@ -1,7 +1,7 @@
 #include <QDebug>
 #include <QTimer>
 #include "controllers/colorinfocontroller.h"
-#include "core/viewstate.h"
+#include "core/viewmodel.h"
 #include "ui/vkimageviewer.h"
 
 ColorInfoController::ColorInfoController(QObject *parent) : QObject(parent) {
@@ -59,7 +59,7 @@ void ColorInfoController::resetClusterSelection() {
     updateIndicatorPosition();
 }
 
-void ColorInfoController::setViewerState(ViewerState *state) {
+void ColorInfoController::setViewerModel(ViewerModel *state) {
     m_viewerState = state;
 
     if (m_viewerState && m_viewerState->viewer()) {
@@ -172,7 +172,7 @@ void ColorInfoController::updateIndicatorPos() {
         pos.setX(1.0f - pos.x());
     }
 
-    QPointF screenPos = viewer->getViewState().normalizedToScreen(pos);
+    QPointF screenPos = viewer->getViewModel().normalizedToScreen(pos);
 
     if (screenPos.x() < 0 || screenPos.y() < 0) {
         viewer->setIndicator(QPoint(), Qt::transparent, false);

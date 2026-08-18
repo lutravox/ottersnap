@@ -3,9 +3,9 @@
 #include <functional>
 
 /// @brief Interface for effects state.
-class IEffectsState {
+class IEffectsModel {
   public:
-    virtual ~IEffectsState() = default;
+    virtual ~IEffectsModel() = default;
     virtual bool grayscaleEnabled() const = 0;
     virtual void setGrayscale(bool enabled) = 0;
     virtual bool mirrorEnabled() const = 0;

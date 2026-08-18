@@ -22,10 +22,10 @@ class SnapshotTimelineModel : public QAbstractListModel {
     enum SnapshotRoles {
         ThumbnailRole = Qt::UserRole + 1, ///< The thumbnail image of the snapshot.
         LabelRole,                        ///< The display label for the snapshot.
-        IndexRole,                        ///< The internal index of the snapshot.
+        UuidRole,                         ///< The internal UUID of the snapshot.
         IsNewRole,                        ///< Whether the snapshot was recently created.
         IsCurrentImageRole                ///< Whether the item is the current disk image.
-    };
+    };;
 
     explicit SnapshotTimelineModel(QObject *parent = nullptr);
 
@@ -36,23 +36,23 @@ class SnapshotTimelineModel : public QAbstractListModel {
      * @brief Updates the complete set of snapshots in the model.
      * @param thumbnails List of thumbnail images.
      * @param labels List of display labels.
-     * @param indices List of snapshot indices.
+     * @param uuids List of snapshot UUIDs.
      */
     void setThumbnails(const QVector<QPixmap>& thumbnails,
                        const QVector<QString>& labels,
-                       const QVector<int>&     indices);
+                       const QVector<QUuid>&     uuids);
 
     /**
      * @brief Marks a specific snapshot as "new" to trigger a visual highlight.
-     * @param snapshotIndex The database ID of the snapshot to mark.
+     * @param uuid The UUID of the snapshot to mark.
      */
-    void markSnapshotAsNew(int snapshotIndex);
+    void markSnapshotAsNew(const QUuid& uuid);
 
     /**
      * @brief Removes the "new" status from a snapshot.
-     * @param snapshotIndex The database ID of the snapshot.
+     * @param uuid The UUID of the snapshot.
      */
-    void clearNewStatus(int snapshotIndex);
+    void clearNewStatus(const QUuid& uuid);
 
     /**
      * @brief Updates the thumbnail for a specific snapshot.
@@ -60,6 +60,13 @@ class SnapshotTimelineModel : public QAbstractListModel {
      * @param pixmap The new thumbnail image.
      */
     void updateThumbnail(int index, const QPixmap& pixmap);
+
+    /**
+     * @brief Find the row index corresponding to a given snapshot UUID string.
+     * @param uuid The UUID string or "current".
+     * @return The row index, or -1 if not found.
+     */
+    int rowForUuidString(const QString& uuid) const;
 
     /// @brief Check if the current session is in snapshot-only mode.
     /// @return True if in snapshot-only mode, false otherwise.
@@ -77,6 +84,6 @@ class SnapshotTimelineModel : public QAbstractListModel {
     bool             m_isSnapshotOnly = false;
     QVector<QPixmap> m_thumbnails;
     QVector<QString> m_labels;
-    QVector<int>     m_indices;
-    QSet<int>        m_newSnapshots;
+    QVector<QUuid>   m_uuids;
+    QSet<QUuid>      m_newSnapshots;
 };

@@ -94,7 +94,7 @@ void TestThumbnailCache::testUpdateMaxCost() {
 
 void TestThumbnailCache::testLoadThumbnailCacheMiss() {
     QString key = "miss_key_" + QString::number(QRandomGenerator::global()->generate());
-    int     version = 1;
+    QString version = "v1";
     QSize   size(32, 32);
 
     QImage result = ThumbnailCache::loadThumbnail(key, version, size);
@@ -104,7 +104,7 @@ void TestThumbnailCache::testLoadThumbnailCacheMiss() {
 
 void TestThumbnailCache::testLoadThumbnailCacheHit() {
     QString key = "hit_key";
-    int     version = 1;
+    QString version = "v1";
     QSize   size(32, 32);
 
     QString baseThumbDir =
@@ -112,7 +112,7 @@ void TestThumbnailCache::testLoadThumbnailCacheHit() {
     QString cacheDir = baseThumbDir + '/' + key;
     QDir().mkpath(cacheDir);
     QImage thumb(64, 64, QImage::Format_RGB32);
-    thumb.save(cacheDir + "/v0001.webp", "WEBP");
+    thumb.save(cacheDir + "/" + version + ".webp", "WEBP");
 
     QImage result = ThumbnailCache::loadThumbnail(key, version, size);
 

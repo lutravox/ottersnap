@@ -53,11 +53,11 @@ void ThumbnailCache::remove(const QString& key) {
     s_thumbnailCache.remove(key);
 }
 
-void ThumbnailCache::invalidate(const QString& imageKey, int version) {
+void ThumbnailCache::invalidate(const QString& imageKey, const QString& version) {
     const int storageSize = ThumbnailConstants::StorageSize;
 
     QString cacheKey =
-        (version == -1)
+        (version == ThumbnailConstants::CurrentVersion)
             ? QString("%1:current:%2x%3").arg(imageKey).arg(storageSize).arg(storageSize)
             : QString("%1:%2:%3x%4").arg(imageKey).arg(version).arg(storageSize).arg(storageSize);
 
@@ -65,18 +65,17 @@ void ThumbnailCache::invalidate(const QString& imageKey, int version) {
 
     QString baseThumbDir =
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
-    QString thumbPath = baseThumbDir + '/' + imageKey + '/' + QString::asprintf("v%04d", version) +
+    QString thumbPath = baseThumbDir + '/' + imageKey + '/' + version +
                         ThumbnailConstants::Extension;
 
     QFile::remove(thumbPath);
 }
 
-QImage ThumbnailCache::loadThumbnail(const QString& imageKey, int version, const QSize& size) {
+QImage ThumbnailCache::loadThumbnail(const QString& imageKey, const QString& version, const QSize& size) {
     const int storageSize = ThumbnailConstants::StorageSize;
 
-    // -1 = Current Image
     QString cacheKey =
-        (version == -1)
+        (version == ThumbnailConstants::CurrentVersion)
             ? QString("%1:current:%2x%3").arg(imageKey).arg(storageSize).arg(storageSize)
             : QString("%1:%2:%3x%4").arg(imageKey).arg(version).arg(storageSize).arg(storageSize);
 
@@ -99,7 +98,7 @@ QImage ThumbnailCache::loadThumbnail(const QString& imageKey, int version, const
     QDir().mkpath(cacheDir);
 
     QString thumbPath =
-        cacheDir + '/' + QString::asprintf("v%04d", version) + ThumbnailConstants::Extension;
+        cacheDir + '/' + version + ThumbnailConstants::Extension;
 
     if (QFile::exists(thumbPath)) {
         QImage thumb(thumbPath);

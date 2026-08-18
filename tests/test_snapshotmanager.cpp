@@ -41,6 +41,10 @@ class TestSnapshotManager : public QObject {
     // Dedup
     void testSaveDuplicateSkipped();
 
+    // Export / Import
+    void testExportImportBasic();
+    void testExportImportPrepend();
+
     // Delete
     void testDeleteLastSnapshot();
     void testDeleteMiddleSnapshotRebase();
@@ -128,7 +132,7 @@ void TestSnapshotManager::testSaveFirstSnapshot() {
 
     auto snap = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap.has_value());
-    QCOMPARE(snap->snapshotIndex, 1);
+    QVERIFY(!snap->uuid.isNull());
 }
 
 void TestSnapshotManager::testLoadSnapshots() {
@@ -139,7 +143,7 @@ void TestSnapshotManager::testLoadSnapshots() {
 
     QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 1);
-    QCOMPARE(snapshots[0].snapshotIndex, 1);
+    QVERIFY(!snapshots[0].uuid.isNull());
     QVERIFY(!snapshots[0].fileName.isEmpty());
     QVERIFY(!snapshots[0].checksum.isEmpty());
     QVERIFY(!snapshots[0].timestamp.isNull());
@@ -155,9 +159,9 @@ void TestSnapshotManager::testMultipleSnapshots() {
 
     QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 3);
-    QCOMPARE(snapshots[0].snapshotIndex, 1);
-    QCOMPARE(snapshots[1].snapshotIndex, 2);
-    QCOMPARE(snapshots[2].snapshotIndex, 3);
+    QVERIFY(!snapshots[0].uuid.isNull());
+    QVERIFY(!snapshots[1].uuid.isNull());
+    QVERIFY(!snapshots[2].uuid.isNull());
 }
 
 void TestSnapshotManager::testSizeChangeTriggersBase() {
@@ -186,7 +190,7 @@ void TestSnapshotManager::testSizeChangeTriggersBase() {
     QVERIFY(snaps[2].isBase);  // Snap 3 - should be base due to size change
 
     // Verify the metadata is correct
-    QCOMPARE(snaps[2].snapshotIndex, 3);
+    QVERIFY(!snaps[2].uuid.isNull());
 }
 
 void TestSnapshotManager::testBaseIntervalLogic() {
@@ -228,18 +232,18 @@ void TestSnapshotManager::testReconstructSnapshot() {
     QImage img1 = makeImage(100, 100, Qt::red);
     QImage img2 = makeImage(100, 100, Qt::blue);
 
-    SnapshotManager::saveSnapshot(path, img1); // Snap 1 (Base)
+    QUuid id1 = SnapshotManager::saveSnapshot(path, img1)->uuid;
     QTest::qWait(500);
-    SnapshotManager::saveSnapshot(path, img2); // Snap 2 (Delta)
+    QUuid id2 = SnapshotManager::saveSnapshot(path, img2)->uuid;
     QTest::qWait(500);
 
     // Test base reconstruction first
-    QImage restored1 = SnapshotManager::reconstructSnapshot(path, 1);
+    QImage restored1 = SnapshotManager::reconstructSnapshot(path, id1);
     QCOMPARE(restored1.size(), img1.size());
     QCOMPARE(restored1.pixelColor(0, 0), img1.pixelColor(0, 0));
 
     // Test delta reconstruction
-    QImage restored2 = SnapshotManager::reconstructSnapshot(path, 2);
+    QImage restored2 = SnapshotManager::reconstructSnapshot(path, id2);
     QCOMPARE(restored2.size(), img2.size());
     QCOMPARE(restored2.pixelColor(0, 0), img2.pixelColor(0, 0));
 }
@@ -262,7 +266,8 @@ void TestSnapshotManager::testSparseDeltaReconstruction() {
     QTest::qWait(500);
 
     // Reconstruct the second snapshot
-    QImage restored = SnapshotManager::reconstructSnapshot(path, 2);
+    QUuid  id2 = SnapshotManager::saveSnapshot(path, img2)->uuid;
+    QImage restored = SnapshotManager::reconstructSnapshot(path, id2);
 
     QCOMPARE(restored.size(), img2.size());
     QCOMPARE(restored.pixelColor(10, 10), Qt::blue);
@@ -287,16 +292,84 @@ void TestSnapshotManager::testSaveDuplicateSkipped() {
 
     auto snap1 = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap1.has_value());
-    QCOMPARE(snap1->snapshotIndex, 1);
+    QVERIFY(!snap1->uuid.isNull());
 
-    // Saving the same image again should return the existing snapshot index
+    // Saving the same image again should return the existing snapshot UUID
     auto snap2 = SnapshotManager::saveSnapshot(path, img);
     QVERIFY(snap2.has_value());
-    QCOMPARE(snap2->snapshotIndex, 1);
+    QCOMPARE(snap2->uuid, snap1->uuid);
 
     // Only one snapshot on disk
     QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapshots.size(), 1);
+}
+
+void TestSnapshotManager::testExportImportBasic() {
+    QString sourcePath = testFilePath("export_src");
+    QString destPath = testFilePath("export_dest");
+    QString bundlePath = QDir::tempPath() + "/test_bundle.snaphist";
+
+    SnapshotManager::deleteAllSnapshots(sourcePath);
+    SnapshotManager::deleteAllSnapshots(destPath);
+
+    // Create snapshots in source
+    QUuid uuid1 = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::red))->uuid;
+    QUuid uuid2 = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::blue))->uuid;
+
+    // Export
+    QVERIFY(SnapshotManager::exportHistory(sourcePath, bundlePath));
+
+    // Import to destination
+    QVERIFY(SnapshotManager::importHistory(destPath, bundlePath));
+
+    // Verify
+    QVector<ImageSnapshot> imported = SnapshotManager::loadSnapshots(destPath);
+    QCOMPARE(imported.size(), 2);
+    QCOMPARE(imported[0].uuid, uuid1);
+    QCOMPARE(imported[1].uuid, uuid2);
+
+    // Verify reconstruction works
+    QImage res1 = SnapshotManager::reconstructSnapshot(destPath, uuid1);
+    QCOMPARE(res1.pixelColor(0, 0), Qt::red);
+    QImage res2 = SnapshotManager::reconstructSnapshot(destPath, uuid2);
+    QCOMPARE(res2.pixelColor(0, 0), Qt::blue);
+}
+
+void TestSnapshotManager::testExportImportPrepend() {
+    QString sourcePath = testFilePath("prepend_src");
+    QString destPath = testFilePath("prepend_dest");
+    QString bundlePath = QDir::tempPath() + "/prepend_bundle.snaphist";
+
+    SnapshotManager::deleteAllSnapshots(sourcePath);
+    SnapshotManager::deleteAllSnapshots(destPath);
+
+    // Source snapshots (A -> B)
+    QUuid uuidA = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::red))->uuid;
+    QUuid uuidB = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::blue))->uuid;
+
+    // Export
+    QVERIFY(SnapshotManager::exportHistory(sourcePath, bundlePath));
+
+    // Destination has one snapshot (C)
+    QUuid uuidC = SnapshotManager::saveSnapshot(destPath, makeImage(10, 10, Qt::green))->uuid;
+
+    // Import Prepend
+    QVERIFY(SnapshotManager::importHistory(destPath, bundlePath));
+
+    // Verify chain: A -> B -> C
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(destPath);
+    QCOMPARE(snapshots.size(), 3);
+    QCOMPARE(snapshots[0].uuid, uuidA);
+    QCOMPARE(snapshots[1].uuid, uuidB);
+    QCOMPARE(snapshots[2].uuid, uuidC);
+
+    // Verify C is now a base image (bridge strategy)
+    QVERIFY(snapshots[2].isBase);
+
+    // Verify reconstruction of all
+    QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidA).pixelColor(0, 0), Qt::red);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidB).pixelColor(0, 0), Qt::blue);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidC).pixelColor(0, 0), Qt::green);
 }
 
 void TestSnapshotManager::testDeleteLastSnapshot() {
@@ -306,15 +379,16 @@ void TestSnapshotManager::testDeleteLastSnapshot() {
     SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red));
     SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue));
 
-    QVector<ImageSnapshot> snapsBefore = SnapshotManager::loadSnapshots(path);
-    QCOMPARE(snapsBefore.size(), 2);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snapshots.size(), 2);
 
-    // Delete the last one (index 2)
-    QVERIFY(SnapshotManager::deleteSnapshot(path, 2));
+    // Delete the last one
+    QUuid lastUuid = snapshots.last().uuid;
+    QVERIFY(SnapshotManager::deleteSnapshot(path, lastUuid));
 
     QVector<ImageSnapshot> snapsAfter = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snapsAfter.size(), 1);
-    QCOMPARE(snapsAfter[0].snapshotIndex, 1);
+    QVERIFY(!snapsAfter[0].uuid.isNull());
 }
 
 void TestSnapshotManager::testDeleteMiddleSnapshotRebase() {
@@ -330,25 +404,26 @@ void TestSnapshotManager::testDeleteMiddleSnapshotRebase() {
     SnapshotManager::saveSnapshot(path, img3);
 
     // Verify initial state: S1(Base), S2(Delta), S3(Delta)
-    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
-    QCOMPARE(snaps.size(), 3);
-    QVERIFY(snaps[0].isBase);
-    QVERIFY(!snaps[1].isBase);
-    QVERIFY(!snaps[2].isBase);
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snapshots.size(), 3);
+    QVERIFY(snapshots[0].isBase);
+    QVERIFY(!snapshots[1].isBase);
+    QVERIFY(!snapshots[2].isBase);
 
     // Delete S2 (middle)
-    QVERIFY(SnapshotManager::deleteSnapshot(path, 2));
+    QUuid id2 = snapshots[1].uuid;
+    QVERIFY(SnapshotManager::deleteSnapshot(path, id2));
 
     // Verify new state: S1(Base), S3(Delta of S1)
-    snaps = SnapshotManager::loadSnapshots(path);
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 2);
-    QCOMPARE(snaps[0].snapshotIndex, 1);
-    QCOMPARE(snaps[1].snapshotIndex, 3);
+    QVERIFY(!snaps[0].uuid.isNull());
+    QVERIFY(!snaps[1].uuid.isNull());
     QVERIFY(snaps[0].isBase);
     QVERIFY(!snaps[1].isBase); // S3 should be rebased as a delta of S1
 
-    // Verify rebased structure is correct
-    QCOMPARE(snaps[1].snapshotIndex, 3);
+    // Verify structure is correct
+    QVERIFY(!snaps[1].uuid.isNull());
     QVERIFY(!snaps[1].isBase);
 }
 
@@ -363,17 +438,19 @@ void TestSnapshotManager::testDeleteFirstSnapshotRebase() {
     SnapshotManager::saveSnapshot(path, img2);
 
     // Delete S1 (the base)
-    QVERIFY(SnapshotManager::deleteSnapshot(path, 1));
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
+    QUuid                  id1 = snapshots[0].uuid;
+    QVERIFY(SnapshotManager::deleteSnapshot(path, id1));
 
     // Verify new state: S2(Base)
     QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), 1);
-    QCOMPARE(snaps[0].snapshotIndex, 2);
+    QVERIFY(!snaps[0].uuid.isNull());
     QVERIFY(snaps[0].isBase);
 
     // Verify S2 is now the base
     QVERIFY(snaps[0].isBase);
-    QCOMPARE(snaps[0].snapshotIndex, 2);
+    QVERIFY(!snaps[0].uuid.isNull());
 }
 
 void TestSnapshotManager::testDeleteAllSnapshots() {
@@ -420,7 +497,7 @@ void TestSnapshotManager::testCorruptedSnapshot() {
 
     // Reconstruction should not crash.
     // Depending on implementation, it might return a null image or partial.
-    QImage restored = SnapshotManager::reconstructSnapshot(path, res->snapshotIndex);
+    QImage restored = SnapshotManager::reconstructSnapshot(path, res->uuid);
     // We just verify it doesn't crash the process.
     Q_UNUSED(restored);
 }

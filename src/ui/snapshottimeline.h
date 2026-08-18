@@ -6,14 +6,15 @@
 #include <QVector>
 #include <QWidget>
 
-#include "core/snapshottimelinemodel.h"
-#include "ui/snapshottimelinedelegate.h"
 #include "controllers/snapshottimelinecontroller.h"
+#include "ui/snapshottimelinedelegate.h"
 
 #include <QHBoxLayout>
 #include <QListView>
 
 static constexpr int c_startPadding = 6;
+static constexpr int c_thumbnailSize = 48;
+static constexpr int c_clipAmount = 23;
 
 /**
  * @class SnapshotTimeline
@@ -39,8 +40,8 @@ class SnapshotTimeline : public QWidget {
     void setCreateButtonEnabled(bool enabled);
 
     /// @brief Updates the secondary selection highlight in the timeline.
-    /// @param index The database ID of the snapshot to highlight as secondary.
-    void setSecondaryIndex(int index);
+    /// @param id The identity of the snapshot to highlight as secondary.
+    void setSecondaryIdentity(const QString& id);
 
     /// @brief Updates the view to reflect the current selection.
     /// @param newIndex The index of the snapshot that was selected.
@@ -65,17 +66,19 @@ class SnapshotTimeline : public QWidget {
 
     /**
      * @brief Emitted when a request is made to delete a snapshot.
-     * @param index The index of the snapshot to delete.
+     * @param uuid The identity of the snapshot to delete.
      */
-    void snapshotDeletionRequested(int index);
+    void snapshotDeletionRequested(const QUuid& uuid);
 
     /// @brief Emitted when a snapshot is set as the secondary/comparison snapshot.
-    void secondarySnapshotSelected(int index);
+    void secondarySnapshotSelected(const QString& id);
 
   private:
+    QUuid uuidAt(const QModelIndex& index) const;
+
     SnapshotTimelineController *m_controller = nullptr;
-    QListView                *m_listView = nullptr;
-    SnapshotTimelineDelegate *m_delegate = nullptr;
+    QListView                  *m_listView = nullptr;
+    SnapshotTimelineDelegate   *m_delegate = nullptr;
 
     QPushButton *m_createButton = nullptr;
     QWidget     *m_stripContainer = nullptr;

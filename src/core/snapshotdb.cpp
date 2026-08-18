@@ -21,11 +21,21 @@ bool SnapshotDatabase::init(const QString& dbPath) {
         m_dbPath =
             QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/snapshots.db";
     }
-
+    // Ensure the directory exists before trying to open the database file
+    QFileInfo fileInfo(m_dbPath);
+    QString   dirPath = fileInfo.absolutePath();
+    QDir      dir(dirPath);
+    if (!dir.exists()) {
+        if (!dir.mkpath(".")) {
+            qWarning() << "[SnapshotDb] Failed to create database directory:" << dirPath;
+            return false;
+        }
+    }
+    // Use the standard connection to initialize tables
     QSqlDatabase db = connection();
 
     if (!db.isOpen()) {
-        qWarning() << "[SnapshotDb] Failed to open database:" << db.lastError().text();
+        qWarning() << "[SnapshotDb] Failed to open database for init:" << db.lastError().text();
         return false;
     }
 
@@ -42,14 +52,16 @@ bool SnapshotDatabase::init(const QString& dbPath) {
     // Snapshots table
     if (!query.exec("CREATE TABLE IF NOT EXISTS snapshots ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "uuid TEXT NOT NULL, "
+                    "parent_uuid TEXT, "
                     "image_key TEXT NOT NULL, "
-                    "snapshot_index INTEGER NOT NULL, "
                     "timestamp TEXT NOT NULL, "
                     "checksum TEXT NOT NULL, "
                     "is_base INTEGER NOT NULL, "
                     "file_name TEXT NOT NULL, "
                     "FOREIGN KEY(image_key) REFERENCES images(image_key) ON DELETE CASCADE)")) {
-        qWarning() << "[SnapshotDb] Failed to create snapshots table:" << query.lastError().text();
+        qWarning() << "[SnapshotDb] Failed to create snapshots table:"
+                   << query.lastError().text();
         return false;
     }
 
@@ -67,23 +79,32 @@ bool SnapshotDatabase::registerImage(const QString& key, const QString& path) {
 
 bool SnapshotDatabase::addSnapshot(const QString& key, const ImageSnapshot& s) {
     QSqlQuery query(connection());
-    query.prepare("INSERT INTO snapshots (image_key, snapshot_index, timestamp, checksum, is_base, "
-                  "file_name) "
-                  "VALUES (?, ?, ?, ?, ?, ?)");
+    query.prepare(
+        "INSERT INTO snapshots (uuid, parent_uuid, image_key, timestamp, checksum, is_base, "
+        "file_name) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)");
+    query.addBindValue(s.uuid.toString(QUuid::WithoutBraces));
+    query.addBindValue(s.parentUuid.toString(QUuid::WithoutBraces));
     query.addBindValue(key);
-    query.addBindValue(s.snapshotIndex);
     query.addBindValue(s.timestamp.toString(Qt::ISODate));
     query.addBindValue(s.checksum);
     query.addBindValue(s.isBase ? 1 : 0);
     query.addBindValue(s.fileName);
-    return query.exec();
+
+    bool success = query.exec();
+    if (!success) {
+        qWarning() << "[SnapshotDb] Failed to add snapshot for" << key << ":"
+                   << query.lastError().text();
+    }
+
+    return success;
 }
 
 QVector<ImageSnapshot> SnapshotDatabase::getSnapshots(const QString& key) {
     QVector<ImageSnapshot> snapshots;
     QSqlQuery              query(connection());
-    query.prepare("SELECT snapshot_index, file_name, timestamp, checksum, is_base "
-                  "FROM snapshots WHERE image_key = ? ORDER BY snapshot_index ASC");
+    query.prepare("SELECT uuid, parent_uuid, file_name, timestamp, checksum, is_base "
+                  "FROM snapshots WHERE image_key = ? ORDER BY id ASC");
     query.addBindValue(key);
 
     if (!query.exec()) {
@@ -94,22 +115,23 @@ QVector<ImageSnapshot> SnapshotDatabase::getSnapshots(const QString& key) {
 
     while (query.next()) {
         ImageSnapshot s;
-        s.snapshotIndex = query.value(0).toInt();
-        s.fileName = query.value(1).toString();
-        s.timestamp = QDateTime::fromString(query.value(2).toString(), Qt::ISODate);
-        s.checksum = query.value(3).toString();
-        s.isBase = query.value(4).toInt() != 0;
+        s.uuid = QUuid::fromString(query.value(0).toString());
+        s.parentUuid = QUuid::fromString(query.value(1).toString());
+        s.fileName = query.value(2).toString();
+        s.timestamp = QDateTime::fromString(query.value(3).toString(), Qt::ISODate);
+        s.checksum = query.value(4).toString();
+        s.isBase = query.value(5).toInt() != 0;
         snapshots.append(s);
     }
 
     return snapshots;
 }
 
-bool SnapshotDatabase::removeSnapshot(const QString& key, int index) {
+bool SnapshotDatabase::removeSnapshot(const QString& key, const QUuid& uuid) {
     QSqlQuery query(connection());
-    query.prepare("DELETE FROM snapshots WHERE image_key = ? AND snapshot_index = ?");
+    query.prepare("DELETE FROM snapshots WHERE image_key = ? AND uuid = ?");
     query.addBindValue(key);
-    query.addBindValue(index);
+    query.addBindValue(uuid.toString(QUuid::WithoutBraces));
     return query.exec();
 }
 
@@ -148,16 +170,15 @@ void SnapshotDatabase::pruneImage(const QString& key) {
 
 bool SnapshotDatabase::updateSnapshot(const QString& key, const ImageSnapshot& s) {
     QSqlQuery query(connection());
-    query.prepare("UPDATE snapshots SET snapshot_index = ?, timestamp = ?, checksum = ?, "
+    query.prepare("UPDATE snapshots SET timestamp = ?, checksum = ?, "
                   "is_base = ?, file_name = ? "
-                  "WHERE image_key = ? AND snapshot_index = ?");
-    query.addBindValue(s.snapshotIndex);
+                  "WHERE image_key = ? AND uuid = ?");
     query.addBindValue(s.timestamp.toString(Qt::ISODate));
     query.addBindValue(s.checksum);
     query.addBindValue(s.isBase ? 1 : 0);
     query.addBindValue(s.fileName);
     query.addBindValue(key);
-    query.addBindValue(s.snapshotIndex);
+    query.addBindValue(s.uuid.toString(QUuid::WithoutBraces));
     return query.exec();
 }
 

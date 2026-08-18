@@ -1,7 +1,7 @@
 #include <QDebug>
 #include <QFutureWatcher>
-#include <QtConcurrent>
 #include <QPainter>
+#include <QtConcurrent>
 #include "core/thumbnailmanager.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
@@ -24,18 +24,19 @@ QImage ThumbnailManager::getThumbnail(int                           index,
         return QImage();
 
     QString key = SnapshotManager::imageKey(filePath);
-    int     version = isCurrent ? -1 : snapshots[index].snapshotIndex;
+    QUuid   uuid = isCurrent ? QUuid() : snapshots[index].uuid;
+    QString idStr = getIdentityString(uuid);
 
-    QImage thumb = ThumbnailCache::loadThumbnail(key, version, QSize(size, size));
+    QImage thumb = ThumbnailCache::loadThumbnail(key, idStr, QSize(size, size));
     if (!thumb.isNull())
         return thumb;
 
-    QString requestKey = filePath + ":" + QString::number(index);
+    QString requestKey = getRequestKey(filePath, uuid);
     if (m_activeRequests.contains(requestKey)) {
         return QImage();
     }
 
-    enqueueRequest({index, filePath, version, currentImage});
+    enqueueRequest({index, filePath, uuid, currentImage});
     return QImage();
 }
 
@@ -46,13 +47,13 @@ void ThumbnailManager::enqueueRequest(const ThumbnailRequest& request) {
         return;
     }
 
-    QString requestKey = request.filePath + ":" + QString::number(request.index);
+    QString requestKey = getRequestKey(request.filePath, request.uuid);
     if (m_activeRequests.contains(requestKey)) {
         return;
     }
     m_activeRequests.insert(requestKey);
 
-    if (request.snapshotIndex == -1) {
+    if (request.uuid.isNull()) {
         static_cast<QList<ThumbnailRequest>&>(m_queue).prepend(request);
     } else {
         m_queue.enqueue(request);
@@ -79,15 +80,13 @@ void ThumbnailManager::processNext() {
     });
 
     std::function<std::optional<QImage>()> worker;
-    if (request.snapshotIndex == -1) {
+    if (request.uuid.isNull()) {
         worker = [path = request.filePath, img = request.currentImage]() -> std::optional<QImage> {
             return reconstructDiskImage(path, img);
         };
     } else {
-        int snapshotIdx = request.snapshotIndex;
-        worker = [path = request.filePath, snapshotIdx]() {
-            return reconstructThumbnail(path, snapshotIdx);
-        };
+        QUuid uuid = request.uuid;
+        worker = [path = request.filePath, uuid]() { return reconstructThumbnail(path, uuid); };
     }
 
     watcher->setFuture(QtConcurrent::run(ThumbnailThreadPool::instance(), worker));
@@ -98,42 +97,46 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
     auto res = watcher->result();
     if (res && !res->isNull()) {
         const QImage& img = *res;
-        saveThumbnail(request.filePath, request.snapshotIndex, img);
+        saveThumbnail(request.filePath, request.uuid, img);
 
         // Cache in memory
-        QString cacheKey = (request.snapshotIndex == -1)
-                               ? QString("%1:current:%2x%3")
-                                     .arg(SnapshotManager::imageKey(request.filePath))
-                                     .arg(ThumbnailConstants::StorageSize)
-                                     .arg(ThumbnailConstants::StorageSize)
-                               : QString("%1:%2:%3x%4")
-                                     .arg(SnapshotManager::imageKey(request.filePath))
-                                     .arg(request.snapshotIndex)
-                                     .arg(ThumbnailConstants::StorageSize)
-                                     .arg(ThumbnailConstants::StorageSize);
+        QString idStr = getIdentityString(request.uuid);
+        QString cacheKey = QString("%1:%2:%3x%4")
+                               .arg(SnapshotManager::imageKey(request.filePath))
+                               .arg(idStr)
+                               .arg(ThumbnailConstants::StorageSize)
+                               .arg(ThumbnailConstants::StorageSize);
 
         ThumbnailCache::insert(cacheKey, new QImage(img), img.sizeInBytes());
 
-        emit thumbnailGenerated(request.filePath, request.index, img);
+        emit thumbnailGenerated(request.filePath, request.uuid, img);
     }
 
-    QString requestKey = request.filePath + ":" + QString::number(request.index);
+    QString requestKey = getRequestKey(request.filePath, request.uuid);
     m_activeRequests.remove(requestKey);
     watcher->deleteLater();
     processNext();
 }
 
 void ThumbnailManager::saveThumbnail(const QString& filePath,
-                                     int            snapshotIndex,
+                                     const QUuid&   uuid,
                                      const QImage&  image) {
     QString key = SnapshotManager::imageKey(filePath);
     QString sd = SnapshotManager::thumbnailDir() + '/' + key;
     if (!DiskUtils::ensureDir(sd))
         return;
 
-    QString path =
-        sd + '/' + QString::asprintf("v%04d", snapshotIndex) + ThumbnailConstants::Extension;
+    QString idStr = getIdentityString(uuid);
+    QString path = sd + '/' + idStr + ThumbnailConstants::Extension;
     image.save(path, ThumbnailConstants::Format.toUtf8().constData());
+}
+
+QString ThumbnailManager::getIdentityString(const QUuid& uuid) const {
+    return uuid.isNull() ? ThumbnailConstants::CurrentVersion : uuid.toString(QUuid::WithoutBraces);
+}
+
+QString ThumbnailManager::getRequestKey(const QString& filePath, const QUuid& uuid) const {
+    return filePath + ":" + getIdentityString(uuid);
 }
 
 QImage ThumbnailManager::formatThumbnail(const QImage& image, int size) {
@@ -178,20 +181,37 @@ std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path
     return result;
 }
 
-std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path, int snapshotIdx) {
+std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path,
+                                                             const QUuid&   uuid) {
     auto snapList = SnapshotManager::loadSnapshots(path);
 
-    int baseIdx = -1;
-    for (int i = static_cast<int>(snapList.size()) - 1; i >= 0; --i) {
-        if (snapList[i].snapshotIndex <= snapshotIdx && snapList[i].isBase) {
-            baseIdx = i;
+    ImageSnapshot target;
+    bool          found = false;
+    for (const auto& s : snapList) {
+        if (s.uuid == uuid) {
+            target = s;
+            found = true;
             break;
         }
     }
+    if (!found)
+        return std::nullopt;
+
+    // Find the closest preceding base image to determine dimensions
+    int baseIdx = -1;
+    for (int i = 0; i < static_cast<int>(snapList.size()); ++i) {
+        if (snapList[i].isBase) {
+            baseIdx = i;
+        }
+        if (snapList[i].uuid == uuid) {
+            break;
+        }
+    }
+
     if (baseIdx == -1)
         return std::nullopt;
 
-    auto optBase = SnapshotManager::loadBaseImage(path, snapList[baseIdx].snapshotIndex);
+    auto optBase = SnapshotManager::loadBaseImage(path, snapList[baseIdx]);
     if (!optBase)
         return std::nullopt;
 
@@ -200,8 +220,9 @@ std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path
     QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
                                        : QSize(qRound(storageSize * aspect), storageSize);
 
-    QImage result = SnapshotManager::reconstructSnapshot(path, snapshotIdx, targetSize);
+    QImage result = SnapshotManager::reconstructSnapshot(path, uuid, targetSize);
     if (result.isNull())
         return std::nullopt;
+
     return result;
 }

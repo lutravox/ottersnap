@@ -48,10 +48,10 @@ class ViewerState : public QWidget {
         }
     }
 
-    /// @brief Updates the secondary snapshot index in the timeline.
-    void setSecondarySnapshotIndex(int index) {
+    /// @brief Updates the secondary snapshot identity in the timeline.
+    void setSecondarySnapshotId(const QString& id) {
         if (m_snapshotTimeline) {
-            m_snapshotTimeline->setSecondaryIndex(index);
+            m_snapshotTimeline->setSecondaryIdentity(id);
         }
     }
 

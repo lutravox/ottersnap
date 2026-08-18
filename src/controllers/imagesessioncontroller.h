@@ -28,25 +28,30 @@ class ImageSessionController : public QObject {
     /// @brief Return the session associated with the given path.
     ImageSession *sessionForPath(const QString& path) const;
 
-    /// @brief Return a list of all currently open image paths.
-    QStringList openPaths() const;
+    /// @brief Return the currently active session.
+    ImageSession *activeSession() const { return m_activeSession; }
 
     /// @brief Set the currently active session.
     void setActiveSession(ImageSession *session);
 
-    /// @brief Return the currently active session.
-    ImageSession *activeSession() const {
-        return m_activeSession;
-    }
+    /// @brief Return a list of all currently open image paths.
+    QStringList openPaths() const;
 
     /// @brief Check if mirroring is enabled for the active session.
     bool isMirrorEnabled() const {
         return m_activeSession ? m_activeSession->mirrorEnabled() : false;
     }
 
+    /// @brief Notify the controller that snapshots have changed for a given image.
+    void notifySnapshotChanged(const QString& filePath);
+
   signals:
     /// @brief Emitted when the active session changes.
     void activeSessionChanged(ImageSession *session);
+
+    /// @brief Emitted when a session becomes invalid (e.g., all snapshots deleted in snapshot-only
+    /// mode).
+    void sessionInvalidated(const QString& filePath);
 
     /// @brief Emitted when the active session's effects are changed.
     void activeSessionEffectsChanged();
@@ -64,5 +69,5 @@ class ImageSessionController : public QObject {
 
     AppSettingsController        *m_settings;
     QMap<QString, ImageSession *> m_sessions;
-    ImageSession                *m_activeSession = nullptr;
+    ImageSession                 *m_activeSession = nullptr;
 };

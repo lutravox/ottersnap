@@ -1,5 +1,7 @@
 #include "core/snapshottimelinemodel.h"
 
+#include <QUuid>
+
 SnapshotTimelineModel::SnapshotTimelineModel(QObject *parent) : QAbstractListModel(parent) {
 }
 
@@ -20,12 +22,12 @@ QVariant SnapshotTimelineModel::data(const QModelIndex& index, int role) const {
         case LabelRole:
             return m_labels.isEmpty() ? QVariant(QString("v%1").arg(row + 1))
                                       : QVariant(m_labels[row]);
-        case IndexRole:
-            return m_indices[row];
+        case UuidRole:
+            return m_uuids[row];
         case IsNewRole:
-            return m_newSnapshots.contains(m_indices[row]);
+            return m_newSnapshots.contains(m_uuids[row]);
         case IsCurrentImageRole:
-            return m_indices[row] == -1;
+            return m_uuids[row].isNull() || m_uuids[row] == QUuid();
         case Qt::ToolTipRole:
             return m_labels.isEmpty() ? QVariant(QString("v%1").arg(row + 1))
                                       : QVariant(m_labels[row]);
@@ -35,38 +37,38 @@ QVariant SnapshotTimelineModel::data(const QModelIndex& index, int role) const {
 }
 
 void SnapshotTimelineModel::setThumbnails(const QVector<QPixmap>& thumbnails,
-                                  const QVector<QString>& labels,
-                                  const QVector<int>&     indices) {
+                                          const QVector<QString>& labels,
+                                          const QVector<QUuid>&   uuids) {
     beginResetModel();
     m_thumbnails = thumbnails;
     m_labels = labels;
-    m_indices = indices;
+    m_uuids = uuids;
     // If it's snapshot-only, the model should only contain snapshots.
     // If not, the last item is the current image.
     endResetModel();
 }
 
-void SnapshotTimelineModel::markSnapshotAsNew(int snapshotIndex) {
-    if (snapshotIndex == -1)
+void SnapshotTimelineModel::markSnapshotAsNew(const QUuid& uuid) {
+    if (uuid.isNull())
         return;
-    m_newSnapshots.insert(snapshotIndex);
+    m_newSnapshots.insert(uuid);
 
     // Notify view that the item with this index has changed
-    for (int i = 0; i < m_indices.size(); ++i) {
-        if (m_indices[i] == snapshotIndex) {
+    for (int i = 0; i < m_uuids.size(); ++i) {
+        if (m_uuids[i] == uuid) {
             emit dataChanged(index(i), index(i), {IsNewRole});
             break;
         }
     }
 }
 
-void SnapshotTimelineModel::clearNewStatus(int snapshotIndex) {
-    if (snapshotIndex == -1)
+void SnapshotTimelineModel::clearNewStatus(const QUuid& uuid) {
+    if (uuid.isNull())
         return;
-    if (m_newSnapshots.contains(snapshotIndex)) {
-        m_newSnapshots.remove(snapshotIndex);
-        for (int i = 0; i < m_indices.size(); ++i) {
-            if (m_indices[i] == snapshotIndex) {
+    if (m_newSnapshots.contains(uuid)) {
+        m_newSnapshots.remove(uuid);
+        for (int i = 0; i < m_uuids.size(); ++i) {
+            if (m_uuids[i] == uuid) {
                 emit dataChanged(index(i), index(i), {IsNewRole});
                 break;
             }
@@ -80,4 +82,21 @@ void SnapshotTimelineModel::updateThumbnail(int index, const QPixmap& pixmap) {
     m_thumbnails[index] = pixmap;
     QModelIndex modelIndex = this->index(index);
     emit        dataChanged(modelIndex, modelIndex, {ThumbnailRole});
+}
+
+int SnapshotTimelineModel::rowForUuidString(const QString& uuid) const {
+    if (uuid == "current") {
+        return m_uuids.isEmpty() ? -1 : m_uuids.size() - 1;
+    }
+
+    QUuid quuid = QUuid::fromString(uuid);
+    if (quuid.isNull())
+        return -1;
+
+    for (int i = 0; i < m_uuids.size(); ++i) {
+        if (m_uuids[i] == quuid) {
+            return i;
+        }
+    }
+    return -1;
 }

@@ -91,9 +91,9 @@ class SnapshotManagerDialog : public QDialog {
     /**
      * @brief Emitted when a request is made to open a specific snapshot in the viewer.
      * @param path The path to the base image.
-     * @param index The index of the snapshot to open.
+     * @param uuid The identity of the snapshot to open.
      */
-    void openSnapshotRequested(const QString& path, int index);
+    void openSnapshotRequested(const QString& path, const QUuid& uuid);
 
   private slots:
     /**

@@ -132,11 +132,6 @@ void MainWindow::setupUi() {
 
     centralLayout->addWidget(m_contentStack, 1);
 
-    connect(m_viewerState->snapshotTimeline(),
-            &SnapshotTimeline::snapshotSelected,
-            this,
-            &MainWindow::onSnapshotSelected);
-
     m_viewerState->snapshotTimeline()->setController(m_snapshotController);
 
     connect(m_viewerState, &ViewerState::zoomRequested, this, [this](double pct) {
@@ -168,11 +163,6 @@ void MainWindow::setupUi() {
 
     // Link controller signals to main window/viewer
     connect(m_snapshotController,
-            &SnapshotTimelineController::snapshotSelected,
-            this,
-            &MainWindow::onSnapshotSelected);
-
-    connect(m_snapshotController,
             &SnapshotTimelineController::snapshotDeletionRequested,
             this,
             &MainWindow::onSnapshotDeletionRequested);
@@ -186,8 +176,6 @@ void MainWindow::setupUi() {
             &SnapshotTimelineController::secondarySnapshotSelected,
             m_viewerController,
             &ViewerController::setSecondarySnapshot);
-
-    // Controllers
     auto *uiAdapter = new EffectsUIAdapter(m_actionGrayscale, m_actionMirror);
     m_effectsController->setup(m_viewerState->viewer());
     m_effectsController->addUI(uiAdapter);
@@ -204,6 +192,11 @@ void MainWindow::setupUi() {
     m_notificationManager = new NotificationManager(this);
 
     // Connections
+    connect(m_sessionController,
+            &ImageSessionController::sessionInvalidated,
+            this,
+            &MainWindow::onSessionInvalidated);
+
     connect(m_viewerState->viewer(),
             &VkImageViewer::resetViewRequested,
             this,
@@ -254,7 +247,7 @@ void MainWindow::setupUi() {
     connect(m_viewerController,
             &ViewerController::secondarySnapshotChanged,
             m_viewerState,
-            &ViewerState::setSecondarySnapshotIndex);
+            &ViewerState::setSecondarySnapshotId);
 
     connect(m_viewerController,
             &ViewerController::secondarySnapshotChanged,
@@ -265,6 +258,13 @@ void MainWindow::setupUi() {
             &ViewerController::secondarySnapshotChanged,
             this,
             &MainWindow::updateMenuBar);
+
+    connect(m_viewerController,
+            &ViewerController::stateChanged,
+            m_viewerState->toolbar(),
+            &ViewerToolbar::updateToolStates);
+
+    connect(m_viewerController, &ViewerController::stateChanged, this, &MainWindow::updateMenuBar);
 
     // Register shortcuts for toolbar tools
     if (m_viewerState && m_viewerState->toolbar()) {
@@ -303,28 +303,14 @@ void MainWindow::setupMenu() {
 
     m_fileMenu->addSeparator();
 
-    m_actionSaveSnapshot = m_fileMenu->addAction(tr("&Save Snapshot of Current"));
-    m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
-    connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
-
     m_actionExportSnapshot = m_fileMenu->addAction(tr("&Export Snapshot As..."));
     connect(m_actionExportSnapshot, &QAction::triggered, this, &MainWindow::onExportSnapshot);
 
-    m_actionDeleteSnapshot = m_fileMenu->addAction(tr("&Delete Selected Snapshot"));
-    m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-    connect(m_actionDeleteSnapshot,
-            &QAction::triggered,
-            this,
-            &MainWindow::onDeleteCurrentSnapshotRequested);
+    m_actionExportHistory = m_fileMenu->addAction(tr("&Export History..."));
+    connect(m_actionExportHistory, &QAction::triggered, this, &MainWindow::onExportHistory);
 
-    m_actionDeleteAllSnapshots = m_fileMenu->addAction(tr("Delete &All Snapshots"));
-    connect(m_actionDeleteAllSnapshots,
-            &QAction::triggered,
-            this,
-            &MainWindow::onDeleteAllSnapshotsRequested);
-
-    m_actionManageSnapshots = m_fileMenu->addAction(tr("Manage Snapshots..."));
-    connect(m_actionManageSnapshots, &QAction::triggered, this, &MainWindow::onManageSnapshots);
+    m_actionImportHistory = m_fileMenu->addAction(tr("&Import History..."));
+    connect(m_actionImportHistory, &QAction::triggered, this, &MainWindow::onImportHistory);
 
     m_fileMenu->addSeparator();
 
@@ -342,6 +328,32 @@ void MainWindow::setupMenu() {
     connect(m_actionExit, &QAction::triggered, this, &QWidget::close);
 
     m_editMenu = menuBar()->addMenu(tr("&Edit"));
+    m_actionSaveSnapshot = m_editMenu->addAction(tr("&Create Snapshot"));
+    m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
+    connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
+
+    m_editMenu->addSeparator();
+
+    m_actionDeleteSnapshot = m_editMenu->addAction(tr("&Delete Selected Snapshot"));
+    m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    connect(m_actionDeleteSnapshot,
+            &QAction::triggered,
+            this,
+            &MainWindow::onDeleteCurrentSnapshotRequested);
+
+    m_actionDeleteAllSnapshots = m_editMenu->addAction(tr("Delete &All Snapshots"));
+    connect(m_actionDeleteAllSnapshots,
+            &QAction::triggered,
+            this,
+            &MainWindow::onDeleteAllSnapshotsRequested);
+
+    m_editMenu->addSeparator();
+
+    m_actionManageSnapshots = m_editMenu->addAction(tr("Manage Snapshots..."));
+    connect(m_actionManageSnapshots, &QAction::triggered, this, &MainWindow::onManageSnapshots);
+
+    m_editMenu->addSeparator();
+
     m_actionSettings = m_editMenu->addAction(tr("&Settings"));
     connect(m_actionSettings, &QAction::triggered, this, &MainWindow::onSettings);
 
@@ -430,10 +442,16 @@ void MainWindow::updateMenuBar() {
         // Disable "Save Snapshot of Current" if in Snapshot Only mode
         m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
         m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
+        m_actionExportHistory->setEnabled(!snapshots.isEmpty());
+        m_actionImportHistory->setEnabled(true);
+        m_actionManageSnapshots->setEnabled(true);
     } else {
         m_actionDeleteSnapshot->setEnabled(false);
         m_actionSaveSnapshot->setEnabled(false);
         m_actionDeleteAllSnapshots->setEnabled(false);
+        m_actionExportHistory->setEnabled(false);
+        m_actionImportHistory->setEnabled(false);
+        m_actionManageSnapshots->setEnabled(true);
     }
 
     m_actionToggleToolbar->setChecked(m_viewerController->isToolbarVisible());
@@ -441,7 +459,10 @@ void MainWindow::updateMenuBar() {
     switch (m_currentState) {
         case ContentState::Empty:
             m_actionSaveSnapshot->setVisible(false);
+            m_actionExportHistory->setVisible(false);
+            m_actionImportHistory->setVisible(false);
             m_actionDeleteSnapshot->setVisible(false);
+            m_actionDeleteAllSnapshots->setVisible(false);
             m_actionCloseTab->setVisible(false);
             m_actionCloseAllTabs->setVisible(false);
             m_actionScaleWithWindow->setVisible(false);
@@ -456,7 +477,10 @@ void MainWindow::updateMenuBar() {
 
         case ContentState::Viewer:
             m_actionSaveSnapshot->setVisible(true);
+            m_actionExportHistory->setVisible(true);
+            m_actionImportHistory->setVisible(true);
             m_actionDeleteSnapshot->setVisible(true);
+            m_actionDeleteAllSnapshots->setVisible(true);
             m_actionCloseTab->setVisible(true);
             m_actionCloseAllTabs->setVisible(true);
             m_actionScaleWithWindow->setVisible(true);
@@ -590,13 +614,63 @@ void MainWindow::onToggleFullScreen() {
     }
 }
 
+void MainWindow::onExportHistory() {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    QString baseName = QFileInfo(tab->filePath()).baseName();
+    QString suggestedName = QString("%1_history.zip").arg(baseName);
+
+    QString path = QFileDialog::getSaveFileName(
+        this, tr("Export Snapshot History"), suggestedName, tr("Snapshot History (*.zip)"));
+    if (path.isEmpty())
+        return;
+
+    if (SnapshotManager::exportHistory(tab->filePath(), path)) {
+        notify(tr("Snapshot history exported successfully."));
+    } else {
+        notify(tr("Failed to export snapshot history."));
+    }
+}
+
+void MainWindow::onImportHistory() {
+    auto *tab = currentTab();
+    if (!tab) {
+        notify(tr("No image open to import history for."));
+        return;
+    }
+
+    QString path = QFileDialog::getOpenFileName(
+        this, tr("Import Snapshot History"), "", tr("Snapshot History (*.zip)"));
+    if (path.isEmpty())
+        return;
+
+    int duplicates = 0;
+    if (SnapshotManager::importHistory(tab->filePath(), path, &duplicates)) {
+        QString msg = tr("Snapshot history imported successfully.");
+        if (duplicates > 0) {
+            QString dupMsg = (duplicates == 1)
+                ? tr("%1 duplicate snapshot was skipped.").arg(duplicates)
+                : tr("%1 duplicate snapshots were skipped.").arg(duplicates);
+            msg += " " + dupMsg;
+        }
+        notify(msg);
+        tab->session()->rebuildSnapshotList();
+        updateSnapshotTimeline();
+        updateViewer();
+    } else {
+        notify(tr("Failed to import snapshot history."));
+    }
+}
+
 void MainWindow::onExportSnapshot() {
     auto *tab = currentTab();
     if (!tab)
         return;
 
     QString baseName = QFileInfo(tab->filePath()).baseName();
-    int snapshotIdx = tab->session()->currentSnapshotIndex();
+    int     snapshotIdx = tab->session()->currentSnapshotIndex();
     QString suggestedName;
     if (snapshotIdx >= 0) {
         suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(snapshotIdx + 1);
@@ -621,8 +695,7 @@ void MainWindow::onExportSnapshot() {
     if (snapshotIdx >= 0) {
         params.isSnapshot = true;
         auto session = tab->session();
-        params.seq =
-            session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;
+        params.seq = session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;
         if (!params.seq) {
             notify(tr("Failed to export snapshot."));
             qDebug() << "[MainWindow] Failed to retrieve reconstruction sequence for export.";
@@ -678,7 +751,12 @@ void MainWindow::onDeleteCurrentSnapshotRequested() {
         return;
     }
 
-    onSnapshotDeletionRequested(index);
+    // Convert index to UUID
+    const auto& snapshots = tab->session()->snapshots();
+    if (index < 0 || index >= static_cast<int>(snapshots.size()))
+        return;
+
+    onSnapshotDeletionRequested(snapshots[index].uuid);
 }
 
 void MainWindow::setupTabConnections(ImageTab *tab) {
@@ -699,9 +777,9 @@ void MainWindow::setupTabConnections(ImageTab *tab) {
     });
     connect(tab, &ImageTab::snapshotsChanged, this, &MainWindow::syncTimelineSelection);
     connect(tab, &ImageTab::snapshotChanged, this, &MainWindow::onSnapshotChanged);
-    connect(tab, &ImageTab::snapshotCreated, this, [this, tab](int snapshotIdx) {
+    connect(tab, &ImageTab::snapshotCreated, this, [this, tab](const QUuid& uuid) {
         if (tab == currentTab()) {
-            m_snapshotController->clearNewStatus(snapshotIdx);
+            m_snapshotController->markSnapshotAsNew(uuid);
         }
     });
 
@@ -771,7 +849,8 @@ void MainWindow::onCloseTab(int index) {
     updateState();
     auto *nextTab = currentTab();
     if (nextTab) {
-        m_viewerController->requestSessionChange(nextTab->session(), nextTab->session()->currentSnapshotIndex());
+        m_viewerController->requestSessionChange(nextTab->session(),
+                                                 nextTab->session()->currentSnapshotIndex());
         updateViewer(nextTab);
     } else {
         m_viewerController->requestSessionChange(nullptr, -1);
@@ -795,10 +874,12 @@ void MainWindow::onTabChanged(int index) {
 
     auto *tab = qobject_cast<ImageTab *>(m_tabBar->widget(index));
     if (tab) {
-        m_viewerController->requestSessionChange(tab->session(), tab->session()->currentSnapshotIndex());
+        m_viewerController->requestSessionChange(tab->session(),
+                                                 tab->session()->currentSnapshotIndex());
         updateViewer(tab);
         updateState();
         updateMenuBar();
+        updateSnapshotTimeline();
     }
 
     setTabThumbnail(index);
@@ -864,6 +945,7 @@ void MainWindow::updateSnapshotTimeline() {
 
     m_snapshotController->updateModel();
     m_snapshotController->selectSnapshot(tab->session()->currentSnapshotIndex());
+    m_viewerState->setSecondarySnapshotId(tab->session()->secondarySnapshotId());
     m_viewerState->snapshotTimeline()->setCreateButtonEnabled(!tab->session()->isSnapshotOnly());
     m_viewerState->setSnapshotOnlyIndicator(tab->session()->isSnapshotOnly());
 }
@@ -915,44 +997,34 @@ void MainWindow::onManageSnapshots() {
     SnapshotManagerDialog dialog(this);
     connect(
         &dialog, &SnapshotManagerDialog::snapshotChanged, this, [this](const QString& imagePath) {
-            QVector<ImageTab *> tabsToClose;
-            for (auto *tab : m_tabPaths.values()) {
-                if (tab->session()->filePath() == imagePath) {
-                    tab->session()->rebuildSnapshotList();
-
-                    // If it's a snapshot-only session and all snapshots were deleted, mark for
-                    // closure
-                    if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
-                        tabsToClose.append(tab);
-                    }
-                }
-            }
-
-            for (auto *tab : tabsToClose) {
-                int idx = m_tabBar->indexOf(tab);
-                if (idx != -1) {
-                    onCloseTab(idx);
-                }
-            }
-
+            m_sessionController->notifySnapshotChanged(imagePath);
             updateSnapshotTimeline();
         });
     connect(&dialog,
             &SnapshotManagerDialog::openSnapshotRequested,
             this,
-            [this, &dialog](const QString& path, int index) {
-                onOpenSnapshotRequested(path, index);
+            [this, &dialog](const QString& path, const QUuid& uuid) {
+                onOpenSnapshotRequested(path, uuid);
                 dialog.accept();
             });
     dialog.exec();
 }
 
-void MainWindow::onOpenSnapshotRequested(const QString& path, int index) {
+void MainWindow::onSessionInvalidated(const QString& filePath) {
+    if (auto *tab = m_tabPaths.value(filePath)) {
+        int index = m_tabBar->indexOf(tab);
+        if (index != -1) {
+            onCloseTab(index);
+        }
+    }
+}
+
+void MainWindow::onOpenSnapshotRequested(const QString& path, const QUuid& uuid) {
     if (m_tabPaths.contains(path)) {
         ImageTab *tab = m_tabPaths.value(path);
-        tab->session()->selectSnapshot(index);
+        tab->session()->selectSnapshot(uuid);
         m_tabBar->setCurrentWidget(tab);
-        m_viewerController->requestSessionChange(tab->session(), index);
+        m_viewerController->requestSessionChange(tab->session(), uuid);
         updateViewer(tab);
         m_viewerController->fitToWindow();
         return;
@@ -962,8 +1034,8 @@ void MainWindow::onOpenSnapshotRequested(const QString& path, int index) {
     if (!tab)
         return;
 
-    tab->session()->selectSnapshot(index);
-    m_viewerController->requestSessionChange(tab->session(), index);
+    tab->session()->selectSnapshot(uuid);
+    m_viewerController->requestSessionChange(tab->session(), uuid);
     updateViewer(tab);
     m_viewerController->fitToWindow();
 }
@@ -981,8 +1053,6 @@ void MainWindow::updateViewer(ImageTab *tab) {
         return;
     }
 
-    int snapshotIdx = tab->session()->currentSnapshotIndex();
-    
     m_effectsController->setTargetState(tab->session());
     QSize dims = tab->session()->dimensions();
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
@@ -1009,27 +1079,14 @@ void MainWindow::updateState() {
     }
 }
 
-void MainWindow::onSnapshotSelected(int index) {
+void MainWindow::onSnapshotDeletionRequested(const QUuid& uuid) {
     auto *tab = currentTab();
     if (!tab)
         return;
 
-    tab->selectSnapshot(index);
-
-    updateMenuBar();
-}
-
-void MainWindow::onSnapshotDeletionRequested(int index) {
-    auto *tab = currentTab();
-    if (!tab)
-        return;
-
-    if (DialogUtils::confirm(this,
-                             tr("Delete Snapshot"),
-                             tr("Delete snapshot %1?").arg(index + 1),
-                             tr("Delete"),
-                             tr("Cancel"))) {
-        tab->deleteSnapshot(index);
+    if (DialogUtils::confirm(
+            this, tr("Delete Snapshot"), tr("Delete snapshot?"), tr("Delete"), tr("Cancel"))) {
+        tab->deleteSnapshot(uuid);
         updateSnapshotTimeline();
         updateViewer();
 

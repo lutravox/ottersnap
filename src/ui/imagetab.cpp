@@ -15,8 +15,8 @@ ImageTab::ImageTab(QWidget *parent, ImageSession *session) : QWidget(parent), m_
     connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
     connect(m_session, &ImageSession::thumbnailChanged, this, &ImageTab::onThumbnailChanged);
-    connect(m_session, &ImageSession::snapshotCreated, this, [this](int idx) {
-        emit snapshotCreated(idx);
+    connect(m_session, &ImageSession::snapshotCreated, this, [this](const QUuid& uuid) {
+        emit snapshotCreated(uuid);
     });
     connect(&m_thumbnailUpdateTimer, &QTimer::timeout, this, &ImageTab::onThumbnailTimerTimeout);
 
@@ -87,8 +87,8 @@ void ImageTab::saveSnapshot() {
     m_session->saveSnapshot();
 }
 
-void ImageTab::deleteSnapshot(int index) {
-    m_session->deleteSnapshot(index);
+void ImageTab::deleteSnapshot(const QUuid& uuid) {
+    m_session->deleteSnapshot(uuid);
 }
 
 void ImageTab::deleteAllSnapshots() {

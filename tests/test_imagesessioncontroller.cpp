@@ -5,6 +5,7 @@
 #include "controllers/appsettingscontroller.h"
 #include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
+#include "core/snapshotdb.h"
 #include "core/snapshotmanager.h"
 
 class TestImageSessionController : public QObject {
@@ -14,9 +15,20 @@ class TestImageSessionController : public QObject {
     AppSettingsController  *m_settings;
     ImageSessionController *m_controller;
     QTemporaryFile         *m_tempFile;
+    QTemporaryFile         *m_tempDbFile;
     QString                 m_testFilePath;
 
   private slots:
+    void initTestCase() {
+        // Use a unique temporary database for this test case to avoid collisions with other tests.
+        QString tempDb = QDir::tempPath() + "/test_imagesessioncontroller_" +
+                         QString::number(QRandomGenerator::global()->generate()) + ".db";
+        SnapshotDatabase::instance().init(tempDb);
+    }
+
+    void cleanupTestCase() {
+    }
+
     void init() {
         m_settings = new AppSettingsController();
         m_controller = new ImageSessionController(m_settings);

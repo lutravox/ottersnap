@@ -9,6 +9,8 @@ set(CMAKE_AUTORCC ON)
 
 # Qt6:
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql ShaderTools QuickWidgets)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBZIP REQUIRED libzip)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 
@@ -152,7 +154,7 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets)
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets ${LIBZIP_LIBRARIES})
 
 add_executable(${PROJECT_NAME}
 

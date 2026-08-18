@@ -55,6 +55,14 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
     m_imageChangedConnection = QObject::connect(
         session, &ImageSession::imageChanged, this, &ViewerController::onSessionImageChanged);
 
+    // Connect to secondarySnapshotChanged to handle secondary selection resets
+    QObject::disconnect(m_secondaryChangedConnection);
+    m_secondaryChangedConnection = QObject::connect(
+        session, &ImageSession::secondarySnapshotChanged, this, [this](const QString& id) {
+            emit secondarySnapshotChanged(id);
+            emit stateChanged();
+        });
+
     if (session && m_viewer) {
         // Ensure the session is initialized with Vulkan handles before using its reconstructor
         session->setUIReconstructorHandles(VulkanContext::instance().getUIHandles());
@@ -69,7 +77,7 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
 
     syncSessionToViewer();
 
-    emit secondarySnapshotChanged(session->secondarySnapshotIndex());
+    emit secondarySnapshotChanged(session->secondarySnapshotId());
 }
 
 void ViewerController::onSessionImageChanged() {
@@ -82,6 +90,9 @@ void ViewerController::onSessionImageChanged() {
     } else if (auto seq = session->getReconstructionSequence()) {
         m_viewer->reconstruct(*seq);
     }
+
+    syncSessionToViewer();
+    emit stateChanged();
 }
 
 void ViewerController::setViewer(IViewer *viewer) {
@@ -104,13 +115,30 @@ void ViewerController::setViewer(IViewer *viewer) {
 }
 
 void ViewerController::requestSessionChange(ImageSession *session, int index) {
-    // Check if we are already viewing this session and snapshot
-    ImageSession *currentSession = m_sessionController ? m_sessionController->activeSession() : nullptr;
-    int currentIdx = currentSession ? currentSession->currentSnapshotIndex() : -1;
-
-    if (session == currentSession && index == currentIdx) {
-        return; // No change needed
+    QString uuid;
+    if (!session) {
+        uuid = "";
+    } else if (index == session->currentSnapshotIndex()) {
+        uuid = session->currentUuid();
+    } else if (index == static_cast<int>(session->snapshots().size()) &&
+               !session->isSnapshotOnly()) {
+        uuid = ImageSession::c_currentId;
+    } else if (index >= 0 && index < static_cast<int>(session->snapshots().size())) {
+        uuid = session->snapshots()[index].uuid.toString(QUuid::WithoutBraces);
+    } else {
+        uuid = "";
     }
+
+    requestSessionChange(session, uuid);
+}
+
+void ViewerController::requestSessionChange(ImageSession *session, const QUuid& uuid) {
+    requestSessionChange(session, uuid.toString(QUuid::WithoutBraces));
+}
+
+void ViewerController::requestSessionChange(ImageSession *session, const QString& uuid) {
+    ImageSession *currentSession =
+        m_sessionController ? m_sessionController->activeSession() : nullptr;
 
     if (session != currentSession) {
         if (m_viewer) {
@@ -121,11 +149,8 @@ void ViewerController::requestSessionChange(ImageSession *session, int index) {
         }
     }
 
-    // If the session is now active, we might need to trigger a refresh if the index changed
-    // or if it was just set for the first time.
     if (session && m_viewer) {
-        // We use the session's index to ensure we are loading the requested version
-        session->selectSnapshot(index);
+        session->selectSnapshot(uuid);
         onSessionImageChanged();
     }
 
@@ -198,17 +223,20 @@ bool ViewerController::isPickingEnabled() const {
     return m_pickingEnabled;
 }
 
-void ViewerController::setSecondarySnapshot(int index) {
+void ViewerController::setSecondarySnapshot(const QString& id) {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
     if (session) {
-        session->setSecondarySnapshotIndex(index);
+        session->setSecondarySnapshotId(id);
     }
-    emit secondarySnapshotChanged(index);
+    emit secondarySnapshotChanged(id);
+    emit stateChanged();
 }
 
-int ViewerController::secondarySnapshotIndex() const {
+QString ViewerController::secondarySnapshotId() const {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
-    return session ? session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
+    if (!session)
+        return QString();
+    return session->secondarySnapshotId();
 }
 
 bool ViewerController::canSwap() const {
@@ -216,21 +244,10 @@ bool ViewerController::canSwap() const {
     if (!session)
         return false;
 
-    int secondary = session->secondarySnapshotIndex();
-    if (secondary == ImageSession::SecondaryNone)
-        return false;
+    QString primaryId = session->currentUuid();
+    QString secondaryId = secondarySnapshotId();
 
-    int         primaryRow = session->currentSnapshotIndex();
-    int         primaryDbId = -1;
-    const auto& snapshots = session->snapshots();
-
-    if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
-        primaryDbId = snapshots[primaryRow].snapshotIndex;
-    } else if (primaryRow == static_cast<int>(snapshots.size()) && !session->isSnapshotOnly()) {
-        primaryDbId = ImageSession::SecondaryCurrent;
-    }
-
-    return primaryDbId != secondary;
+    return !primaryId.isEmpty() && !secondaryId.isEmpty() && primaryId != secondaryId;
 }
 
 void ViewerController::swapPrimaryAndSecondary() {
@@ -238,45 +255,22 @@ void ViewerController::swapPrimaryAndSecondary() {
     if (!session)
         return;
 
-    int primaryRow = session->currentSnapshotIndex();
-    int secondaryDbId = session->secondarySnapshotIndex();
+    QString primaryId = session->currentUuid();
+    QString secondaryId = secondarySnapshotId();
 
-    if (secondaryDbId == ImageSession::SecondaryNone)
+    if (secondaryId.isEmpty())
         return; // No secondary snapshot selected
 
-    if (secondaryDbId == ImageSession::SecondaryCurrent && session->isSnapshotOnly())
-        return; // Secondary cannot be 'current' in snapshot-only mode
-
-    // Determine the row of the secondary snapshot
-    int secondaryRow = -1;
-    if (secondaryDbId == ImageSession::SecondaryCurrent) {
-        // Secondary is the current disk image
-        secondaryRow = static_cast<int>(session->snapshots().size());
-    } else {
-        int relVer = session->getRelativeVersion(secondaryDbId);
-        if (relVer != -1) {
-            secondaryRow = relVer - 1;
-        }
-    }
-
-    if (secondaryRow < 0 || secondaryRow > session->maxValidIndex())
+    if (primaryId == secondaryId)
         return;
 
-    // Determine the database ID of the current primary
-    int         primaryDbId = -1;
-    const auto& snapshots = session->snapshots();
-    if (primaryRow >= 0 && primaryRow < static_cast<int>(snapshots.size())) {
-        primaryDbId = snapshots[primaryRow].snapshotIndex;
-    } else if (primaryRow == static_cast<int>(snapshots.size()) && !session->isSnapshotOnly()) {
-        primaryDbId = -1; // Primary is the current image
-    }
-
     // Perform swap
-    session->selectSnapshot(secondaryRow);
-    session->setSecondarySnapshotIndex(primaryDbId);
+    session->selectSnapshot(secondaryId);
+    session->setSecondarySnapshotId(primaryId);
 
-    emit secondarySnapshotChanged(primaryDbId);
+    emit secondarySnapshotChanged(primaryId);
     syncSessionToViewer();
+    emit stateChanged();
 }
 
 void ViewerController::handleViewportResize(int width, int height) {

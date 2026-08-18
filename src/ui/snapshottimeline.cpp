@@ -1,4 +1,5 @@
 #include "ui/snapshottimeline.h"
+#include "core/imagesession.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -14,10 +15,6 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QWheelEvent>
-
-#include "core/imagesession.h"
-
-constexpr int c_thumbnailSize = 48;
 
 SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_delegate = new SnapshotTimelineDelegate(this);
@@ -123,27 +120,23 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
         } else if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *me = static_cast<QMouseEvent *>(event);
 
-            // 1. Clear "new" status immediately on any left-click press to remove the highlight
             // border
             if (me->button() == Qt::LeftButton) {
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
-                    int snapshotIdx = m_controller->model()
-                                          ->data(index, SnapshotTimelineModel::IndexRole)
-                                          .toInt();
-                    m_controller->model()->clearNewStatus(snapshotIdx);
+                    QUuid uuid = uuidAt(index);
+                    m_controller->model()->clearNewStatus(uuid);
                     m_listView->viewport()->update();
                 }
             } else if (me->button() == Qt::MiddleButton) {
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
-                    int snapshotIdx = m_controller->model()
-                                          ->data(index, SnapshotTimelineModel::IndexRole)
-                                          .toInt();
-                    if (snapshotIdx == m_controller->secondarySnapshotDbId()) {
-                        emit secondarySnapshotSelected(ImageSession::SecondaryNone);
+                    QUuid uuid = uuidAt(index);
+                    QString id = uuid.isNull() ? ImageSession::c_currentId : uuid.toString(QUuid::WithoutBraces);
+                    if (id == m_controller->secondarySnapshotId()) {
+                        emit secondarySnapshotSelected(QString());
                     } else {
-                        emit secondarySnapshotSelected(snapshotIdx);
+                        emit secondarySnapshotSelected(id);
                     }
                 }
             }
@@ -151,30 +144,30 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
             if (me->button() == Qt::RightButton) {
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
-                    int row = index.row();
-                    int snapshotIdx = m_controller->model()
-                                          ->data(index, SnapshotTimelineModel::IndexRole)
-                                          .toInt();
+                    int   row = index.row();
+                    QUuid uuid = uuidAt(index);
+                    QString id = uuid.isNull() ? ImageSession::c_currentId : uuid.toString(QUuid::WithoutBraces);
 
                     QMenu menu(this);
 
-                    QAction *secAct =
-                        menu.addAction(snapshotIdx == m_controller->secondarySnapshotDbId()
-                                           ? tr("Deselect Comparison Snapshot")
-                                           : tr("Set as Comparison Snapshot"));
-                    connect(secAct, &QAction::triggered, this, [this, snapshotIdx]() {
-                        if (snapshotIdx == m_controller->secondarySnapshotDbId()) {
-                            emit secondarySnapshotSelected(ImageSession::SecondaryNone);
+                    QAction *secAct = menu.addAction(id == m_controller->secondarySnapshotId()
+                                                         ? tr("Deselect Comparison Snapshot")
+                                                         : tr("Set as Comparison Snapshot"));
+                    connect(secAct, &QAction::triggered, this, [this, id]() {
+                        if (id == m_controller->secondarySnapshotId()) {
+                            emit secondarySnapshotSelected(QString());
                         } else {
-                            emit secondarySnapshotSelected(snapshotIdx);
+                            emit secondarySnapshotSelected(id);
                         }
                     });
 
-                    if (snapshotIdx != -1) {
+                    if (!uuid.isNull()) {
                         menu.addSeparator();
                         QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
                         connect(deleteAct, &QAction::triggered, this, [this, row]() {
-                            emit snapshotDeletionRequested(row);
+                            QModelIndex index = m_controller->model()->index(row);
+                            QUuid       uuid = uuidAt(index);
+                            emit        snapshotDeletionRequested(uuid);
                         });
                     }
 
@@ -219,12 +212,22 @@ void SnapshotTimeline::setController(SnapshotTimelineController *controller) {
     }
 }
 
+QUuid SnapshotTimeline::uuidAt(const QModelIndex& index) const {
+    if (!index.isValid() || !m_controller)
+        return QUuid();
+
+    return m_controller->model()->data(index, SnapshotTimelineModel::UuidRole).value<QUuid>();
+}
+
 void SnapshotTimeline::setCreateButtonEnabled(bool enabled) {
     m_createButton->setEnabled(enabled);
 }
 
-void SnapshotTimeline::setSecondaryIndex(int dbId) {
-    int row = m_controller ? m_controller->rowForDbId(dbId) : -1;
+void SnapshotTimeline::setSecondaryIdentity(const QString& id) {
+    int row = -1;
+    if (m_controller && !id.isEmpty()) {
+        row = m_controller->model()->rowForUuidString(id);
+    }
 
     if (m_delegate) {
         m_delegate->setSecondaryIndex(row);
@@ -243,8 +246,6 @@ void SnapshotTimeline::updateSelection(int newIndex) {
         m_listView->setCurrentIndex(m_controller->model()->index(newIndex));
     }
 
-    // Force a viewport update to clear any painting artifacts (e.g., the "new" highlight
-    // border)
     m_listView->viewport()->update();
 }
 
@@ -253,7 +254,7 @@ void SnapshotTimeline::resizeEvent(QResizeEvent *event) {
     // Position button so part of it extends past the right edge (clipped)
 
     int btnH = m_createButton->height();
-    int x = m_stripContainer->width() - 23; // crop ~27px of the right edge
+    int x = m_stripContainer->width() - c_clipAmount;
     int y = (m_stripContainer->height() - btnH) / 2;
 
     m_createButton->move(x, y);

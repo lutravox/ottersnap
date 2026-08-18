@@ -106,3 +106,19 @@ ImageSession *ImageSessionController::sessionForPath(const QString& path) const 
 QStringList ImageSessionController::openPaths() const {
     return m_sessions.keys();
 }
+
+void ImageSessionController::notifySnapshotChanged(const QString& filePath) {
+    ImageSession *session = sessionForPath(filePath);
+    if (!session)
+        return;
+
+    session->rebuildSnapshotList();
+
+    if (session->isSnapshotOnly() && session->snapshots().isEmpty()) {
+        emit sessionInvalidated(filePath);
+    }
+
+    if (m_activeSession == session) {
+        emit activeSessionSnapshotsChanged();
+    }
+}

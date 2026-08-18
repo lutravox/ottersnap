@@ -8,6 +8,7 @@
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
 #include "core/snapshotmanager.h"
+#include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
 #include "ui/imagetab.h"
 #include "ui/mainwindow.h"
@@ -50,6 +51,11 @@ class TestMainWindow : public QObject {
 
   private slots:
     void init() {
+        // Use a unique temporary database for this test case to avoid collisions with other tests.
+        QString tempDb = QDir::tempPath() + "/test_mainwindow_" +
+                         QString::number(QRandomGenerator::global()->generate()) + ".db";
+        SnapshotDatabase::instance().init(tempDb);
+
         m_window = new MainWindowTestWrapper();
 
         // Initialize Vulkan for snapshot reconstruction

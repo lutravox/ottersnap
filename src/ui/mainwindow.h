@@ -50,7 +50,8 @@ class MainWindow : public QMainWindow {
   private slots:
     void onFileOpen();
     void onManageSnapshots();
-    void onOpenSnapshotRequested(const QString& path, int index);
+    void onSessionInvalidated(const QString& filePath);
+    void onOpenSnapshotRequested(const QString& path, const QUuid& uuid);
     void onSaveSnapshot();
     void onDeleteCurrentSnapshotRequested();
     void onCloseTab(int index);
@@ -63,6 +64,8 @@ class MainWindow : public QMainWindow {
     void onActualSize();
     void onToggleFullScreen();
     void onExportSnapshot();
+    void onExportHistory();
+    void onImportHistory();
     void onResetEffects();
     void onSettings();
     void onToggleToolbar();
@@ -72,8 +75,7 @@ class MainWindow : public QMainWindow {
     void onColorInfoToggled(bool checked);
     void onSessionColorClustersChanged();
     void onTabChanged(int index);
-    void onSnapshotSelected(int index);
-    void onSnapshotDeletionRequested(int index);
+    void onSnapshotDeletionRequested(const QUuid& uuid);
     void onDeleteAllSnapshotsRequested();
 
   private:
@@ -129,6 +131,8 @@ class MainWindow : public QMainWindow {
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
     QAction *m_actionExportSnapshot;
+    QAction *m_actionExportHistory;
+    QAction *m_actionImportHistory;
     QAction *m_actionDeleteSnapshot;
     QAction *m_actionDeleteAllSnapshots;
     QAction *m_actionCloseTab;

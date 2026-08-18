@@ -45,7 +45,7 @@ class ImageTab : public QWidget {
     void saveSnapshot();
 
     /// @brief Delete a specific snapshot.
-    void deleteSnapshot(int index);
+    void deleteSnapshot(const QUuid& uuid);
 
     /// @brief Delete all snapshots associated with this image.
     void deleteAllSnapshots();
@@ -66,8 +66,8 @@ class ImageTab : public QWidget {
     void snapshotChanged(int index);
 
     /// @brief Emitted when a new snapshot is created.
-    /// @param snapshotIndex The unique index of the new snapshot.
-    void snapshotCreated(int snapshotIndex);
+    /// @param uuid The unique identity of the new snapshot.
+    void snapshotCreated(const QUuid& uuid);
 
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();

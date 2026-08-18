@@ -20,9 +20,9 @@
 class ImageSession : public QObject, public IEffectsState {
     Q_OBJECT
   public:
-    static constexpr int SecondaryNone = -2;
-    static constexpr int SecondaryCurrent = -1;
     static constexpr int MaxClusterCacheSize = 50;
+    static inline const QString c_currentId = "current";
+    static inline const QString c_secondaryNoneId = "";
 
     explicit ImageSession(QObject *parent = nullptr);
     ~ImageSession();
@@ -72,17 +72,21 @@ class ImageSession : public QObject, public IEffectsState {
 
     /// @brief Select a snapshot by index.
     void selectSnapshot(int index);
+    /// @brief Select a snapshot by its UUID.
+    void selectSnapshot(const QUuid& uuid);
+    /// @brief Select a snapshot by its identity string.
+    void selectSnapshot(const QString& uuid);
     /// @brief Manually trigger a snapshot of the current image on disk.
     void saveSnapshot();
 
-    /// @brief Delete a snapshot by its index.
-    void deleteSnapshot(int index);
+    /// @brief Delete a snapshot by its UUID.
+    void deleteSnapshot(const QUuid& uuid);
 
     /// @brief Generate and cache a thumbnail for a specific snapshot.
     QImage generateThumbnail(int index, int size, bool padded = true);
 
     /// @brief Retrieve thumbnails for all available snapshots and the current image.
-    std::tuple<QVector<QImage>, QVector<QString>, QVector<int>>
+    std::tuple<QVector<QImage>, QVector<QString>, QVector<QUuid>>
     snapshotTimelineThumbnails(int size);
 
     /// @brief Generate and cache a thumbnail for the currently selected image.
@@ -94,20 +98,32 @@ class ImageSession : public QObject, public IEffectsState {
     QString filePath() const {
         return m_filePath;
     }
+    QString currentUuid() const {
+        return m_currentUuid;
+    }
+
     int currentSnapshotIndex() const {
-        return m_selectedIndex;
+        if (m_currentUuid == c_currentId) {
+            return static_cast<int>(m_snapshots.size());
+        }
+        for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+            if (m_snapshots[i].uuid.toString(QUuid::WithoutBraces) == m_currentUuid) {
+                return i;
+            }
+        }
+        return -1;
     }
 
-    int secondarySnapshotIndex() const {
-        return m_secondarySnapshotIndex;
+    QString secondarySnapshotId() const {
+        return m_secondarySnapshotId;
     }
 
-    void setSecondarySnapshotIndex(int index) {
-        m_secondarySnapshotIndex = index;
+    void setSecondarySnapshotId(const QString& id) {
+        m_secondarySnapshotId = id;
     }
 
     bool isCurrentImageSelected() const {
-        return isCurrentImage(m_selectedIndex);
+        return m_currentUuid == c_currentId;
     }
 
     const QVector<ImageSnapshot>& snapshots() const {
@@ -130,7 +146,7 @@ class ImageSession : public QObject, public IEffectsState {
     void updateColorClusters();
 
     /// @brief Return the relative version of a snapshot on the timeline (1-based).
-    int getRelativeVersion(int snapshotIndex) const;
+    int getRelativeVersion(const QUuid& uuid) const;
 
     /// @brief Returns the UI-bound reconstructor for the current session.
     std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
@@ -156,16 +172,17 @@ class ImageSession : public QObject, public IEffectsState {
     /// @brief Emitted when the list of available snapshots changes.
     void snapshotsChanged();
     /// @brief Emitted when a new snapshot is created.
-    void snapshotCreated(int snapshotIndex);
+    void snapshotCreated(const QUuid& uuid);
     /// @brief Emitted when a specific thumbnail has been updated.
     void thumbnailChanged(int index);
+    void secondarySnapshotChanged(const QString& id);
     void effectsChanged();
     void colorClustersChanged();
     /// @brief Emitted with a status message to show to the user.
     void statusMessage(const QString& message, int timeoutMs = -1);
 
   private slots:
-    void handleThumbnailGenerated(const QString& path, int index);
+    void handleThumbnailGenerated(const QString& path, const QUuid& uuid);
     void onFileChanged();
     void onDeviceChanged();
 
@@ -182,8 +199,8 @@ class ImageSession : public QObject, public IEffectsState {
     QImage                 m_diskImage;
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
-    int                    m_selectedIndex = 0;
-    int                    m_secondarySnapshotIndex = SecondaryNone;
+    QString m_currentUuid = c_currentId;
+    QString                  m_secondarySnapshotId = c_secondaryNoneId;
 
     QMap<int, QImage> m_placeholderCache;
 
@@ -200,5 +217,5 @@ class ImageSession : public QObject, public IEffectsState {
     ImageMonitor                                   *m_monitor;
     std::shared_ptr<VkSnapshotReconstructor>        m_uiReconstructor;
     QList<ColorAnalyzer::ColorCluster>              m_colorClusters;
-    QCache<int, QList<ColorAnalyzer::ColorCluster>> m_clusterCache;
+    QCache<QString, QList<ColorAnalyzer::ColorCluster>> m_clusterCache;
 };

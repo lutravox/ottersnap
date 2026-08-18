@@ -11,13 +11,13 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
-#include <QFileInfo>
-#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QTemporaryFile>
 #include <functional>
+#include <zip.h>
 
 QHash<QString, QVector<ImageSnapshot>> SnapshotManager::s_snapshotsCache;
 QRecursiveMutex                        SnapshotManager::s_mutex;
@@ -27,85 +27,8 @@ static const int      c_tileWidth = 256;
 static const int      c_tileHeight = 256;
 static const uint32_t c_sparseFormatVersion = 1;
 
-static const QString c_tmp = QLatin1String(".tmp");
-
-QImage
-SnapshotManager::reconstructSnapshot(const QString&                           filePath,
-                                     int                                      snapshotIndex,
-                                     QSize                                    targetSize,
-                                     std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
-    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(filePath);
-    QString                key = SnapshotManager::imageKey(filePath);
-
-    int targetIdx = -1;
-    for (int i = 0; i < snapshots.size(); ++i) {
-        if (snapshots[i].snapshotIndex == snapshotIndex) {
-            targetIdx = i;
-            break;
-        }
-    }
-
-    int baseIdx = -1;
-    for (int i = targetIdx; i >= 0; --i) {
-        if (snapshots[i].isBase) {
-            baseIdx = i;
-            break;
-        }
-    }
-
-    ReconstructionSequence seq;
-    seq.baseIdx = baseIdx;
-    auto optBase = SnapshotManager::loadBaseImage(filePath, snapshots[baseIdx].snapshotIndex);
-    if (!optBase)
-        return {}; // return null image
-    seq.base = std::move(optBase->image);
-    seq.baseChecksum = optBase->checksum;
-
-    for (int i = baseIdx + 1; i <= targetIdx; ++i) {
-        auto optDelta = SnapshotManager::loadDelta(filePath, snapshots[i].snapshotIndex);
-        if (!optDelta)
-            return {};
-        seq.deltas.append({key + ":" + snapshots[i].fileName, std::move(*optDelta)});
-    }
-
-    if (!reconstructor) {
-        reconstructor = VulkanContext::instance().getUtilityReconstructor();
-    }
-    if (!reconstructor)
-        return {};
-
-    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
-}
-
-QImage SnapshotManager::resizeImage(const QImage& image, QSize targetSize) {
-    auto reconstructor = VulkanContext::instance().getUtilityReconstructor();
-    if (!reconstructor)
-        return {};
-
-    ReconstructionSequence seq;
-    seq.base = image;
-    seq.baseChecksum = "";
-
-    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
-}
-
 static QString snapshotDirPath(const QString& key) {
     return SnapshotManager::baseDir() + '/' + key;
-}
-
-qint64 SnapshotManager::calculateStorageUsage(const QString& filePath) {
-    QString key = imageKey(filePath);
-    QString sd = snapshotDirPath(key);
-    QDir    dir(sd);
-    if (!dir.exists()) {
-        return 0;
-    }
-
-    qint64 totalSize = 0;
-    for (const QFileInfo& info : dir.entryInfoList(QDir::Files)) {
-        totalSize += info.size();
-    }
-    return totalSize;
 }
 
 static bool saveImageFile(const QString& path, const QImage& img) {
@@ -202,6 +125,337 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
     return result;
 }
 
+QImage
+SnapshotManager::reconstructSnapshot(const QString&                           filePath,
+                                     const QUuid&                             uuid,
+                                     QSize                                    targetSize,
+                                     std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(filePath);
+
+    ImageSnapshot target;
+    bool          found = false;
+    for (const auto& s : snapshots) {
+        if (s.uuid == uuid) {
+            target = s;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found)
+        return {};
+
+    // Trace back the chain using parentUuid
+    QVector<ImageSnapshot> chain;
+    ImageSnapshot          current = target;
+    while (true) {
+        chain.prepend(current);
+        if (current.isBase)
+            break;
+
+        // Find parent by UUID
+        bool parentFound = false;
+        for (const auto& s : snapshots) {
+            if (s.uuid == current.parentUuid) {
+                current = s;
+                parentFound = true;
+                break;
+            }
+        }
+
+        if (!parentFound) {
+            qWarning() << "[SnapshotManager] Broken snapshot chain: parent" << current.parentUuid
+                       << "not found";
+            return {};
+        }
+    }
+
+    // Now chain[0] is the base, and chain.last() is the target
+    ReconstructionSequence seq;
+    seq.baseIdx = 0; // For the sequence, we just need the base image
+    auto optBase = SnapshotManager::loadBaseImage(filePath, chain[0]);
+    if (!optBase)
+        return {};
+    seq.base = std::move(optBase->image);
+    seq.baseChecksum = optBase->checksum;
+
+    QString key = SnapshotManager::imageKey(filePath);
+    for (int i = 1; i < chain.size(); ++i) {
+        auto optDelta = SnapshotManager::loadDelta(filePath, chain[i]);
+        if (!optDelta)
+            return {};
+        seq.deltas.append({key + ":" + chain[i].fileName, std::move(*optDelta)});
+    }
+
+    if (!reconstructor) {
+        reconstructor = VulkanContext::instance().getUtilityReconstructor();
+    }
+    if (!reconstructor)
+        return {};
+
+    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
+}
+
+QImage SnapshotManager::resizeImage(const QImage& image, QSize targetSize) {
+    auto reconstructor = VulkanContext::instance().getUtilityReconstructor();
+    if (!reconstructor)
+        return {};
+
+    ReconstructionSequence seq;
+    seq.base = image;
+    seq.baseChecksum = "";
+
+    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
+}
+
+bool SnapshotManager::exportHistory(const QString& filePath, const QString& bundlePath) {
+    QMutexLocker           locker(&s_mutex);
+    QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
+
+    if (snapshots.isEmpty()) {
+        qWarning() << "[SnapshotManager] No snapshots to export for" << filePath;
+        return false;
+    }
+
+    // Create a temporary directory to hold files before they are zipped
+    QString tempDirPath = QDir::tempPath() + "/ottersnap_export_" +
+                          QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (!QDir().mkpath(tempDirPath)) {
+        qWarning() << "[SnapshotManager] Failed to create temporary export directory";
+        return false;
+    }
+    QDir tempDir(tempDirPath);
+
+    int    err = 0;
+    zip_t *archive = zip_open(bundlePath.toUtf8().constData(), ZIP_CREATE | ZIP_TRUNCATE, &err);
+    if (!archive) {
+        qWarning() << "[SnapshotManager] Failed to open ZIP archive for writing:" << bundlePath;
+        tempDir.removeRecursively();
+        return false;
+    }
+
+    // Metadata: Create a temporary file that persists until we call zip_close
+    QJsonArray array;
+    for (const auto& s : snapshots) {
+        QJsonObject obj;
+        obj["uuid"] = s.uuid.toString(QUuid::WithoutBraces);
+        obj["parentUuid"] = s.parentUuid.toString(QUuid::WithoutBraces);
+        obj["file"] = s.fileName;
+        obj["timestamp"] = s.timestamp.toString(Qt::ISODate);
+        obj["checksum"] = s.checksum;
+        obj["isBase"] = s.isBase;
+        array.append(obj);
+    }
+
+    QString metaPath = tempDirPath + "/metadata.json";
+    QFile   metaFile(metaPath);
+    if (!metaFile.open(QIODevice::WriteOnly)) {
+        qWarning() << "[SnapshotManager] Failed to write temporary metadata file";
+        zip_close(archive);
+        tempDir.removeRecursively();
+        return false;
+    }
+    metaFile.write(QJsonDocument(array).toJson());
+    metaFile.close();
+
+    QByteArray    metaPathBytes = metaPath.toUtf8();
+    zip_source_t *metaSource = zip_source_file(archive, metaPathBytes.constData(), 0, 0);
+    if (!metaSource || zip_file_add(archive, "metadata.json", metaSource, 0) < 0) {
+        qWarning() << "[SnapshotManager] Failed to add metadata.json to ZIP";
+        zip_close(archive);
+        tempDir.removeRecursively();
+        return false;
+    }
+
+    QString       key = imageKey(filePath);
+    QString       sd = snapshotDirPath(key);
+    QDir          srcDir(sd);
+    QFileInfoList files = srcDir.entryInfoList(QDir::Files);
+
+    for (const QFileInfo& info : files) {
+        QString tempFilePath = tempDirPath + "/" + info.fileName();
+        if (!QFile::copy(info.absoluteFilePath(), tempFilePath)) {
+            qWarning() << "[SnapshotManager] Failed to copy file to temp export dir:"
+                       << info.fileName();
+            zip_close(archive);
+            tempDir.removeRecursively();
+            return false;
+        }
+
+        QString       zipPath = "files/" + info.fileName();
+        QByteArray    tempFilePathBytes = tempFilePath.toUtf8();
+        QByteArray    zipPathBytes = zipPath.toUtf8();
+        zip_source_t *fileSource = zip_source_file(archive, tempFilePathBytes.constData(), 0, 0);
+        if (!fileSource || zip_file_add(archive, zipPathBytes.constData(), fileSource, 0) < 0) {
+            qWarning() << "[SnapshotManager] Failed to add file to ZIP:" << zipPath;
+            zip_close(archive);
+            tempDir.removeRecursively();
+            return false;
+        }
+    }
+
+    if (zip_close(archive) < 0) {
+        qWarning() << "[SnapshotManager] Failed to close and save ZIP archive";
+        tempDir.removeRecursively();
+        return false;
+    }
+
+    tempDir.removeRecursively();
+    qDebug() << "[SnapshotManager] Exported snapshot history for" << filePath << "to" << bundlePath;
+    return true;
+}
+
+bool SnapshotManager::importHistory(const QString& filePath,
+                                    const QString& bundlePath,
+                                    int* duplicatesFound) {
+    if (duplicatesFound)
+        *duplicatesFound = 0;
+
+    QMutexLocker           locker(&s_mutex);
+    QString                key = imageKey(filePath);
+    QVector<ImageSnapshot> existing = loadSnapshots(filePath);
+
+    int    err = 0;
+    zip_t *archive = zip_open(bundlePath.toUtf8().constData(), 0, &err);
+    if (!archive) {
+        qWarning() << "[SnapshotManager] Failed to open ZIP archive for reading:" << bundlePath;
+        return false;
+    }
+
+    // Metadata
+    zip_file_t *metaFile = zip_fopen(archive, "metadata.json", 0);
+    if (!metaFile) {
+        qWarning() << "[SnapshotManager] metadata.json not found in bundle:" << bundlePath;
+        zip_close(archive);
+        return false;
+    }
+
+    struct zip_stat st;
+    zip_stat(archive, "metadata.json", 0, &st);
+    QByteArray metaData;
+    metaData.resize(st.size);
+    zip_fread(metaFile, metaData.data(), st.size);
+    zip_fclose(metaFile);
+
+    QJsonDocument doc = QJsonDocument::fromJson(metaData);
+    if (!doc.isArray()) {
+        qWarning() << "[SnapshotManager] Invalid metadata in bundle:" << bundlePath;
+        zip_close(archive);
+        return false;
+    }
+
+    QJsonArray             array = doc.array();
+    QVector<ImageSnapshot> imported;
+    for (const QJsonValue& val : array) {
+        QJsonObject   obj = val.toObject();
+        ImageSnapshot s;
+        s.uuid = QUuid::fromString(obj["uuid"].toString());
+        s.parentUuid = QUuid::fromString(obj["parentUuid"].toString());
+        s.fileName = obj["file"].toString();
+        s.timestamp = QDateTime::fromString(obj["timestamp"].toString(), Qt::ISODate);
+        s.checksum = obj["checksum"].toString();
+        s.isBase = obj["isBase"].toBool();
+        imported.append(s);
+    }
+
+    if (!existing.isEmpty() && !imported.isEmpty()) {
+        ImageSnapshot& firstExisting = existing[0];
+        firstExisting.parentUuid = imported.last().uuid;
+        if (!SnapshotDatabase::instance().updateSnapshot(key, firstExisting)) {
+            qWarning() << "[SnapshotManager] Failed to update parent UUID for bridge snapshot in database";
+        }
+    }
+
+    QString sd = ensureStorageReady(filePath);
+    if (sd.isEmpty()) {
+        zip_close(archive);
+        return false;
+    }
+
+    for (const auto& s : imported) {
+        // Skip if this snapshot already exists in the local history
+        bool alreadyExists = false;
+        for (const auto& ex : existing) {
+            if (ex.uuid == s.uuid) {
+                alreadyExists = true;
+                break;
+            }
+        }
+        if (alreadyExists) {
+            if (duplicatesFound)
+                (*duplicatesFound)++;
+            continue;
+        }
+
+        QString     zipPath = "files/" + s.fileName;
+        zip_file_t *file = zip_fopen(archive, zipPath.toUtf8().constData(), 0);
+        if (!file) {
+            qWarning() << "[SnapshotManager] Missing file in bundle:" << s.fileName;
+            zip_close(archive);
+            return false;
+        }
+
+        struct zip_stat stFile;
+        zip_stat(archive, zipPath.toUtf8().constData(), 0, &stFile);
+        QByteArray data;
+        data.resize(stFile.size);
+        zip_fread(file, data.data(), stFile.size);
+        zip_fclose(file);
+
+        if (!saveFile(sd + '/' + s.fileName, data)) {
+            qWarning() << "[SnapshotManager] Failed to write imported file:" << s.fileName;
+            zip_close(archive);
+            return false;
+        }
+
+        if (!SnapshotDatabase::instance().addSnapshot(key, s)) {
+            qWarning() << "[SnapshotManager] Failed to record imported snapshot in database";
+            zip_close(archive);
+            return false;
+        }
+    }
+
+    zip_close(archive);
+
+    QVector<ImageSnapshot> finalSnapshots;
+    for (const auto& s : imported) {
+        finalSnapshots.append(s);
+    }
+
+    for (const auto& s : existing) {
+        bool duplicate = false;
+        for (const auto& imp : imported) {
+            if (s.uuid == imp.uuid) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            finalSnapshots.append(s);
+        }
+    }
+    s_snapshotsCache[key] = finalSnapshots;
+
+    qDebug() << "[SnapshotManager] Imported snapshot history for" << filePath << "from"
+             << bundlePath;
+    return true;
+}
+
+qint64 SnapshotManager::calculateStorageUsage(const QString& filePath) {
+    QString key = imageKey(filePath);
+    QString sd = snapshotDirPath(key);
+    QDir    dir(sd);
+    if (!dir.exists()) {
+        return 0;
+    }
+
+    qint64 totalSize = 0;
+    for (const QFileInfo& info : dir.entryInfoList(QDir::Files)) {
+        totalSize += info.size();
+    }
+    return totalSize;
+}
+
 QString SnapshotManager::baseDir() {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + '/' + c_baseSubDir;
 }
@@ -218,6 +472,17 @@ QString SnapshotManager::imageKey(const QString& filePath) {
 void SnapshotManager::ensureDir() {
     QString bd = baseDir();
     DiskUtils::ensureDir(bd);
+}
+
+QString SnapshotManager::ensureStorageReady(const QString& filePath) {
+    ensureDir();
+    QString key = imageKey(filePath);
+    SnapshotDatabase::instance().registerImage(key, filePath);
+    QString sd = snapshotDirPath(key);
+    if (!DiskUtils::ensureDir(sd)) {
+        return QString();
+    }
+    return sd;
 }
 
 QString SnapshotManager::computeChecksum(const QImage& image) {
@@ -237,7 +502,6 @@ QVector<ImageSnapshot> SnapshotManager::loadSnapshots(const QString& filePath) {
         return s_snapshotsCache.value(key);
     }
 
-    SnapshotDatabase::instance().init();
     QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
 
     s_snapshotsCache[key] = snapshots;
@@ -261,31 +525,31 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
         const ImageSnapshot& last = snapshots.last();
         if (last.checksum == checksum) {
             qDebug() << "[SnapshotManager] Duplicate of latest snapshot skipped for" << filePath
-                     << "(snapshot" << last.snapshotIndex << ")";
-            return SaveResult{SaveStatus::Existing, last.snapshotIndex};
+                     << "(" << last.uuid.toString(QUuid::WithoutBraces) << ")";
+            return SaveResult{SaveStatus::Existing, last.uuid};
         }
     }
 
-    ensureDir();
-    SnapshotDatabase::instance().init();
-    SnapshotDatabase::instance().registerImage(key, filePath);
-
-    int     nextIdx = snapshots.isEmpty() ? 1 : snapshots.last().snapshotIndex + 1;
-    QString sd = snapshotDirPath(key);
-    if (!DiskUtils::ensureDir(sd)) {
+    QString sd = ensureStorageReady(filePath);
+    if (sd.isEmpty()) {
         return std::nullopt;
     }
 
     ImageSnapshot s;
-    s.snapshotIndex = nextIdx;
+    s.uuid = QUuid::createUuid();
     s.timestamp = QDateTime::currentDateTimeUtc();
     s.checksum = checksum;
 
-    bool shouldBeBase = (nextIdx == 1) || ((nextIdx - 1) % AppSettings::baseInterval() == 0);
+    if (!snapshots.isEmpty()) {
+        s.parentUuid = snapshots.last().uuid;
+    }
+
+    bool shouldBeBase = snapshots.isEmpty() ||
+                        ((static_cast<int>(snapshots.size())) % AppSettings::baseInterval() == 0);
 
     QImage prevImg;
     if (!snapshots.isEmpty()) {
-        prevImg = reconstructSnapshot(filePath, snapshots.last().snapshotIndex);
+        prevImg = reconstructSnapshot(filePath, snapshots.last().uuid);
     }
 
     if (!shouldBeBase && !prevImg.isNull()) {
@@ -297,14 +561,14 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
     s.isBase = shouldBeBase;
 
     if (s.isBase) {
-        s.fileName = QString("s%1.png").arg(s.snapshotIndex, 4, 10, QChar('0'));
+        s.fileName = QString("%1.png").arg(s.uuid.toString(QUuid::WithoutBraces));
         QString imgPath = sd + '/' + s.fileName;
         if (!saveImageFile(imgPath, image.convertToFormat(QImage::Format_ARGB32))) {
             qWarning() << "[SnapshotManager] Failed to create snapshot file:" << imgPath;
             return std::nullopt;
         }
     } else {
-        s.fileName = QString("s%1.delta").arg(s.snapshotIndex, 4, 10, QChar('0'));
+        s.fileName = QString("%1.delta").arg(s.uuid.toString(QUuid::WithoutBraces));
 
         if (prevImg.isNull()) {
             qWarning() << "[SnapshotManager] Failed to reconstruct previous image for delta";
@@ -326,7 +590,7 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
 
     // Trigger thumbnail generation via the manager
     ThumbnailManager::instance().enqueueRequest(
-        {.index = s.snapshotIndex, .filePath = filePath, .snapshotIndex = s.snapshotIndex});
+        {.index = static_cast<int>(snapshots.size()) + 1, .filePath = filePath, .uuid = s.uuid});
 
     if (!SnapshotDatabase::instance().addSnapshot(key, s)) {
         qWarning() << "[SnapshotManager] Failed to record snapshot in database for" << filePath;
@@ -334,45 +598,38 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
         return std::nullopt;
     }
 
-    qDebug() << "[SnapshotManager] Saved snapshot" << s.snapshotIndex
+    qDebug() << "[SnapshotManager] Saved snapshot" << s.uuid.toString(QUuid::WithoutBraces)
              << (s.isBase ? "(base)" : "(delta)") << "for" << filePath;
     snapshots.append(s);
     s_snapshotsCache[key] = snapshots;
 
-    return SaveResult{SaveStatus::Created, s.snapshotIndex};
+    return SaveResult{SaveStatus::Created, s.uuid};
 }
 
 std::optional<SnapshotManager::BaseImage> SnapshotManager::loadBaseImage(const QString& filePath,
-                                                                         int snapshotIndex) {
-    QString                key = imageKey(filePath);
-    QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
+                                                                         const ImageSnapshot& s) {
+    if (!s.isBase)
+        return std::nullopt;
 
-    for (const auto& s : snapshots) {
-        if (s.snapshotIndex == snapshotIndex && s.isBase) {
-            QString sd = snapshotDirPath(key);
-            QImage  img;
-            if (img.load(sd + '/' + s.fileName)) {
-                return BaseImage{img, s.checksum};
-            }
-            break;
-        }
+    QString key = imageKey(filePath);
+    QString sd = snapshotDirPath(key);
+    QImage  img;
+    if (img.load(sd + '/' + s.fileName)) {
+        return BaseImage{img, s.checksum};
     }
     return std::nullopt;
 }
 
-std::optional<QByteArray> SnapshotManager::loadDelta(const QString& filePath, int snapshotIndex) {
-    QString                key = imageKey(filePath);
-    QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
+std::optional<QByteArray> SnapshotManager::loadDelta(const QString&       filePath,
+                                                     const ImageSnapshot& s) {
+    if (s.isBase)
+        return std::nullopt;
 
-    for (const auto& s : snapshots) {
-        if (s.snapshotIndex == snapshotIndex && !s.isBase) {
-            QString sd = snapshotDirPath(key);
-            QFile   f(sd + '/' + s.fileName);
-            if (f.open(QFile::ReadOnly)) {
-                return f.readAll();
-            }
-            break;
-        }
+    QString key = imageKey(filePath);
+    QString sd = snapshotDirPath(key);
+    QFile   f(sd + '/' + s.fileName);
+    if (f.open(QFile::ReadOnly)) {
+        return f.readAll();
     }
     return std::nullopt;
 }
@@ -408,89 +665,91 @@ void SnapshotManager::clearCache() {
     s_snapshotsCache.clear();
 }
 
-bool SnapshotManager::deleteSnapshot(const QString& filePath, int snapshotIndex) {
+bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid) {
+    QMutexLocker           locker(&s_mutex);
     QString                key = imageKey(filePath);
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
     int targetIdx = -1;
     for (int i = 0; i < snapshots.size(); ++i) {
-        if (snapshots[i].snapshotIndex == snapshotIndex) {
+        if (snapshots[i].uuid == uuid) {
             targetIdx = i;
             break;
         }
     }
 
     if (targetIdx == -1) {
-        qWarning() << "[SnapshotManager"
-                      "] Snapshot "
-                      "not found for "
-                      "deletion:"
-                   << snapshotIndex;
+        qWarning() << "[SnapshotManager] Snapshot not found for deletion:"
+                   << uuid.toString(QUuid::WithoutBraces);
         return false;
     }
+
+    const ImageSnapshot& target = snapshots[targetIdx];
 
     // If we are deleting a snapshot that has dependents (i.e., not the last one), we must
     // repair the chain to avoid orphaning subsequent snapshots.
     if (targetIdx < snapshots.size() - 1) {
-        int nextIdxInList = targetIdx + 1;
-        int nextSnapshotId = snapshots[nextIdxInList].snapshotIndex;
+        int            nextIdxInList = targetIdx + 1;
+        ImageSnapshot& next = snapshots[nextIdxInList];
 
-        QImage imgNext = reconstructSnapshot(filePath, nextSnapshotId);
+        QImage imgNext = reconstructSnapshot(filePath, next.uuid);
         if (imgNext.isNull()) {
             qWarning() << "[SnapshotManager] Failed to reconstruct next snapshot for chain repair";
             return false;
         }
 
         QString sd = snapshotDirPath(key);
-        if (targetIdx == 0) {
-            snapshots[nextIdxInList].isBase = true;
-            snapshots[nextIdxInList].fileName =
-                QString("s%1.png").arg(nextSnapshotId, 4, 10, QChar('0'));
-            if (!saveImageFile(sd + '/' + snapshots[nextIdxInList].fileName, imgNext)) {
+
+        if (target.parentUuid.isNull()) {
+            // The deleted snapshot was the base. The next one must become the new base.
+            next.isBase = true;
+            next.fileName = QString("%1.png").arg(next.uuid.toString(QUuid::WithoutBraces));
+            next.parentUuid = QUuid();
+
+            if (!saveImageFile(sd + '/' + next.fileName, imgNext)) {
                 qWarning() << "[SnapshotManager] Failed to save new base image during chain repair:"
-                           << snapshots[nextIdxInList].fileName;
+                           << next.fileName;
                 return false;
-            }
-            // Persist change to database
-            if (!SnapshotDatabase::instance().updateSnapshot(key, snapshots[nextIdxInList])) {
-                qWarning() << "[SnapshotManager] Failed to update base status in database";
             }
         } else {
-            int    prevIdxInList = targetIdx - 1;
-            QImage imgPrev = reconstructSnapshot(filePath, snapshots[prevIdxInList].snapshotIndex);
-            if (imgPrev.isNull()) {
-                qWarning() << "[SnapshotManager] Failed to reconstruct predecessor for rebasing";
+            // Rebase the next snapshot against the deleted one's parent
+            QImage imgParent = reconstructSnapshot(filePath, target.parentUuid);
+            if (imgParent.isNull()) {
+                qWarning() << "[SnapshotManager] Failed to reconstruct parent for rebasing during "
+                              "chain repair";
                 return false;
             }
 
-            QByteArray delta = computeDelta(imgNext, imgPrev);
+            QByteArray delta = computeDelta(imgNext, imgParent);
             if (delta.isEmpty()) {
-                qWarning() << "[SnapshotManager] Failed to compute rebase delta for snapshot"
-                           << nextSnapshotId;
+                qWarning()
+                    << "[SnapshotManager] Failed to compute rebase delta during chain repair";
                 return false;
             }
 
-            snapshots[nextIdxInList].isBase = false;
-            snapshots[nextIdxInList].fileName =
-                QString("s%1.delta").arg(nextSnapshotId, 4, 10, QChar('0'));
-            if (!saveFile(sd + '/' + snapshots[nextIdxInList].fileName, delta)) {
-                qWarning() << "[SnapshotManager] Failed to save rebase delta file:"
-                           << snapshots[nextIdxInList].fileName;
+            next.isBase = false;
+            next.fileName = QString("%1.delta").arg(next.uuid.toString(QUuid::WithoutBraces));
+            next.parentUuid = target.parentUuid;
+
+            if (!saveFile(sd + '/' + next.fileName, delta)) {
+                qWarning() << "[SnapshotManager] Failed to save rebase delta during chain repair:"
+                           << next.fileName;
                 return false;
             }
-            // Persist change to database
-            if (!SnapshotDatabase::instance().updateSnapshot(key, snapshots[nextIdxInList])) {
-                qWarning() << "[SnapshotManager] Failed to update delta status in database";
-            }
+        }
+
+        // Persist change to database
+        if (!SnapshotDatabase::instance().updateSnapshot(key, next)) {
+            qWarning() << "[SnapshotManager] Failed to update snapshot during chain repair";
         }
     }
 
     // Delete the target snapshot file
     QString sd = snapshotDirPath(key);
-    QFile::remove(sd + '/' + snapshots[targetIdx].fileName);
+    QFile::remove(sd + '/' + target.fileName);
 
     // Remove from database
-    if (!SnapshotDatabase::instance().removeSnapshot(key, snapshots[targetIdx].snapshotIndex)) {
+    if (!SnapshotDatabase::instance().removeSnapshot(key, target.uuid)) {
         qWarning() << "[SnapshotManager] Failed to remove snapshot from database";
     }
 

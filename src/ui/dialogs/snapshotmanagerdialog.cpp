@@ -279,5 +279,5 @@ void SnapshotManagerDialog::onOpenInViewer() {
         return;
 
     // Open the latest snapshot (the last one in the list)
-    emit openSnapshotRequested(img.path, snapshots.last().snapshotIndex);
+    emit openSnapshotRequested(img.path, snapshots.last().uuid);
 }

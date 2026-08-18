@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QUuid>
 #include <QString>
 #include <QVector>
 
@@ -14,7 +15,8 @@
 
 /// @brief Metadata for a single saved image snapshot.
 struct ImageSnapshot {
-    int       snapshotIndex = 0;
+    QUuid     uuid;
+    QUuid     parentUuid;
     QString   fileName;
     QDateTime timestamp;
     QString   checksum;
@@ -28,7 +30,7 @@ class SnapshotManager {
 
     struct SaveResult {
         SaveStatus status;
-        int        snapshotIndex;
+        QUuid      uuid;
     };
 
     struct BaseImage {
@@ -63,9 +65,9 @@ class SnapshotManager {
 
     /// @brief Delete a specific snapshot for an image file.
     /// @param filePath Absolute path of the source image.
-    /// @param snapshotIndex The index of the snapshot to remove.
+    /// @param uuid The unique identity of the snapshot to remove.
     /// @return True if the snapshot was successfully deleted, false otherwise.
-    static bool deleteSnapshot(const QString& filePath, int snapshotIndex);
+    static bool deleteSnapshot(const QString& filePath, const QUuid& uuid);
 
     /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
@@ -75,15 +77,15 @@ class SnapshotManager {
 
     /// @brief Load a base image from the snapshot store.
     /// @param filePath Absolute path of the source image.
-    /// @param snapshotIndex The index of the base snapshot.
+    /// @param s The snapshot metadata.
     /// @return The base image and its checksum, or std::nullopt if not found.
-    static std::optional<BaseImage> loadBaseImage(const QString& filePath, int snapshotIndex);
+    static std::optional<BaseImage> loadBaseImage(const QString& filePath, const ImageSnapshot& s);
 
     /// @brief Load a delta buffer from the snapshot store.
     /// @param filePath Absolute path of the source image.
-    /// @param snapshotIndex The index of the delta snapshot.
+    /// @param s The snapshot metadata.
     /// @return The binary delta data, or std::nullopt if not found.
-    static std::optional<QByteArray> loadDelta(const QString& filePath, int snapshotIndex);
+    static std::optional<QByteArray> loadDelta(const QString& filePath, const ImageSnapshot& s);
 
     /// @brief Delete all stored snapshots for an image file.
     /// @param filePath Absolute path of the source image.
@@ -100,11 +102,11 @@ class SnapshotManager {
 
     /// @brief Reconstruct a snapshot image from base + deltas.
     /// @param filePath Absolute path of the source image.
-    /// @param snapshotIndex The snapshot index to reconstruct.
+    /// @param uuid The unique identity of the snapshot to reconstruct.
     /// @param targetSize Desired output size; pass QSize() for full resolution.
     static QImage
     reconstructSnapshot(const QString&                           filePath,
-                        int                                      snapshotIndex,
+                        const QUuid&                              uuid,
                         QSize                                    targetSize = {},
                         std::shared_ptr<VkSnapshotReconstructor> reconstructor = nullptr);
 
@@ -116,6 +118,25 @@ class SnapshotManager {
 
     /// @brief Clear the in-memory snapshot cache.
     static void clearCache();
+
+    /// @brief Export the snapshot history for an image to a single bundle file.
+    /// @param filePath Absolute path of the source image.
+    /// @param bundlePath Path to the destination .zip file.
+    /// @return True if export was successful, false otherwise.
+    static bool exportHistory(const QString& filePath, const QString& bundlePath);
+
+    /// @brief Import snapshot history from a bundle file.
+    /// @param filePath Absolute path of the source image to associate history with.
+    /// @param bundlePath Path to the .zip bundle file.
+    /// @param duplicatesFound Optional pointer to store the number of skipped duplicate snapshots.
+    /// @return True if import was successful, false otherwise.
+    static bool importHistory(const QString& filePath, const QString& bundlePath, int* duplicatesFound = nullptr);
+
+private:
+    /// @brief Ensures that the base storage and image-specific directories are ready.
+    /// @param filePath Absolute path of the source image.
+    /// @return The path to the snapshot directory, or an empty string on failure.
+    static QString ensureStorageReady(const QString& filePath);
 
     /// @brief Global recursive lock for snapshot store operations to ensure
     /// thread safety. Recursive so loadSnapshots() can safely acquire it

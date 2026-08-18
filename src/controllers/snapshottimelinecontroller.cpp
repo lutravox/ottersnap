@@ -39,8 +39,27 @@ void SnapshotTimelineController::setSessionController(ImageSessionController *co
 void SnapshotTimelineController::onActiveSessionChanged(ImageSession *session) {
     if (session) {
         updateModel();
+        m_currentUuid = session->currentUuid();
+        emit snapshotSelected(currentSelectedIndex());
+        connect(session,
+                &ImageSession::imageChanged,
+                this,
+                &SnapshotTimelineController::onSessionImageChanged);
     } else {
         m_model->setThumbnails({}, {}, {});
+        m_currentUuid = "";
+        emit snapshotSelected(-1);
+    }
+}
+
+void SnapshotTimelineController::onSessionImageChanged() {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (session) {
+        QString uuid = session->currentUuid();
+        if (uuid != m_currentUuid) {
+            m_currentUuid = uuid;
+            emit snapshotSelected(currentSelectedIndex());
+        }
     }
 }
 
@@ -49,8 +68,7 @@ void SnapshotTimelineController::updateModel() {
     if (!session)
         return;
 
-    auto [images, labels, indices] =
-        session->snapshotTimelineThumbnails(ThumbnailSize);
+    auto [images, labels, indices] = session->snapshotTimelineThumbnails(ThumbnailSize);
     QVector<QPixmap> thumbs;
     thumbs.reserve(images.size());
 
@@ -68,50 +86,68 @@ void SnapshotTimelineController::updateModel() {
 
 void SnapshotTimelineController::onSessionChanged() {
     updateModel();
+    emit snapshotSelected(currentSelectedIndex());
 }
 
 void SnapshotTimelineController::selectSnapshot(int row) {
-    if (row == m_currentIndex)
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session)
         return;
 
-    m_currentIndex = row;
+    if (row == currentSelectedIndex())
+        return;
 
-    if (m_model && row >= 0 && row < m_model->rowCount()) {
-        int snapshotIdx =
-            m_model->data(m_model->index(row), SnapshotTimelineModel::IndexRole).toInt();
-        m_model->clearNewStatus(snapshotIdx);
+    if (!m_model)
+        return;
+
+    QUuid uuid = m_model->data(m_model->index(row), SnapshotTimelineModel::UuidRole).value<QUuid>();
+    QString identity =
+        uuid.isNull() ? ImageSession::c_currentId : uuid.toString(QUuid::WithoutBraces);
+
+    // Clear "new" status if it's a snapshot
+    if (!uuid.isNull()) {
+        clearNewStatus(uuid);
     }
 
-    emit snapshotSelected(row);
+    session->selectSnapshot(identity);
 }
 
-void SnapshotTimelineController::clearNewStatus(int dbId) {
+void SnapshotTimelineController::markSnapshotAsNew(const QUuid& uuid) {
     if (m_model) {
-        m_model->clearNewStatus(dbId);
+        m_model->markSnapshotAsNew(uuid);
     }
 }
 
-void SnapshotTimelineController::setSecondarySnapshot(int dbId) {
-    if (secondarySnapshotDbId() == dbId)
+void SnapshotTimelineController::clearNewStatus(const QUuid& uuid) {
+    if (m_model) {
+        m_model->clearNewStatus(uuid);
+    }
+}
+
+void SnapshotTimelineController::setSecondarySnapshot(const QString& id) {
+    if (secondarySnapshotId() == id)
         return;
 
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
     if (session) {
-        session->setSecondarySnapshotIndex(dbId);
+        session->setSecondarySnapshotId(id);
     }
-    emit secondarySnapshotSelected(dbId);
+    emit secondarySnapshotSelected(id);
 }
 
-int SnapshotTimelineController::secondarySnapshotDbId() const {
+QString SnapshotTimelineController::secondarySnapshotId() const {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
-    return session ? session->secondarySnapshotIndex() : ImageSession::SecondaryNone;
+    if (!session)
+        return QString();
+    return session->secondarySnapshotId();
 }
 
-int SnapshotTimelineController::rowForDbId(int dbId) const {
+int SnapshotTimelineController::rowForUuid(const QUuid& uuid) const {
     if (!m_model)
         return -1;
     for (int i = 0; i < m_model->rowCount(); ++i) {
-        if (m_model->data(m_model->index(i), SnapshotTimelineModel::IndexRole).toInt() == dbId) {
+        if (m_model->data(m_model->index(i), SnapshotTimelineModel::UuidRole).value<QUuid>() ==
+            uuid) {
             return i;
         }
     }

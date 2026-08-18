@@ -14,7 +14,7 @@
 struct ThumbnailRequest {
     int     index;
     QString filePath;
-    int     snapshotIndex;
+    QUuid   uuid;
     QImage  currentImage;
 };
 
@@ -48,7 +48,7 @@ class ThumbnailManager : public QObject {
     static QImage formatThumbnail(const QImage& image, int size);
 
   signals:
-    void thumbnailGenerated(const QString& filePath, int index, const QImage& img);
+    void thumbnailGenerated(const QString& filePath, const QUuid& snapshotUuid, const QImage& img);
 
   private:
     ThumbnailManager(QObject *parent = nullptr);
@@ -63,11 +63,14 @@ class ThumbnailManager : public QObject {
     void onReconstructionFinished(QFutureWatcher<std::optional<QImage>> *watcher,
                                   const ThumbnailRequest&                request);
 
-    void saveThumbnail(const QString& filePath, int snapshotIndex, const QImage& image);
+    void saveThumbnail(const QString& filePath, const QUuid& uuid, const QImage& image);
     static std::optional<QImage> reconstructDiskImage(const QString& path,
                                                       const QImage&  currentImage = QImage());
 
-    static std::optional<QImage> reconstructThumbnail(const QString& path, int snapshotIdx);
+    static std::optional<QImage> reconstructThumbnail(const QString& path, const QUuid& uuid);
+
+    QString getIdentityString(const QUuid& uuid) const;
+    QString getRequestKey(const QString& filePath, const QUuid& uuid) const;
 
     QQueue<ThumbnailRequest> m_queue;
     QSet<QString>            m_activeRequests;

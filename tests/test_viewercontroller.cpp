@@ -7,6 +7,8 @@
 #include "core/imagesession.h"
 #include "core/viewer_interfaces.h"
 #include "core/viewstate.h"
+#include "core/snapshotdb.h"
+#include "core/vulkancontext.h"
 
 /// Mock implementation of IViewer to verify ViewController interactions.
 class MockViewer : public IViewer {
@@ -65,6 +67,20 @@ class TestViewerController : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase() {
+        QString tempDb = QDir::tempPath() + "/test_viewercontroller_" +
+                         QString::number(QRandomGenerator::global()->generate()) + ".db";
+        SnapshotDatabase::instance().init(tempDb);
+
+        // Initialize Vulkan context to enable GPU-accelerated reconstruction tests.
+        if (!VulkanContext::instance().initializeInstance()) {
+            qWarning() << "VulkanContext failed to initialize. GPU tests may fail.";
+        }
+    }
+
+    void cleanupTestCase() {
+    }
+
     void testSyncSessionToViewer() {
         AppSettingsController settings;
         ImageSessionController sessionController(&settings);
@@ -190,6 +206,55 @@ class TestViewerController : public QObject {
         QCOMPARE(viewer.notifyViewStateCalled(), true);
     }
 
+    void testSecondarySelectionStability() {
+        AppSettingsController settings;
+        ImageSessionController sessionController(&settings);
+        ViewerController      controller(&settings);
+        ImageSession          session;
+
+        QString tempDir = QDir::tempPath();
+        QString path = tempDir + "/ottersnap_stability_test_" +
+                       QString::number(QRandomGenerator::global()->generate()) + ".png";
+
+        SnapshotManager::deleteAllSnapshots(path);
+        
+        QImage imgA(10, 10, QImage::Format_ARGB32);
+        imgA.fill(Qt::red);
+        auto snapA = SnapshotManager::saveSnapshot(path, imgA);
+        if (!snapA) QFAIL("Failed to save snapshot A");
+        QUuid uuidA = snapA->uuid;
+
+        QImage imgB(10, 10, QImage::Format_ARGB32);
+        imgB.fill(Qt::blue);
+        auto snapB = SnapshotManager::saveSnapshot(path, imgB);
+        if (!snapB) QFAIL("Failed to save snapshot B");
+        QUuid uuidB = snapB->uuid;
+
+        QImage imgC(10, 10, QImage::Format_ARGB32);
+        imgC.fill(Qt::green);
+        auto snapC = SnapshotManager::saveSnapshot(path, imgC);
+        if (!snapC) QFAIL("Failed to save snapshot C");
+        QUuid uuidC = snapC->uuid;
+        
+        session.openImage(path);
+
+        controller.setSessionController(&sessionController);
+        sessionController.setActiveSession(&session);
+
+        // Select B as secondary
+        controller.setSecondarySnapshot(uuidB.toString(QUuid::WithoutBraces));
+        QCOMPARE(controller.secondarySnapshotId(), uuidB.toString(QUuid::WithoutBraces));
+
+        // Delete A
+        SnapshotManager::deleteSnapshot(path, uuidA);
+        session.reloadImage(); // Refresh session snapshots list
+
+        // Secondary should still be B
+        QCOMPARE(controller.secondarySnapshotId(), uuidB.toString(QUuid::WithoutBraces));
+
+        QFile::remove(path);
+    }
+
     void testCanSwap() {
         AppSettingsController settings;
         ViewerController      controller(&settings);
@@ -207,12 +272,12 @@ class TestViewerController : public QObject {
         QVERIFY(!controller.canSwap());
 
         // Case 3: Different secondary selected (should be able to swap)
-        controller.setSecondarySnapshot(123);
+        controller.setSecondarySnapshot(QUuid::createUuid().toString(QUuid::WithoutBraces));
         QVERIFY(controller.canSwap());
 
         // Case 4: Secondary is the same as primary (should NOT be able to swap)
         // In a default session with no snapshots, primary is SecondaryCurrent (-1)
-        controller.setSecondarySnapshot(ImageSession::SecondaryCurrent);
+        controller.setSecondarySnapshot(QString());
         QVERIFY(!controller.canSwap());
     }
 
@@ -226,14 +291,18 @@ class TestViewerController : public QObject {
         sessionController.setActiveSession(&session);
 
         // Test setting and getting
-        controller.setSecondarySnapshot(456);
-        QCOMPARE(controller.secondarySnapshotIndex(), 456);
+        QUuid testUuid = QUuid::createUuid();
+        QString testId = testUuid.toString(QUuid::WithoutBraces);
+        controller.setSecondarySnapshot(testId);
+        QCOMPARE(controller.secondarySnapshotId(), testId);
 
         // Test signal emission
         QSignalSpy spy(&controller, &ViewerController::secondarySnapshotChanged);
-        controller.setSecondarySnapshot(789);
+        QUuid nextUuid = QUuid::createUuid();
+        QString nextId = nextUuid.toString(QUuid::WithoutBraces);
+        controller.setSecondarySnapshot(nextId);
         QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.at(0).at(0).toInt(), 789);
+        QCOMPARE(spy.at(0).at(0).value<QString>(), nextId);
     }
 
     void testSetZoomPercentage() {

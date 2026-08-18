@@ -7,6 +7,7 @@
 #include "config/appsettings.h"
 #include "core/imagesession.h"
 #include "core/snapshotmanager.h"
+#include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
 
 class TestImageSession : public QObject {
@@ -37,6 +38,11 @@ class TestImageSession : public QObject {
 };
 
 void TestImageSession::initTestCase() {
+    // Use a unique temporary database for this test case to avoid collisions with other tests.
+    QString tempDb = QDir::tempPath() + "/test_imagesession_" +
+                     QString::number(QRandomGenerator::global()->generate()) + ".db";
+    SnapshotDatabase::instance().init(tempDb);
+
     // Initialize Vulkan context to enable GPU-accelerated reconstruction tests.
     if (!VulkanContext::instance().initializeInstance()) {
         qWarning() << "VulkanContext failed to initialize. GPU tests may fail.";
@@ -214,6 +220,7 @@ void TestImageSession::testSnapshotDeletion() {
 
     // 1. Create snapshots with unique colors to ensure they are saved
     QColor colors[] = {Qt::blue, Qt::green, Qt::yellow};
+    QVector<QUuid> ids;
     for (int i = 0; i < 3; ++i) {
         createTestImage(uniquePath, colors[i]);
 
@@ -225,6 +232,7 @@ void TestImageSession::testSnapshotDeletion() {
         QSignalSpy saveSpy(&session, &ImageSession::snapshotsChanged);
         QVERIFY(saveSpy.wait(2000));
     }
+    ids = { session.snapshots()[0].uuid, session.snapshots()[1].uuid, session.snapshots()[2].uuid };
 
     // Current state: snapshots [S1, S2, S3], current image is Disk Image (index 3)
     QCOMPARE(session.snapshots().size(), 3);
@@ -232,8 +240,8 @@ void TestImageSession::testSnapshotDeletion() {
     QCOMPARE(session.currentSnapshotIndex(), 3);
     QVERIFY(!session.diskImage().isNull());
 
-    // Scenario A: Delete a snapshot before the current one (e.g., index 1 / S2)
-    session.deleteSnapshot(1);
+    // Scenario A: Delete a snapshot before the current one (e.g., S2)
+    session.deleteSnapshot(ids[1]);
 
     // After deletion, snapshots size is 2. m_currentIndex should be updated to 2.
     QCOMPARE(session.snapshots().size(), 2);
@@ -245,8 +253,8 @@ void TestImageSession::testSnapshotDeletion() {
     session.selectSnapshot(1);
     QCOMPARE(session.currentSnapshotIndex(), 1);
 
-    // Delete S1 (index 0).
-    session.deleteSnapshot(0);
+    // Delete S1.
+    session.deleteSnapshot(ids[0]);
 
     // After deletion, snapshots size is 1. S3 is now at index 0.
     // m_currentIndex should have shifted from 1 to 0.
@@ -255,7 +263,7 @@ void TestImageSession::testSnapshotDeletion() {
     QVERIFY(!session.diskImage().isNull());
 
     // Scenario C: Viewing a snapshot and deleting it.
-    session.deleteSnapshot(0); // Delete the only remaining snapshot S3
+    session.deleteSnapshot(session.snapshots()[0].uuid); // Delete the only remaining snapshot S3
 
     // Should move back to "Current" (index 0 now)
     QCOMPARE(session.snapshots().size(), 0);

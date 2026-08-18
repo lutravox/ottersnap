@@ -18,8 +18,9 @@
 ///
 /// Table: snapshots
 /// - id: INTEGER PRIMARY KEY AUTOINCREMENT
+/// - uuid: TEXT NOT NULL (Unique identifier)
+/// - parent_uuid: TEXT (Parent snapshot UUID for delta chaining)
 /// - image_key: TEXT NOT NULL (FK -> images.image_key, ON DELETE CASCADE)
-/// - snapshot_index: INTEGER NOT NULL (Sequence number)
 /// - timestamp: TEXT NOT NULL (ISO 8601 date string)
 /// - checksum: TEXT NOT NULL (Data integrity checksum)
 /// - is_base: INTEGER NOT NULL (1 = Full base image, 0 = Delta)
@@ -41,7 +42,7 @@ class SnapshotDatabase {
     QVector<ImageSnapshot> getSnapshots(const QString& key);
 
     /// @brief Delete a specific snapshot record.
-    bool removeSnapshot(const QString& key, int index);
+    bool removeSnapshot(const QString& key, const QUuid& uuid);
 
     /// @brief Update an existing snapshot record.
     bool updateSnapshot(const QString& key, const ImageSnapshot& s);

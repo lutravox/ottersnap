@@ -36,7 +36,8 @@ ImageSession::~ImageSession() {
 }
 
 bool ImageSession::openImage(const QString& filePath) {
-    ThumbnailCache::invalidate(SnapshotManager::imageKey(filePath), -1);
+    ThumbnailCache::invalidate(SnapshotManager::imageKey(filePath),
+                               ThumbnailConstants::CurrentVersion);
 
     m_filePath = filePath;
     m_lastModified = QFileInfo(m_filePath).lastModified();
@@ -57,13 +58,14 @@ bool ImageSession::openImage(const QString& filePath) {
         return false;
     }
 
-    m_selectedIndex = m_isSnapshotOnly ? 0 : static_cast<int>(m_snapshots.size());
+    m_currentUuid = m_isSnapshotOnly ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces)
+                                         : c_currentId;
     updateColorClusters();
 
     // Initialize view state with image dimensions
     QSize dims = m_diskImage.size();
     if (m_isSnapshotOnly && !m_snapshots.isEmpty()) {
-        auto optBase = SnapshotManager::loadBaseImage(m_filePath, m_snapshots[0].snapshotIndex);
+        auto optBase = SnapshotManager::loadBaseImage(m_filePath, m_snapshots[0]);
         if (optBase) {
             dims = optBase->image.size();
         }
@@ -84,8 +86,8 @@ void ImageSession::close() {
     m_diskImage = QImage();
     m_snapshots.clear();
     m_labels.clear();
-    m_selectedIndex = 0;
-    m_secondarySnapshotIndex = SecondaryNone;
+    m_currentUuid = c_currentId;
+    m_secondarySnapshotId = c_secondaryNoneId;
     m_baseCache = {-1, QImage()};
     m_clusterCache.clear();
 
@@ -96,7 +98,7 @@ void ImageSession::close() {
 }
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() const {
-    return getReconstructionSequence(m_selectedIndex);
+    return getReconstructionSequence(currentSnapshotIndex());
 }
 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
@@ -128,26 +130,26 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     ReconstructionSequence seq;
     seq.baseIdx = baseIdx;
 
-    int baseSnapshotIdx = m_snapshots[baseIdx].snapshotIndex;
-    if (m_baseCache.index == baseSnapshotIdx && !m_baseCache.image.isNull()) {
+    if (m_baseCache.index == baseIdx && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;
         seq.baseChecksum = m_snapshots[baseIdx].checksum;
     } else {
-        auto optBase = SnapshotManager::loadBaseImage(m_filePath, baseSnapshotIdx);
+        auto optBase = SnapshotManager::loadBaseImage(m_filePath, m_snapshots[baseIdx]);
         if (!optBase)
             return std::nullopt;
 
         seq.base = std::move(optBase->image);
         seq.baseChecksum = m_snapshots[baseIdx].checksum;
-        m_baseCache = {baseSnapshotIdx, seq.base};
+        m_baseCache = {baseIdx, seq.base};
     }
 
     QString imageKey = SnapshotManager::imageKey(m_filePath);
     for (int i = baseIdx + 1; i <= index; ++i) {
-        auto optDelta = SnapshotManager::loadDelta(m_filePath, m_snapshots[i].snapshotIndex);
+        auto optDelta = SnapshotManager::loadDelta(m_filePath, m_snapshots[i]);
         if (!optDelta)
             return std::nullopt;
-        seq.deltas.append({imageKey + ":" + m_snapshots[i].fileName, std::move(*optDelta)});
+        seq.deltas.append(
+            DeltaEntry{imageKey + ":" + m_snapshots[i].fileName, std::move(*optDelta)});
     }
 
     return seq;
@@ -161,7 +163,49 @@ int ImageSession::maxValidIndex() const {
 void ImageSession::selectSnapshot(int index) {
     if (index < 0 || index > maxValidIndex())
         return;
-    m_selectedIndex = index;
+
+    int oldIndex = currentSnapshotIndex();
+    if (oldIndex == index)
+        return;
+
+    if (index == static_cast<int>(m_snapshots.size())) {
+        m_currentUuid = c_currentId;
+    } else if (index >= 0 && index < static_cast<int>(m_snapshots.size())) {
+        m_currentUuid = m_snapshots[index].uuid.toString(QUuid::WithoutBraces);
+    } else {
+        m_currentUuid = c_currentId;
+    }
+
+    // Update view state if dimensions change
+    QSize newDims = dimensions();
+    if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+        m_viewState.updateImageSize(newDims.width(), newDims.height());
+    }
+
+    updateColorClusters();
+    emit imageChanged();
+}
+
+void ImageSession::selectSnapshot(const QUuid& uuid) {
+    if (uuid.isNull()) {
+        selectSnapshot(c_currentId);
+        return;
+    }
+    selectSnapshot(uuid.toString(QUuid::WithoutBraces));
+}
+
+void ImageSession::selectSnapshot(const QString& uuid) {
+    if (m_currentUuid == uuid)
+        return;
+
+    m_currentUuid = uuid;
+
+    // Update view state if dimensions change
+    QSize newDims = dimensions();
+    if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+        m_viewState.updateImageSize(newDims.width(), newDims.height());
+    }
+
     updateColorClusters();
     emit imageChanged();
 }
@@ -174,40 +218,49 @@ void ImageSession::saveSnapshot() {
     performSave(m_diskImage, false);
 }
 
-void ImageSession::deleteSnapshot(int index) {
-    if (index < 0 || index >= static_cast<int>(m_snapshots.size()))
+void ImageSession::deleteSnapshot(const QUuid& uuid) {
+    if (uuid.isNull())
         return;
 
-    int snapshotId = m_snapshots[index].snapshotIndex;
-    int relativeVersion = index + 1;
+    QString snapshotUuid = uuid.toString(QUuid::WithoutBraces);
+    int     relativeVersion = -1;
 
-    if (SnapshotManager::deleteSnapshot(m_filePath, snapshotId)) {
-        // Store current index to adjust it after the list is rebuilt
-        int oldIndex = m_selectedIndex;
-
-        if (m_secondarySnapshotIndex == snapshotId) {
-            m_secondarySnapshotIndex = SecondaryNone;
+    // Find relative version for the status message
+    for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+        if (m_snapshots[i].uuid == uuid) {
+            relativeVersion = i + 1;
+            break;
         }
+    }
 
-        m_clusterCache.remove(snapshotId);
+    if (SnapshotManager::deleteSnapshot(m_filePath, uuid)) {
+        // Store current uuid to adjust it after the list is rebuilt
+        QString oldUuid = m_currentUuid;
+
+        m_clusterCache.remove(snapshotUuid);
         rebuildSnapshotList();
 
-        if (oldIndex == index) {
-            // Viewing the deleted snapshot -> move to current disk image (or last available
-            // snapshot if snapshot-only)
-            m_selectedIndex = maxValidIndex();
-        } else if (oldIndex > index && (isCurrentImage(oldIndex) ||
-                                        oldIndex < static_cast<int>(m_snapshots.size()) + 1)) {
-            // Viewed snapshot shifted left, or we were viewing the disk image
-            // If oldIndex was S, and we deleted one, new S is S-1.
-            // Either way, if it's above the deletion point, it shifts.
-            m_selectedIndex = oldIndex - 1;
+        if (oldUuid == c_currentId) {
+            m_currentUuid = c_currentId;
         } else {
-            m_selectedIndex = oldIndex;
+            // If we deleted the currently selected snapshot, fall back to disk image
+            bool stillExists = false;
+            for (const auto& s : m_snapshots) {
+                if (s.uuid.toString(QUuid::WithoutBraces) == oldUuid) {
+                    stillExists = true;
+                    break;
+                }
+            }
+            if (!stillExists) {
+                m_currentUuid = c_currentId;
+            }
         }
 
-        // Ensure we are still within valid bounds [0, m_snapshots.size()]
-        m_selectedIndex = qBound(0, m_selectedIndex, static_cast<int>(m_snapshots.size()));
+        // Update view state if dimensions change
+        QSize newDims = dimensions();
+        if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+            m_viewState.updateImageSize(newDims.width(), newDims.height());
+        }
 
         emit imageChanged();
         emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
@@ -242,7 +295,8 @@ void ImageSession::reloadImage() {
         if (newImage.isNull() || newImage == m_diskImage)
             return;
 
-        ThumbnailCache::invalidate(SnapshotManager::imageKey(m_filePath), -1);
+        ThumbnailCache::invalidate(SnapshotManager::imageKey(m_filePath),
+                                   ThumbnailConstants::CurrentVersion);
 
         if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
             autosaveSnapshot(m_diskImage);
@@ -250,7 +304,7 @@ void ImageSession::reloadImage() {
 
         m_diskImage = newImage;
         m_lastModified = QFileInfo(m_filePath).lastModified();
-        m_clusterCache.remove(-1);
+        m_clusterCache.remove(c_currentId);
         updateColorClusters();
         emit statusMessage(tr("Current image reloaded."));
         emit imageChanged();
@@ -264,10 +318,10 @@ void ImageSession::autosaveSnapshot(const QImage& img) {
 }
 
 void ImageSession::updateColorClusters() {
-    QImage thumb = ThumbnailManager::instance().getThumbnail(m_selectedIndex,
+    QImage thumb = ThumbnailManager::instance().getThumbnail(currentSnapshotIndex(),
                                                              256,
                                                              m_filePath,
-                                                             isCurrentImage(m_selectedIndex),
+                                                             isCurrentImage(currentSnapshotIndex()),
                                                              m_snapshots,
                                                              m_diskImage);
     if (thumb.isNull()) {
@@ -275,8 +329,7 @@ void ImageSession::updateColorClusters() {
         return;
     }
 
-    int clusterId =
-        isCurrentImage(m_selectedIndex) ? -1 : m_snapshots[m_selectedIndex].snapshotIndex;
+    QString clusterId = m_currentUuid;
 
     if (auto *cached = m_clusterCache.object(clusterId)) {
         m_colorClusters = *cached;
@@ -321,22 +374,20 @@ void ImageSession::handleSaveFinished(
 
     auto res = watcher->result();
     if (res && res->status == SnapshotManager::SaveStatus::Created) {
-        bool wasViewingCurrent = isCurrentImage(m_selectedIndex);
+        bool wasViewingCurrent = isCurrentImageSelected();
         rebuildSnapshotList();
 
         if (wasViewingCurrent) {
-            m_selectedIndex++;
+            m_currentUuid = c_currentId;
             emit imageChanged();
         }
 
         QString msg = isAutosave ? "Autosave successful." : "New snapshot created successfully.";
         emit    statusMessage(msg);
-        emit    snapshotCreated(res->snapshotIndex);
+        emit    snapshotCreated(res->uuid);
     } else if (res && res->status == SnapshotManager::SaveStatus::Existing && !isAutosave) {
-        int     pos = getRelativeVersion(res->snapshotIndex);
-        QString msg =
-            QString("Current image already saved as snapshot %1.").arg(QString::number(pos));
-        emit statusMessage(msg);
+        QString msg = QString("Current image already saved as latest snapshot.");
+        emit    statusMessage(msg);
     } else if (!res || (res && res->status != SnapshotManager::SaveStatus::Existing &&
                         res->status != SnapshotManager::SaveStatus::Created)) {
         emit statusMessage("Save failed.");
@@ -344,9 +395,9 @@ void ImageSession::handleSaveFinished(
     watcher->deleteLater();
 }
 
-int ImageSession::getRelativeVersion(int snapshotIndex) const {
+int ImageSession::getRelativeVersion(const QUuid& uuid) const {
     for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
-        if (m_snapshots[i].snapshotIndex == snapshotIndex) {
+        if (m_snapshots[i].uuid == uuid) {
             return i + 1;
         }
     }
@@ -372,31 +423,65 @@ void ImageSession::rebuildSnapshotList() {
     if (!m_isSnapshotOnly) {
         m_labels.append("Current");
     }
+
+    // Validate current selection: if the selected snapshot no longer exists,
+    // fall back to the disk image (if available).
+    if (m_currentUuid != c_currentId) {
+        bool stillExists = false;
+        for (const auto& s : m_snapshots) {
+            if (s.uuid.toString(QUuid::WithoutBraces) == m_currentUuid) {
+                stillExists = true;
+                break;
+            }
+        }
+        if (!stillExists) {
+            m_currentUuid = m_isSnapshotOnly && !m_snapshots.isEmpty()
+                               ? m_snapshots[0].uuid.toString(QUuid::WithoutBraces)
+                               : c_currentId;
+            emit imageChanged();
+        }
+    }
+
+    // Validate secondary selection: if it no longer exists, reset it.
+    if (m_secondarySnapshotId != c_secondaryNoneId && m_secondarySnapshotId != c_currentId) {
+        bool stillExists = false;
+        for (const auto& s : m_snapshots) {
+            if (s.uuid.toString(QUuid::WithoutBraces) == m_secondarySnapshotId) {
+                stillExists = true;
+                break;
+            }
+        }
+        if (!stillExists) {
+            m_secondarySnapshotId = c_secondaryNoneId;
+            emit secondarySnapshotChanged(m_secondarySnapshotId);
+        }
+    }
+
     emit snapshotsChanged();
 }
 
-std::tuple<QVector<QImage>, QVector<QString>, QVector<int>>
+std::tuple<QVector<QImage>, QVector<QString>, QVector<QUuid>>
 ImageSession::snapshotTimelineThumbnails(int size) {
     QVector<QImage> thumbs;
-    QVector<int>    indices;
+    QVector<QUuid>  indices;
     thumbs.reserve(m_snapshots.size() + 1);
     indices.reserve(m_snapshots.size() + 1);
 
     for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
         thumbs.append(generateThumbnail(i, size));
-        indices.append(m_snapshots[i].snapshotIndex);
+        indices.append(m_snapshots[i].uuid);
     }
 
     if (!m_isSnapshotOnly) {
         thumbs.append(generateThumbnail(static_cast<int>(m_snapshots.size()), size));
-        indices.append(-1); // Current image is not a snapshot in the store
+        indices.append(QUuid()); // Current image is not a snapshot in the store
     }
 
     return {thumbs, m_labels, indices};
 }
 
 QImage ImageSession::thumbnail(int size) {
-    QImage img = generateThumbnail(m_selectedIndex, size);
+    QImage img = generateThumbnail(currentSnapshotIndex(), size);
     return img;
 }
 
@@ -411,11 +496,26 @@ QImage ImageSession::getPlaceholder(int size) {
     return placeholder;
 }
 
-void ImageSession::handleThumbnailGenerated(const QString& path, int index) {
+void ImageSession::handleThumbnailGenerated(const QString& path, const QUuid& uuid) {
     if (path == m_filePath) {
-        emit thumbnailChanged(index);
-        if (index == m_selectedIndex) {
-            updateColorClusters();
+        // Find the current position of this snapshot in the list
+        int index = -1;
+        if (uuid.isNull()) {
+            index = static_cast<int>(m_snapshots.size());
+        } else {
+            for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+                if (m_snapshots[i].uuid == uuid) {
+                    index = i;
+                    break;
+                }
+            }
+        }
+
+        if (index != -1) {
+            emit thumbnailChanged(index);
+            if (index == currentSnapshotIndex()) {
+                updateColorClusters();
+            }
         }
     }
 }
@@ -461,12 +561,16 @@ QSize ImageSession::dimensions() const {
 }
 
 QString ImageSession::currentImageTimestamp() const {
-    if (isCurrentImageSelected()) {
+    if (m_currentUuid == c_currentId) {
         return tr("Current");
     }
 
-    if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_snapshots.size())) {
-        return m_snapshots[m_selectedIndex].timestamp.toString("MMMM d, yyyy h:mm:ss AP");
+    if (m_currentUuid != c_currentId && !m_currentUuid.isEmpty()) {
+        for (const auto& s : m_snapshots) {
+            if (s.uuid.toString(QUuid::WithoutBraces) == m_currentUuid) {
+                return s.timestamp.toString("MMMM d, yyyy h:mm:ss AP");
+            }
+        }
     }
 
     return tr("Current");

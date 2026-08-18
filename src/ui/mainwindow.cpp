@@ -3,8 +3,10 @@
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
+#include "core/snapshotdb.h"
 #include "core/snapshotmanager.h"
 #include "core/thumbnailcache.h"
+#include "core/thumbnailmanager.h"
 #include "ui/dialogutils.h"
 
 #include <QApplication>
@@ -577,6 +579,23 @@ void MainWindow::updateRecentFilesMenu() {
     QStringList recent = m_settings.value("recentFiles").toStringList();
     for (const QString& path : recent) {
         QAction *action = m_recentFilesMenu->addAction(QFileInfo(path).fileName());
+
+        // Attempt to show a thumbnail of the first snapshot (or disk image if no snapshots)
+        QString                key = SnapshotManager::imageKey(path);
+        QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
+
+        int index = 0;
+        bool isCurrent = (index == static_cast<int>(snapshots.size()));
+
+        QImage thumb = ThumbnailManager::instance().getThumbnail(
+            index, ThumbnailConstants::StandardSize, path, isCurrent, snapshots);
+
+        if (!thumb.isNull()) {
+            QPixmap pixmap = QPixmap::fromImage(
+                thumb.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            action->setIcon(QIcon(pixmap));
+        }
+
         connect(action, &QAction::triggered, this, [this, path]() { openImageFile(path); });
     }
 }
@@ -651,8 +670,8 @@ void MainWindow::onImportHistory() {
         QString msg = tr("Snapshot history imported successfully.");
         if (duplicates > 0) {
             QString dupMsg = (duplicates == 1)
-                ? tr("%1 duplicate snapshot was skipped.").arg(duplicates)
-                : tr("%1 duplicate snapshots were skipped.").arg(duplicates);
+                                 ? tr("%1 duplicate snapshot was skipped.").arg(duplicates)
+                                 : tr("%1 duplicate snapshots were skipped.").arg(duplicates);
             msg += " " + dupMsg;
         }
         notify(msg);

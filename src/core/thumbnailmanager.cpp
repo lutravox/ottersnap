@@ -24,7 +24,8 @@ QImage ThumbnailManager::getThumbnail(int                           index,
         return QImage();
 
     QString key = SnapshotManager::imageKey(filePath);
-    QUuid   uuid = isCurrent ? QUuid() : snapshots[index].uuid;
+    QUuid uuid = (isCurrent || index == static_cast<int>(snapshots.size())) ? QUuid()
+                                                                            : snapshots[index].uuid;
     QString idStr = getIdentityString(uuid);
 
     QImage thumb = ThumbnailCache::loadThumbnail(key, idStr, QSize(size, size));

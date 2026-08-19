@@ -87,8 +87,8 @@ void ImageTab::saveSnapshot() {
     m_session->saveSnapshot();
 }
 
-void ImageTab::deleteSnapshot(const QUuid& uuid) {
-    m_session->deleteSnapshot(uuid);
+void ImageTab::deleteSnapshot(const QUuid& uuid, bool silent) {
+    m_session->deleteSnapshot(uuid, silent);
 }
 
 void ImageTab::deleteAllSnapshots() {

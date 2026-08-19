@@ -159,9 +159,19 @@ void MainWindow::setupUi() {
             &MainWindow::onSnapshotDeletionRequested);
 
     connect(m_viewerState->snapshotTimeline(),
+            &SnapshotTimeline::multipleSnapshotsDeletionRequested,
+            this,
+            [this](const QVector<QUuid>& uuids) { onMultipleSnapshotsDeletionRequested(uuids); });
+
+    connect(m_viewerState->snapshotTimeline(),
             &SnapshotTimeline::secondarySnapshotSelected,
             m_viewerController,
             &ViewerController::setSecondarySnapshot);
+
+    connect(m_viewerState->snapshotTimeline(),
+            &SnapshotTimeline::selectionChanged,
+            this,
+            &MainWindow::updateMenuBar);
 
     // Link controller signals to main window/viewer
     connect(m_snapshotController,
@@ -360,12 +370,20 @@ void MainWindow::setupMenu() {
 
     m_editMenu->addSeparator();
 
-    m_actionDeleteSnapshot = m_editMenu->addAction(tr("&Delete Selected Snapshot"));
+    m_actionDeleteSnapshot = m_editMenu->addAction(tr("&Delete Snapshot"));
     m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
     connect(m_actionDeleteSnapshot,
             &QAction::triggered,
             this,
             &MainWindow::onDeleteCurrentSnapshotRequested);
+
+    m_actionDeleteSelectedSnapshots = m_editMenu->addAction(tr("Delete Selected Snapshots"));
+    connect(m_actionDeleteSelectedSnapshots, &QAction::triggered, this, [this]() {
+        auto uuids = m_snapshotController->selectedUuids();
+        if (!uuids.isEmpty()) {
+            onMultipleSnapshotsDeletionRequested(uuids);
+        }
+    });
 
     m_actionDeleteAllSnapshots = m_editMenu->addAction(tr("Delete &All Snapshots"));
     connect(m_actionDeleteAllSnapshots,
@@ -457,29 +475,6 @@ void MainWindow::updateMenuBar() {
     m_fileMenu->menuAction()->setVisible(true);
     m_editMenu->menuAction()->setVisible(true);
 
-    // Update action states based on current selection
-    auto *tab = currentTab();
-    if (tab) {
-        int         index = tab->session()->currentSnapshotIndex();
-        const auto& snapshots = tab->session()->snapshots();
-        // Disable if no snapshot is selected or if it's the current image ('C')
-        m_actionDeleteSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
-
-        // Disable "Save Snapshot of Current" if in Snapshot Only mode
-        m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
-        m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
-        m_actionExportHistory->setEnabled(!snapshots.isEmpty());
-        m_actionImportHistory->setEnabled(true);
-        m_actionManageSnapshots->setEnabled(true);
-    } else {
-        m_actionDeleteSnapshot->setEnabled(false);
-        m_actionSaveSnapshot->setEnabled(false);
-        m_actionDeleteAllSnapshots->setEnabled(false);
-        m_actionExportHistory->setEnabled(false);
-        m_actionImportHistory->setEnabled(false);
-        m_actionManageSnapshots->setEnabled(true);
-    }
-
     m_actionToggleToolbar->setChecked(m_viewerController->isToolbarVisible());
 
     switch (m_currentState) {
@@ -488,6 +483,7 @@ void MainWindow::updateMenuBar() {
             m_actionExportHistory->setVisible(false);
             m_actionImportHistory->setVisible(false);
             m_actionDeleteSnapshot->setVisible(false);
+            m_actionDeleteSelectedSnapshots->setVisible(false);
             m_actionDeleteAllSnapshots->setVisible(false);
             m_actionCloseTab->setVisible(false);
             m_actionCloseAllTabs->setVisible(false);
@@ -506,6 +502,7 @@ void MainWindow::updateMenuBar() {
             m_actionExportHistory->setVisible(true);
             m_actionImportHistory->setVisible(true);
             m_actionDeleteSnapshot->setVisible(true);
+            m_actionDeleteSelectedSnapshots->setVisible(true);
             m_actionDeleteAllSnapshots->setVisible(true);
             m_actionCloseTab->setVisible(true);
             m_actionCloseAllTabs->setVisible(true);
@@ -519,6 +516,40 @@ void MainWindow::updateMenuBar() {
             m_viewMenu->menuAction()->setVisible(true);
             m_effectsMenu->menuAction()->setVisible(true);
             break;
+    }
+
+    // Now update action states based on current selection
+    auto *tab = currentTab();
+    if (tab) {
+        int         index = tab->session()->currentSnapshotIndex();
+        const auto& snapshots = tab->session()->snapshots();
+        // Disable if no snapshot is selected or if it's the current image ('C')
+        m_actionDeleteSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
+
+        // Disable "Save Snapshot of Current" if in Snapshot Only mode
+        m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
+        m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
+        m_actionExportHistory->setEnabled(!snapshots.isEmpty());
+        m_actionImportHistory->setEnabled(true);
+        m_actionManageSnapshots->setEnabled(true);
+
+        // Handle multi-selection action
+        auto selected = m_snapshotController->selectedIndices();
+        m_actionDeleteSelectedSnapshots->setVisible(!selected.isEmpty());
+        if (!selected.isEmpty()) {
+            QString text = (selected.size() == 1)
+                               ? tr("Delete Selected Snapshot (%1)").arg(selected.size())
+                               : tr("Delete Selected Snapshots (%1)").arg(selected.size());
+            m_actionDeleteSelectedSnapshots->setText(text);
+        }
+    } else {
+        m_actionDeleteSnapshot->setEnabled(false);
+        m_actionSaveSnapshot->setEnabled(false);
+        m_actionDeleteAllSnapshots->setEnabled(false);
+        m_actionExportHistory->setEnabled(false);
+        m_actionImportHistory->setEnabled(false);
+        m_actionManageSnapshots->setEnabled(true);
+        m_actionDeleteSelectedSnapshots->setVisible(false);
     }
 
     if (m_viewerController) {
@@ -608,7 +639,7 @@ void MainWindow::updateRecentFilesMenu() {
         QString                key = SnapshotManager::imageKey(path);
         QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
 
-        int index = 0;
+        int  index = 0;
         bool isCurrent = (index == static_cast<int>(snapshots.size()));
 
         QImage thumb = ThumbnailManager::instance().getThumbnail(
@@ -1122,14 +1153,42 @@ void MainWindow::updateState() {
     }
 }
 
-void MainWindow::onSnapshotDeletionRequested(const QUuid& uuid) {
+void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuids) {
     auto *tab = currentTab();
     if (!tab)
         return;
 
     if (DialogUtils::confirm(
-            this, tr("Delete Snapshot"), tr("Delete snapshot?"), tr("Delete"), tr("Cancel"))) {
-        tab->deleteSnapshot(uuid);
+            this,
+            tr("Delete Snapshots"),
+            tr("Are you sure you want to delete %1 selected snapshots?").arg(uuids.size()),
+            tr("Delete"),
+            tr("Cancel"))) {
+        for (const auto& uuid : uuids) {
+            tab->deleteSnapshot(uuid, true);
+        }
+        updateSnapshotTimeline();
+        updateViewer();
+        notify(tr("Deleted %1 snapshots successfully.").arg(uuids.size()));
+
+        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
+            onCloseCurrentTab();
+        }
+    }
+}
+
+void MainWindow::onSnapshotDeletionRequested(const QUuid& uuid) {
+    auto *tab = currentTab();
+    if (!tab)
+        return;
+
+    if (DialogUtils::confirm(this,
+                             tr("Delete Snapshot"),
+                             tr("Are you sure you want to delete snapshot %1?")
+                                 .arg(tab->session()->getRelativeVersion(uuid)),
+                             tr("Delete"),
+                             tr("Cancel"))) {
+        tab->deleteSnapshot(uuid, false);
         updateSnapshotTimeline();
         updateViewer();
 

@@ -159,3 +159,66 @@ void SnapshotTimelineController::updateThumbnail(int index, const QPixmap& pixma
         return;
     m_model->updateThumbnail(index, pixmap);
 }
+
+void SnapshotTimelineController::toggleSelection(int row) {
+    if (!m_model || row < 0 || row >= m_model->rowCount())
+        return;
+
+    QModelIndex idx = m_model->index(row);
+    QUuid uuid = m_model->data(idx, SnapshotTimelineModel::UuidRole).value<QUuid>();
+
+    if (uuid.isNull()) {
+        return; // Protect disk image from multi-selection
+    }
+
+    if (m_selectedIndices.contains(row)) {
+        m_selectedIndices.remove(row);
+    } else {
+        m_selectedIndices.insert(row);
+    }
+
+    emit selectionChanged();
+}
+
+void SnapshotTimelineController::selectRange(int start, int end) {
+    if (!m_model || start < 0 || end < 0)
+        return;
+
+    int active = currentSelectedIndex();
+    if (active < 0)
+        return;
+
+    int low = qMin(active, start);
+    int high = qMax(active, end);
+
+    m_selectedIndices.clear();
+    for (int i = low; i <= high && i < m_model->rowCount(); ++i) {
+        QModelIndex idx = m_model->index(i);
+        QUuid uuid = m_model->data(idx, SnapshotTimelineModel::UuidRole).value<QUuid>();
+        if (!uuid.isNull()) {
+            m_selectedIndices.insert(i);
+        }
+    }
+    emit selectionChanged();
+}
+
+void SnapshotTimelineController::clearSelection() {
+    if (m_selectedIndices.isEmpty())
+        return;
+    m_selectedIndices.clear();
+    emit selectionChanged();
+}
+
+QVector<QUuid> SnapshotTimelineController::selectedUuids() const {
+    QVector<QUuid> uuids;
+    if (!m_model) return uuids;
+
+    for (int row : m_selectedIndices) {
+        QModelIndex idx = m_model->index(row);
+        QUuid uuid = m_model->data(idx, SnapshotTimelineModel::UuidRole).value<QUuid>();
+        if (!uuid.isNull()) {
+            uuids.append(uuid);
+        }
+    }
+    return uuids;
+}

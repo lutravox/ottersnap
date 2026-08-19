@@ -54,6 +54,14 @@ class SnapshotTimelineDelegate : public QStyledItemDelegate {
         m_secondaryIndex = index;
     }
 
+    /**
+     * @brief Updates the set of multi-selected indices for custom rendering.
+     * @param indices The set of indices currently multi-selected.
+     */
+    void setSelectedIndices(const QSet<int>& indices) {
+        m_selectedIndices = indices;
+    }
+
   private:
     static constexpr int c_thumbSize = 48;
     static constexpr int c_labelHeight = 16;
@@ -66,4 +74,5 @@ class SnapshotTimelineDelegate : public QStyledItemDelegate {
     int m_currentIndex = -1;
     int m_hoverIndex = -1;
     int m_secondaryIndex = -1;
+    QSet<int> m_selectedIndices;
 };

@@ -16,7 +16,7 @@ NotificationManager::~NotificationManager() {
 }
 
 void NotificationManager::notify(const QString& message, int timeoutMs) {
-    int timeout = (timeoutMs == -1) ? 3500 : timeoutMs;
+    int timeout = (timeoutMs == -1) ? c_defaultTimeoutMs : timeoutMs;
 
     Notification *n = new Notification(m_targetWindow->windowHandle());
     n->notify(message, timeout);

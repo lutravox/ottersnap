@@ -76,6 +76,7 @@ class MainWindow : public QMainWindow {
     void onSessionColorClustersChanged();
     void onTabChanged(int index);
     void onSnapshotDeletionRequested(const QUuid& uuid);
+    void onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuids);
     void onDeleteAllSnapshotsRequested();
 
   private:
@@ -134,6 +135,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionExportHistory;
     QAction *m_actionImportHistory;
     QAction *m_actionDeleteSnapshot;
+    QAction *m_actionDeleteSelectedSnapshots;
     QAction *m_actionDeleteAllSnapshots;
     QAction *m_actionCloseTab;
     QAction *m_actionCloseAllTabs;

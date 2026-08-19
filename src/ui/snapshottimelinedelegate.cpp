@@ -38,16 +38,20 @@ void SnapshotTimelineDelegate::paint(QPainter                   *painter,
     int   y = rect.y() + (rect.height() - totalHeight) / 2 + padding + c_borderMargin;
 
     // Background (Selection or Hover)
-    if (index.row() == m_currentIndex || index.row() == m_hoverIndex || index.row() == m_secondaryIndex) {
+    if (index.row() == m_currentIndex || index.row() == m_hoverIndex || index.row() == m_secondaryIndex || m_selectedIndices.contains(index.row())) {
         QColor hoverColor = QApplication::palette().midlight().color();
         QColor selectedColor = QApplication::palette().light().color();
         QColor secondaryColor = QApplication::palette().mid().color();
+        QColor multiColor = QApplication::palette().highlight().color();
+        multiColor.setAlpha(80);
 
-        QColor bgColor = (index.row() == m_currentIndex) ? selectedColor : 
+        QColor bgColor = (m_selectedIndices.contains(index.row())) ? multiColor : 
+                         (index.row() == m_currentIndex) ? selectedColor : 
                          (index.row() == m_secondaryIndex) ? secondaryColor : hoverColor;
         painter->setBrush(bgColor);
 
-        QColor borderColor = (index.row() == m_currentIndex) ? selectedColor : 
+        QColor borderColor = (m_selectedIndices.contains(index.row())) ? QApplication::palette().highlight().color() : 
+                             (index.row() == m_currentIndex) ? selectedColor : 
                              (index.row() == m_secondaryIndex) ? secondaryColor : hoverColor;
         QPen   borderPen(borderColor);
 

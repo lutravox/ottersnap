@@ -45,7 +45,7 @@ class ImageTab : public QWidget {
     void saveSnapshot();
 
     /// @brief Delete a specific snapshot.
-    void deleteSnapshot(const QUuid& uuid);
+    void deleteSnapshot(const QUuid& uuid, bool silent = false);
 
     /// @brief Delete all snapshots associated with this image.
     void deleteAllSnapshots();

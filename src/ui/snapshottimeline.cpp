@@ -3,6 +3,7 @@
 
 #include <QAbstractItemView>
 #include <QAction>
+#include <QApplication>
 #include <QEvent>
 #include <QFile>
 #include <QFont>
@@ -14,6 +15,7 @@
 #include <QModelIndex>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QRubberBand>
 #include <QWheelEvent>
 
 SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
@@ -45,6 +47,15 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
     m_listView->setAutoFillBackground(true);
 
     connect(m_listView, &QListView::clicked, this, [this](const QModelIndex& index) {
+        if (QApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier)) {
+            return;
+        }
+
+        m_controller->clearSelection();
+        m_delegate->setSelectedIndices({});
+        m_listView->viewport()->update();
+        emit selectionChanged();
+
         int row = index.row();
         if (m_controller) {
             m_controller->selectSnapshot(row);
@@ -94,59 +105,85 @@ SnapshotTimeline::SnapshotTimeline(QWidget *parent) : QWidget(parent) {
 bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
     if (obj == m_listView->viewport() || obj == m_listView) {
         QPoint pos;
+        bool   hasPos = false;
 
-        if (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove ||
-            event->type() == QEvent::MouseButtonPress) {
-            if (auto *me = dynamic_cast<QMouseEvent *>(event)) {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress) {
+            if (auto *me = static_cast<QMouseEvent *>(event)) {
                 pos = m_listView->viewport()->mapFromGlobal(me->globalPosition().toPoint());
-            } else if (auto *he = dynamic_cast<QHoverEvent *>(event)) {
+                hasPos = true;
+            }
+        } else if (event->type() == QEvent::HoverMove) {
+            if (auto *he = static_cast<QHoverEvent *>(event)) {
                 pos = m_listView->viewport()->mapFromGlobal(he->globalPosition().toPoint());
+                hasPos = true;
             }
         }
 
         if (event->type() == QEvent::MouseMove) {
-            QModelIndex index = m_listView->indexAt(pos);
-            int         newHoverIndex = index.isValid() ? index.row() : -1;
-            m_delegate->setHoverIndex(newHoverIndex);
-            m_listView->viewport()->update();
+            if (hasPos) {
+                QModelIndex index = m_listView->indexAt(pos);
+                int         newHoverIndex = index.isValid() ? index.row() : -1;
+                m_delegate->setHoverIndex(newHoverIndex);
+                m_listView->viewport()->update();
+            }
         } else if (event->type() == QEvent::HoverMove) {
-            QModelIndex index = m_listView->indexAt(pos);
-            int         newHoverIndex = index.isValid() ? index.row() : -1;
-            m_delegate->setHoverIndex(newHoverIndex);
-            m_listView->viewport()->update();
+            if (hasPos) {
+                QModelIndex index = m_listView->indexAt(pos);
+                int         newHoverIndex = index.isValid() ? index.row() : -1;
+                m_delegate->setHoverIndex(newHoverIndex);
+                m_listView->viewport()->update();
+            }
         } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
             m_delegate->setHoverIndex(-1);
             m_listView->viewport()->update();
         } else if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *me = static_cast<QMouseEvent *>(event);
 
-            // border
             if (me->button() == Qt::LeftButton) {
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
+                    int row = index.row();
+
+                    // Handle multi-selection
+                    if (me->modifiers() & Qt::ControlModifier) {
+                        m_controller->toggleSelection(row);
+                        m_delegate->setSelectedIndices(m_controller->selectedIndices());
+                        m_listView->viewport()->update();
+                        emit selectionChanged();
+                        return true; // Prevent activation
+                    } else if (me->modifiers() & Qt::ShiftModifier) {
+                        m_controller->selectRange(row, row);
+                        m_delegate->setSelectedIndices(m_controller->selectedIndices());
+                        m_listView->viewport()->update();
+                        emit selectionChanged();
+                        return true; // Prevent activation
+                    }
+
                     QUuid uuid = uuidAt(index);
                     m_controller->model()->clearNewStatus(uuid);
                     m_listView->viewport()->update();
                 }
             } else if (me->button() == Qt::MiddleButton) {
+                // Secondary selection
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
-                    QUuid uuid = uuidAt(index);
-                    QString id = uuid.isNull() ? ImageSession::c_currentId : uuid.toString(QUuid::WithoutBraces);
+                    QUuid   uuid = uuidAt(index);
+                    QString id = uuid.isNull() ? ImageSession::c_currentId
+                                               : uuid.toString(QUuid::WithoutBraces);
                     if (id == m_controller->secondarySnapshotId()) {
                         emit secondarySnapshotSelected(QString());
                     } else {
                         emit secondarySnapshotSelected(id);
                     }
                 }
-            }
-
-            if (me->button() == Qt::RightButton) {
+            } else if (me->button() == Qt::RightButton) {
+                // Context Menu
                 QModelIndex index = m_listView->indexAt(pos);
                 if (index.isValid()) {
-                    int   row = index.row();
-                    QUuid uuid = uuidAt(index);
-                    QString id = uuid.isNull() ? ImageSession::c_currentId : uuid.toString(QUuid::WithoutBraces);
+                    int     row = index.row();
+                    QUuid   uuid = uuidAt(index);
+                    QString id = uuid.isNull() ? ImageSession::c_currentId
+                                               : uuid.toString(QUuid::WithoutBraces);
 
                     QMenu menu(this);
 
@@ -161,20 +198,38 @@ bool SnapshotTimeline::eventFilter(QObject *obj, QEvent *event) {
                         }
                     });
 
-                    if (!uuid.isNull()) {
+                    if (!uuid.isNull() || !m_controller->selectedIndices().isEmpty()) {
                         menu.addSeparator();
-                        QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
-                        connect(deleteAct, &QAction::triggered, this, [this, row]() {
-                            QModelIndex index = m_controller->model()->index(row);
-                            QUuid       uuid = uuidAt(index);
-                            emit        snapshotDeletionRequested(uuid);
-                        });
+
+                        if (!uuid.isNull()) {
+                            QAction *deleteAct = menu.addAction(tr("Delete Snapshot"));
+                            connect(deleteAct, &QAction::triggered, this, [this, row]() {
+                                QModelIndex index = m_controller->model()->index(row);
+                                QUuid       uuid = uuidAt(index);
+                                emit        snapshotDeletionRequested(uuid);
+                            });
+                        }
+
+                        if (!m_controller->selectedIndices().isEmpty()) {
+                            QString  actionText = (m_controller->selectedIndices().size() == 1)
+                                                      ? tr("Delete Selected Snapshot (%1)")
+                                                            .arg(m_controller->selectedIndices().size())
+                                                      : tr("Delete Selected Snapshots (%1)")
+                                                            .arg(m_controller->selectedIndices().size());
+                            QAction *multiDeleteAct = menu.addAction(actionText);
+                            connect(multiDeleteAct, &QAction::triggered, this, [this]() {
+                                QVector<QUuid> uuids = m_controller->selectedUuids();
+                                emit multipleSnapshotsDeletionRequested(uuids);
+                            });
+                        }
                     }
 
                     menu.exec(me->globalPosition().toPoint());
                     return true;
                 }
             }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            m_listView->viewport()->update();
         } else if (event->type() == QEvent::Wheel) {
             QWheelEvent *we = static_cast<QWheelEvent *>(event);
             if (m_controller && m_controller->model()->rowCount() == 0) {
@@ -236,9 +291,13 @@ void SnapshotTimeline::setSecondaryIdentity(const QString& id) {
 }
 
 void SnapshotTimeline::updateSelection(int newIndex) {
+    m_controller->clearSelection();
+    emit selectionChanged();
+
     // Update the delegate's current index for custom rendering
     if (m_delegate) {
         m_delegate->setCurrentIndex(newIndex);
+        m_delegate->setSelectedIndices({});
     }
 
     // Scroll to center the current thumbnail

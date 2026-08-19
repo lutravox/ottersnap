@@ -218,7 +218,7 @@ void ImageSession::saveSnapshot() {
     performSave(m_diskImage, false);
 }
 
-void ImageSession::deleteSnapshot(const QUuid& uuid) {
+void ImageSession::deleteSnapshot(const QUuid& uuid, bool silent) {
     if (uuid.isNull())
         return;
 
@@ -263,9 +263,13 @@ void ImageSession::deleteSnapshot(const QUuid& uuid) {
         }
 
         emit imageChanged();
-        emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
+        if (!silent) {
+            emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
+        }
     } else {
-        emit statusMessage("Failed to delete snapshot!");
+        if (!silent) {
+            emit statusMessage("Failed to delete snapshot!");
+        }
     }
 }
 

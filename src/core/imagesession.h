@@ -80,7 +80,7 @@ class ImageSession : public QObject, public IEffectsModel {
     void saveSnapshot();
 
     /// @brief Delete a snapshot by its UUID.
-    void deleteSnapshot(const QUuid& uuid);
+    void deleteSnapshot(const QUuid& uuid, bool silent = false);
 
     /// @brief Generate and cache a thumbnail for a specific snapshot.
     QImage generateThumbnail(int index, int size, bool padded = true);

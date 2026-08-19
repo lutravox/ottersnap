@@ -60,18 +60,27 @@ class SnapshotTimeline : public QWidget {
     void snapshotSelected(int index);
 
     /**
-     * @brief Emitted when the user clicks the "+" button to create a snapshot.
-     */
-    void createSnapshotRequested();
-
-    /**
      * @brief Emitted when a request is made to delete a snapshot.
      * @param uuid The identity of the snapshot to delete.
      */
     void snapshotDeletionRequested(const QUuid& uuid);
 
+    /**
+     * @brief Emitted when multiple snapshots are requested to be deleted.
+     * @param uuids The identities of the snapshots to delete.
+     */
+    void multipleSnapshotsDeletionRequested(const QVector<QUuid>& uuids);
+
+    /**
+     * @brief Emitted when the user clicks the "+" button to create a snapshot.
+     */
+    void createSnapshotRequested();
+
     /// @brief Emitted when a snapshot is set as the secondary/comparison snapshot.
     void secondarySnapshotSelected(const QString& id);
+
+    /// @brief Emitted when the multi-selection set changes.
+    void selectionChanged();
 
   private:
     QUuid uuidAt(const QModelIndex& index) const;

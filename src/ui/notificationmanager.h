@@ -11,13 +11,15 @@ class NotificationManager : public QObject {
     Q_OBJECT
 
   public:
+    static constexpr int c_defaultTimeoutMs = 5000;
+
     /// @brief Construct the manager.
     /// @param targetWindow The window that notifications should be positioned relative to.
     explicit NotificationManager(QWidget *targetWindow, QObject *parent = nullptr);
     ~NotificationManager() override;
 
     /// @brief Displays a new notification message.
-    void notify(const QString& message, int timeoutMs = 3500);
+    void notify(const QString& message, int timeoutMs = c_defaultTimeoutMs);
 
   private slots:
     void onNotificationFinished(Notification *notification);

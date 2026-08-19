@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+#include <QSet>
+#include <QVector>
 #include <memory>
 #include "controllers/imagesessioncontroller.h"
 #include "core/snapshottimelinemodel.h"
@@ -54,6 +56,24 @@ class SnapshotTimelineController : public QObject {
     /// @return The identity of the secondary snapshot, or empty if none.
     QString secondarySnapshotId() const;
 
+    /// @brief Toggles the selection of a snapshot.
+    /// @param row The row index of the snapshot.
+    void toggleSelection(int row);
+
+    /// @brief Selects a range of snapshots.
+    /// @param start The start row index.
+    /// @param end The end row index.
+    void selectRange(int start, int end);
+
+    /// @brief Clears the multi-selection set.
+    void clearSelection();
+
+    /// @brief Returns the current set of multi-selected snapshot indices.
+    QSet<int> selectedIndices() const { return m_selectedIndices; }
+
+    /// @brief Returns the UUIDs of the currently multi-selected snapshots.
+    QVector<QUuid> selectedUuids() const;
+
     /// @brief Get the row index for a given snapshot UUID.
     /// @param uuid The UUID to search for.
     /// @return The corresponding row index in the model, or -1 if not found.
@@ -77,6 +97,9 @@ class SnapshotTimelineController : public QObject {
     /// @brief Emitted when a snapshot deletion is requested.
     void snapshotDeletionRequested(const QUuid& uuid);
 
+    /// @brief Emitted when the multi-selection set changes.
+    void selectionChanged();
+
   private:
     void onActiveSessionChanged(ImageSession *session);
     void onSessionImageChanged();
@@ -85,4 +108,5 @@ class SnapshotTimelineController : public QObject {
     std::unique_ptr<SnapshotTimelineModel> m_model;
     ImageSessionController                *m_sessionController = nullptr;
     QString                                m_currentUuid = "";
+    QSet<int>                             m_selectedIndices;
 };

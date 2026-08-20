@@ -62,10 +62,6 @@ ViewerModel::ViewerModel(QWidget *parent) : QWidget(parent) {
     connect(m_viewer, &ImageViewer::zoomChanged, m_statusBar, [this](double pct) {
         m_statusBar->setZoom(pct);
     });
-
-    connect(m_viewer, &ImageViewer::viewportResized, m_viewer, [this](int w, int h) {
-        m_viewer->getViewModel().setViewportSize(w, h);
-    });
 }
 
 void ViewerModel::setSnapshotOnlyIndicator(bool visible) {

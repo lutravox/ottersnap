@@ -17,6 +17,7 @@ private slots:
     void testRowForDbId();
     void testClearNewStatus();
     void testUpdateThumbnail();
+    void testMultiSelection();
 
 private:
     SnapshotTimelineController *m_controller = nullptr;
@@ -25,9 +26,9 @@ private:
 };
 
 void TestSnapshotTimelineController::init() {
-    m_sessionController = new ImageSessionController(nullptr); // Use nullptr instead of local settings
+    m_sessionController = new ImageSessionController(new AppSettingsController());
     m_controller = new SnapshotTimelineController();
-    m_session = new ImageSession();
+    m_session = new ImageSession(m_sessionController);
 
     m_controller->setSessionController(m_sessionController);
     m_sessionController->setActiveSession(m_session);
@@ -108,6 +109,46 @@ void TestSnapshotTimelineController::testUpdateThumbnail() {
     m_controller->updateThumbnail(0, newThumb);
 
     QCOMPARE(model->data(model->index(0), SnapshotTimelineModel::ThumbnailRole).value<QPixmap>().size(), QSize(20, 20));
+}
+
+void TestSnapshotTimelineController::testMultiSelection() {
+    auto* model = m_controller->model();
+    QVector<QPixmap> thumbs = { QPixmap(), QPixmap(), QPixmap() };
+    QVector<QString> labels = { "S1", "S2", "S3" };
+    QVector<QUuid> identities = { QUuid::createUuid(), QUuid::createUuid(), QUuid::createUuid() };
+    model->setThumbnails(thumbs, labels, identities);
+
+    QSignalSpy spy(m_controller, &SnapshotTimelineController::selectionChanged);
+
+    // Test toggle
+    m_controller->toggleSelection(0);
+    QCOMPARE(m_controller->selectedIndices().contains(0), true);
+    QCOMPARE(spy.count(), 1);
+
+    m_controller->toggleSelection(0);
+    QCOMPARE(m_controller->selectedIndices().contains(0), false);
+    QCOMPARE(spy.count(), 2);
+
+    // Test range
+    // Primary selection is needed for range selection
+    m_controller->selectSnapshot(1); 
+    m_controller->selectRange(0, 2);
+    
+    QSet<int> expected = { 0, 1, 2 };
+    QCOMPARE(m_controller->selectedIndices(), expected);
+    QCOMPARE(spy.count(), 3);
+
+    // Test selectedUuids
+    QVector<QUuid> uuids = m_controller->selectedUuids();
+    QCOMPARE(uuids.count(), 3);
+    QVERIFY(uuids.contains(identities[0]));
+    QVERIFY(uuids.contains(identities[1]));
+    QVERIFY(uuids.contains(identities[2]));
+
+    // Test clear
+    m_controller->clearSelection();
+    QCOMPARE(m_controller->selectedIndices().count(), 0);
+    QCOMPARE(spy.count(), 4);
 }
 
 QTEST_MAIN(TestSnapshotTimelineController)

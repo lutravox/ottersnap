@@ -1,6 +1,8 @@
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
+#include "controllers/imagesessioncontroller.h"
 #include "core/imagesession.h"
 
 /// @brief A tab for an opened image.
@@ -11,7 +13,9 @@ class ImageTab : public QWidget {
     /// @brief Construct an empty tab.
     /// @param parent Optional parent widget.
     /// @param session The session to associate with this tab.
-    explicit ImageTab(QWidget *parent, ImageSession *session);
+    /// @param controller The session controller to use for actions.
+    explicit ImageTab(QWidget *parent, ImageSession *session, ImageSessionController *controller);
+
     ~ImageTab();
 
     /// @brief Close the current image and release resources.
@@ -25,7 +29,7 @@ class ImageTab : public QWidget {
     }
 
     /// @brief The session associated with this tab.
-    ImageSession *session() const {
+    QPointer<ImageSession> session() const {
         return m_session;
     }
 
@@ -88,7 +92,8 @@ class ImageTab : public QWidget {
   private:
     void setupUi();
 
-    QTimer        m_thumbnailUpdateTimer;
-    bool          m_isSnapshotOnly = false;
-    ImageSession *m_session = nullptr;
+    QTimer                  m_thumbnailUpdateTimer;
+    bool                    m_isSnapshotOnly = false;
+    QPointer<ImageSession>  m_session = nullptr;
+    ImageSessionController *m_controller = nullptr;
 };

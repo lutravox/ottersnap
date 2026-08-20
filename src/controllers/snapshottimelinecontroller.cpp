@@ -109,7 +109,7 @@ void SnapshotTimelineController::selectSnapshot(int row) {
         clearNewStatus(uuid);
     }
 
-    session->selectSnapshot(identity);
+    m_sessionController->selectSnapshot(identity);
 }
 
 void SnapshotTimelineController::markSnapshotAsNew(const QUuid& uuid) {

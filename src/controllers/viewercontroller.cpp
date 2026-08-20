@@ -6,6 +6,10 @@
 
 ViewerController::ViewerController(AppSettingsController *settings, QObject *parent)
     : QObject(parent), m_settings(settings) {
+    connect(&VulkanContext::instance(),
+            &VulkanContext::deviceChanged,
+            this,
+            &ViewerController::onDeviceChanged);
 }
 
 void ViewerController::setSessionController(ImageSessionController *controller) {
@@ -40,8 +44,10 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
     if (m_viewer) {
         // Sync current viewport size to the new session's view state
         QSize sz = m_viewer->getViewportSize();
-        session->viewModel().setViewportSize(sz.width(), sz.height());
-        session->viewModel().updateZoomRatio();
+        if (!sz.isEmpty()) {
+            session->viewModel().setViewportSize(sz.width(), sz.height());
+            session->viewModel().updateZoomRatio();
+        }
 
         if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
             QObject::disconnect(m_effectsConnection);
@@ -55,6 +61,11 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
     m_imageChangedConnection = QObject::connect(
         session, &ImageSession::imageChanged, this, &ViewerController::onSessionImageChanged);
 
+    // Connect to effectsChanged to sync rendering params
+    QObject::disconnect(m_effectsChangedConnection);
+    m_effectsChangedConnection = QObject::connect(
+        session, &ImageSession::effectsChanged, this, &ViewerController::syncSessionToViewer);
+
     // Connect to secondarySnapshotChanged to handle secondary selection resets
     QObject::disconnect(m_secondaryChangedConnection);
     m_secondaryChangedConnection = QObject::connect(
@@ -63,9 +74,21 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
             emit stateChanged();
         });
 
-    if (session && m_viewer) {
-        // Ensure the session is initialized with Vulkan handles before using its reconstructor
-        session->setUIReconstructorHandles(VulkanContext::instance().getUIHandles());
+    updateViewerState();
+    syncSessionToViewer();
+
+    emit secondarySnapshotChanged(session->secondarySnapshotId());
+}
+
+void ViewerController::updateViewerState() {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session || !m_viewer)
+        return;
+
+    // ORCHESTRATION: Prepare session for rendering
+    VulkanHandles handles = VulkanContext::instance().getUIHandles();
+    if (handles.device != VK_NULL_HANDLE) {
+        session->setUIReconstructorHandles(handles);
         m_viewer->setReconstructor(session->uiReconstructor());
 
         if (session->isCurrentImageSelected()) {
@@ -74,32 +97,16 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
             m_viewer->reconstruct(*seq);
         }
     }
-
-    syncSessionToViewer();
-
-    emit secondarySnapshotChanged(session->secondarySnapshotId());
 }
 
 void ViewerController::onSessionImageChanged() {
-    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
-    if (!session || !m_viewer)
-        return;
-
-    if (session->isCurrentImageSelected()) {
-        m_viewer->setImage(session->diskImage());
-    } else if (auto seq = session->getReconstructionSequence()) {
-        m_viewer->reconstruct(*seq);
-    }
-
+    updateViewerState();
     syncSessionToViewer();
     emit stateChanged();
 }
 
 void ViewerController::setViewer(IViewer *viewer) {
     m_viewer = viewer;
-    if (m_viewer) {
-        m_viewer->setSessionController(m_sessionController);
-    }
     if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
         connect(
             vkViewer, &VkImageViewer::zoomRequested, this, &ViewerController::handleZoomRequested);
@@ -108,6 +115,10 @@ void ViewerController::setViewer(IViewer *viewer) {
         connect(
             vkViewer, &VkImageViewer::grayscaleToggled, this, &ViewerController::grayscaleToggled);
         connect(vkViewer, &VkImageViewer::mirrorToggled, this, &ViewerController::mirrorToggled);
+        connect(vkViewer,
+                &VkImageViewer::colorPickRequested,
+                this,
+                &ViewerController::handleColorPickRequested);
 
         // Sync initial state
         vkViewer->setScaleWithWindowChecked(isScaleWithWindowEnabled());
@@ -162,6 +173,21 @@ void ViewerController::syncSessionToViewer() {
     if (!session || !m_viewer)
         return;
 
+    // Push a read-only snapshot of the session state to the viewer
+    RenderParams     params;
+    const ViewModel& vm = session->viewModel();
+    params.viewportWidth = static_cast<float>(m_viewer->getViewportSize().width());
+    params.viewportHeight = static_cast<float>(m_viewer->getViewportSize().height());
+    params.imageWidth = static_cast<float>(vm.imageWidth());
+    params.imageHeight = static_cast<float>(vm.imageHeight());
+    params.panX = vm.pan().x();
+    params.panY = vm.pan().y();
+    params.zoom = vm.zoom();
+    params.fitScale = vm.fitScale();
+    params.grayscale = session->grayscaleEnabled();
+    params.mirror = session->mirrorEnabled();
+
+    m_viewer->setRenderParams(params);
     m_viewer->notifyViewModelChanged();
 }
 
@@ -177,6 +203,7 @@ void ViewerController::fitToWindow() {
 
     state.fitToWindow();
 
+    syncSessionToViewer();
     m_viewer->notifyViewModelChanged();
 }
 
@@ -188,6 +215,7 @@ void ViewerController::setZoomPercentage(double pct) {
     ViewModel& state = session->viewModel();
     state.setPercentage(pct);
 
+    syncSessionToViewer();
     m_viewer->notifyViewModelChanged();
 }
 
@@ -273,6 +301,30 @@ void ViewerController::swapPrimaryAndSecondary() {
     emit stateChanged();
 }
 
+void ViewerController::handleColorPickRequested(QPointF screenPos) {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (!session)
+        return;
+
+    QPoint pixelPos = session->viewModel().screenToPixel(screenPos);
+    if (pixelPos == QPoint(-1, -1))
+        return;
+
+    QRgb color = 0;
+    if (session->isCurrentImageSelected()) {
+        QImage img = session->diskImage();
+        if (!img.isNull()) {
+            color = img.pixel(pixelPos.x(), pixelPos.y());
+        }
+    } else if (session->uiReconstructor()) {
+        color = session->uiReconstructor()->samplePixel(pixelPos.x(), pixelPos.y());
+    }
+
+    if (color != 0) {
+        emit colorPicked(QColor::fromRgba(color));
+    }
+}
+
 void ViewerController::handleViewportResize(int width, int height) {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
     if (!session || !m_viewer)
@@ -289,6 +341,7 @@ void ViewerController::handleViewportResize(int width, int height) {
         state.updateZoomRatio();
     }
 
+    syncSessionToViewer();
     m_viewer->notifyViewModelChanged();
 }
 
@@ -300,6 +353,7 @@ void ViewerController::handleZoomRequested(bool zoomIn, bool ctrlHeld) {
     ViewModel& state = session->viewModel();
     state.applyWheelZoom(zoomIn, ctrlHeld);
 
+    syncSessionToViewer();
     m_viewer->notifyViewModelChanged();
 }
 
@@ -311,5 +365,11 @@ void ViewerController::handlePanRequested(int dx, int dy) {
     ViewModel& state = session->viewModel();
     state.applyPanDelta(dx, dy);
 
+    syncSessionToViewer();
     m_viewer->notifyViewModelChanged();
+}
+
+void ViewerController::onDeviceChanged() {
+    updateViewerState();
+    syncSessionToViewer();
 }

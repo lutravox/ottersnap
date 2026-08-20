@@ -10,8 +10,6 @@
 #include <optional>
 #include <vulkan/vulkan.h>
 #include "core/viewer_interfaces.h"
-#include "controllers/imagesessioncontroller.h"
-#include "core/imagesession.h"
 #include "core/vksnapshotreconstructor.h"
 
 /// @struct UniformBufferObject
@@ -65,7 +63,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     }
 
     bool grayscaleEnabled() const {
-        return session() ? session()->grayscaleEnabled() : false;
+        return m_params.grayscale;
     }
 
     /// @brief Sets the indicator's state.
@@ -76,7 +74,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     /// @brief Returns whether horizontal mirroring is enabled.
     bool mirrorEnabled() const {
-        return session() ? session()->mirrorEnabled() : false;
+        return m_params.mirror;
     }
 
     /// @brief Updates the renderer's viewport size.
@@ -96,13 +94,8 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     /// @brief Sets the active reconstructor to use for rendering.
     void setReconstructor(const std::shared_ptr<VkSnapshotReconstructor>& reconstructor);
-    /// @brief Associates the renderer with the session coordinator.
-    void setSessionController(ImageSessionController *controller);
 
-    /// @brief Get the currently associated session.
-    ImageSession *session() const {
-        return m_sessionController ? m_sessionController->activeSession() : nullptr;
-    }
+    RenderParams m_params;
 
   protected:
     /// @brief Initializes Vulkan resources (samplers, buffers, etc.).
@@ -175,8 +168,6 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     RenderState m_state = RenderState::Empty;
     uint32_t    m_currentGeneration = 0;
     QImage      m_sourceImage;
-
-    ImageSessionController *m_sessionController = nullptr;
 
     // Qt Vulkan function wrappers
     QVulkanDeviceFunctions *m_devFuncs = nullptr;

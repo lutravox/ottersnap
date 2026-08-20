@@ -9,10 +9,24 @@ class VkSnapshotReconstructor;
 
 /// @brief Possible states of the viewer's rendering pipeline.
 enum class RenderState {
-    Empty,           ///< No image is loaded.
-    Loading,         ///< Base image is being uploaded to GPU.
-    Reconstructing,  ///< Snapshot deltas are being applied.
+    Empty,          ///< No image is loaded.
+    Loading,        ///< Base image is being uploaded to GPU.
+    Reconstructing, ///< Snapshot deltas are being applied.
     Ready           ///< Image is fully reconstructed and ready to draw.
+};
+
+/// @brief Parameters for rendering a frame.
+struct RenderParams {
+    float viewportWidth = 0.0f;
+    float viewportHeight = 0.0f;
+    float imageWidth = 0.0f;
+    float imageHeight = 0.0f;
+    float panX = 0.0f;
+    float panY = 0.0f;
+    float zoom = 1.0f;
+    float fitScale = 0.0f;
+    bool  grayscale = false;
+    bool  mirror = false;
 };
 
 /// @brief Interface for an image viewer.
@@ -23,8 +37,8 @@ class IViewer {
     /// @brief Get the current state of the rendering pipeline.
     virtual RenderState renderState() const = 0;
 
-    /// @brief Set the session coordinator associated with this viewer.
-    virtual void setSessionController(class ImageSessionController *controller) = 0;
+    /// @brief Update the rendering parameters (zoom, pan, etc.).
+    virtual void setRenderParams(const RenderParams& params) = 0;
 
     /// @brief Set the image to be displayed.
     virtual void setImage(const QImage& image) = 0;

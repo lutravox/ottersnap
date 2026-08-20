@@ -9,9 +9,6 @@
 
 #include "core/effects_interfaces.h"
 #include "core/viewer_interfaces.h"
-#include "core/viewmodel.h"
-#include "core/imagesession.h"
-#include "controllers/imagesessioncontroller.h"
 
 class VkImageViewerRenderer;
 
@@ -46,6 +43,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @param visible Whether the indicator should be visible.
     void setIndicator(QPoint pos, QColor color, bool visible);
 
+    /// @brief Update the rendering parameters (zoom, pan, etc.).
+    void setRenderParams(const RenderParams& params) override;
+
     /// @brief Display an image in the viewer.
     /// @param image The image to display.
     void setImage(const QImage& image) override;
@@ -53,29 +53,9 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Reconstructs a snapshot from a base image and a series of deltas.
     void reconstruct(const ReconstructionSequence& seq) override;
 
-    /// @brief Get the current zoom level as a percentage (100.0 = 1:1).
-    /// @return The zoom percentage.
+    /// @brief Return the current zoom level as a percentage (100.0 = 1:1).
     double zoomPercentage() const override {
-        return getViewModel().percentage();
-    }
-
-    /// @brief Get the current view model.
-    /// @return A reference to the current ViewModel containing zoom and pan information.
-    ViewModel& getViewModel() {
-        if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-            return s->viewModel();
-        }
-        static ViewModel fallback;
-        return fallback;
-    }
-
-    /// @brief Get the current view model (const version).
-    const ViewModel& getViewModel() const {
-        if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-            return s->viewModel();
-        }
-        static ViewModel fallback;
-        return fallback;
+        return m_params.zoom * 100.0;
     }
 
     /// @brief Get the viewport size.
@@ -102,10 +82,6 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
         return m_container ? m_container->mapToGlobal(pos) : QPoint();
     }
 
-    /// @brief Set the session coordinator associated with this viewer.
-    /// @param controller The image session controller.
-    void setSessionController(class ImageSessionController *controller) override;
-
     /// @brief Set the checked state of the 'Scale with Window' menu option.
     /// @param checked True if scaling with window should be enabled.
     void setScaleWithWindowChecked(bool checked);
@@ -125,8 +101,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Emitted when the user clicks the image.
     void imageClicked();
 
-    /// @brief Emitted when a color is picked from the image.
-    void colorPicked(const QColor& color);
+    /// @brief Emitted when a color picking is requested at the given screen position.
+    void colorPickRequested(QPointF screenPos);
 
     /// @brief Emitted whenever the viewport size changes.
     /// @param width The new width of the viewport.
@@ -202,14 +178,14 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     VkImageViewerRenderer *m_renderer = nullptr;
     QWidget               *m_container = nullptr;
 
-    bool                    m_hasImage = false;
-    bool                    m_isDragging = false;
-    QPoint                  m_lastMousePos;
-    bool                    m_scaleWithWindow = false;
-    bool                    m_pickingEnabled = false;
-    ImageSessionController *m_sessionController = nullptr;
-    QPointF                 m_indicatorPos;
-    uint32_t                m_generation = 0;
+    bool         m_hasImage = false;
+    bool         m_isDragging = false;
+    QPoint       m_lastMousePos;
+    bool         m_scaleWithWindow = false;
+    bool         m_pickingEnabled = false;
+    RenderParams m_params;
+    QPointF      m_indicatorPos;
+    uint32_t     m_generation = 0;
 };
 
 using ImageViewer = VkImageViewer;

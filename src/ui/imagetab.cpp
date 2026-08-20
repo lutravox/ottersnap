@@ -9,8 +9,10 @@
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
-ImageTab::ImageTab(QWidget *parent, ImageSession *session) : QWidget(parent), m_session(session) {
+ImageTab::ImageTab(QWidget *parent, ImageSession *session, ImageSessionController *controller)
+    : QWidget(parent), m_session(session), m_controller(controller) {
     connect(m_session, &ImageSession::imageChanged, this, &ImageTab::onImageChanged);
+
     connect(m_session, &ImageSession::snapshotsChanged, this, &ImageTab::onSnapshotsChanged);
     connect(m_session, &ImageSession::effectsChanged, this, &ImageTab::onEffectsChanged);
     connect(m_session, &ImageSession::statusMessage, this, &ImageTab::statusMessage);
@@ -36,23 +38,35 @@ void ImageTab::setSnapshotOnly(bool snapshotOnly) {
 }
 
 void ImageTab::notifyImageOpened() {
+    if (!m_session)
+        return;
     emit snapshotChanged(m_session->currentSnapshotIndex());
 }
 
 void ImageTab::close() {
-    m_session->close();
+    if (m_session) {
+        m_session->close();
+    }
 }
 
 const QImage& ImageTab::diskImage() const {
+    if (!m_session) {
+        static QImage empty;
+        return empty;
+    }
     return m_session->diskImage();
 }
 
 void ImageTab::selectSnapshot(int index) {
-    m_session->selectSnapshot(index);
+    if (m_controller && m_session) {
+        m_session->selectSnapshot(index);
+    }
 }
 
 void ImageTab::onImageChanged() {
-    emit snapshotChanged(m_session->currentSnapshotIndex());
+    if (m_session) {
+        emit snapshotChanged(m_session->currentSnapshotIndex());
+    }
 }
 
 void ImageTab::onSnapshotsChanged() {
@@ -66,6 +80,8 @@ void ImageTab::onEffectsChanged() {
 }
 
 void ImageTab::onThumbnailChanged(int index) {
+    if (!m_session)
+        return;
     QImage img = m_session->generateThumbnail(index, ThumbnailConstants::StandardSize);
     if (!img.isNull()) {
         emit thumbnailUpdated(index, QPixmap::fromImage(img));
@@ -80,19 +96,25 @@ void ImageTab::onThumbnailChanged(int index) {
 }
 
 void ImageTab::onThumbnailTimerTimeout() {
-    emit snapshotChanged(m_session->currentSnapshotIndex());
+    if (m_session) {
+        emit snapshotChanged(m_session->currentSnapshotIndex());
+    }
 }
 
 void ImageTab::saveSnapshot() {
-    m_session->saveSnapshot();
+    if (m_controller) {
+        m_controller->saveSnapshot();
+    }
 }
 
 void ImageTab::deleteSnapshot(const QUuid& uuid, bool silent) {
-    m_session->deleteSnapshot(uuid, silent);
+    if (m_controller) {
+        m_controller->deleteSnapshot(uuid, silent);
+    }
 }
 
 void ImageTab::deleteAllSnapshots() {
-    SnapshotManager::deleteAllSnapshots(m_session->filePath());
-    m_session->rebuildSnapshotList();
-    emit snapshotsChanged();
+    if (m_controller) {
+        m_controller->deleteAllSnapshots();
+    }
 }

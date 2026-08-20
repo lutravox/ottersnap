@@ -82,6 +82,10 @@ class ViewModel {
     /// @param ctrlHeld True if Ctrl is held (squared factor).
     void applyWheelZoom(bool zoomIn, bool ctrlHeld = false);
 
+    /// @brief Set the current pan offset.
+    /// @param pan The pan offset in normalized coordinates (relative to center).
+    void setPan(const QPointF& pan);
+
     /// @brief Apply a screen-pixel drag delta to the pan offset.
     /// @param dx Horizontal drag in screen pixels.
     /// @param dy Vertical drag in screen pixels.

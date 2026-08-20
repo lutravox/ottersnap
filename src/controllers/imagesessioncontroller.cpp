@@ -7,10 +7,6 @@ ImageSessionController::ImageSessionController(AppSettingsController *settings, 
 }
 
 ImageSessionController::~ImageSessionController() {
-    for (auto session : m_sessions) {
-        delete session;
-    }
-    m_sessions.clear();
 }
 
 ImageSession *ImageSessionController::openImage(const QString& path, bool snapshotOnly) {
@@ -97,6 +93,33 @@ void ImageSessionController::handleSnapshotsChanged() {
 
 void ImageSessionController::handleColorClustersChanged() {
     emit activeSessionColorClustersChanged();
+}
+
+void ImageSessionController::selectSnapshot(const QString& uuid) {
+    if (m_activeSession) {
+        m_activeSession->selectSnapshot(uuid);
+    }
+}
+
+void ImageSessionController::saveSnapshot() {
+    if (m_activeSession) {
+        m_activeSession->saveSnapshot();
+    }
+}
+
+void ImageSessionController::deleteSnapshot(const QUuid& uuid, bool silent) {
+    if (m_activeSession) {
+        m_activeSession->deleteSnapshot(uuid, silent);
+    }
+}
+
+void ImageSessionController::deleteAllSnapshots() {
+    if (m_activeSession) {
+        SnapshotManager::deleteAllSnapshots(m_activeSession->filePath());
+        m_activeSession->rebuildSnapshotList();
+
+        notifySnapshotChanged(m_activeSession->filePath());
+    }
 }
 
 ImageSession *ImageSessionController::sessionForPath(const QString& path) const {

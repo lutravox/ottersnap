@@ -238,7 +238,7 @@ void MainWindow::setupUi() {
             m_viewerController,
             &ViewerController::handleViewportResize);
 
-    connect(m_viewerState->viewer(), &VkImageViewer::colorPicked, this, &MainWindow::onColorPicked);
+    connect(m_viewerController, &ViewerController::colorPicked, this, &MainWindow::onColorPicked);
 
     connect(m_viewerState->statusBar(),
             &StatusBar::colorInfoToggled,
@@ -882,7 +882,7 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
         return existing;
     }
 
-    auto *tab = new ImageTab(this, session);
+    auto *tab = new ImageTab(this, session, m_sessionController);
     setupTabConnections(tab);
 
     QString displayName = QFileInfo(path).fileName();

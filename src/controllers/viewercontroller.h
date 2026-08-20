@@ -87,8 +87,14 @@ class ViewerController : public QObject {
     /// @param dx Horizontal pan delta.
     /// @param dy Vertical pan delta.
     void handlePanRequested(int dx, int dy);
+    /// @brief Handle a color pick request.
+    /// @param screenPos The screen position in the viewport to sample.
+    void handleColorPickRequested(QPointF screenPos);
+    /// @brief Synchronize the viewer state with the active session.
+    void updateViewerState();
 
   public slots:
+
     /// @brief Handle a zoom request.
     /// @param zoomIn True to zoom in, false to zoom out.
     /// @param ctrlHeld True if the Ctrl key was held during the request.
@@ -101,6 +107,7 @@ class ViewerController : public QObject {
   private slots:
     void onActiveSessionChanged(ImageSession *session);
     void onSessionImageChanged();
+    void onDeviceChanged();
 
   signals:
     void grayscaleToggled(bool enabled);
@@ -108,8 +115,10 @@ class ViewerController : public QObject {
     void toolbarVisibilityToggled(bool visible);
     void secondarySnapshotChanged(const QString& id);
     void stateChanged();
+    void colorPicked(const QColor& color);
 
   private:
+
     AppSettingsController  *m_settings;
     ImageSessionController *m_sessionController = nullptr;
     IViewer                *m_viewer = nullptr;
@@ -117,5 +126,6 @@ class ViewerController : public QObject {
     bool                    m_pickingEnabled = false;
     QMetaObject::Connection m_effectsConnection;
     QMetaObject::Connection m_imageChangedConnection;
+    QMetaObject::Connection m_effectsChangedConnection;
     QMetaObject::Connection m_secondaryChangedConnection;
 };

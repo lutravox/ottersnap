@@ -481,6 +481,8 @@ void VulkanContext::setUIDevice(VkDevice         device,
             m_uiDevice, &poolInfo, nullptr, &m_uiCommandPool) != VK_SUCCESS) {
         qCritical() << "[VulkanContext] Failed to create UI command pool";
     }
+
+    emit deviceChanged();
 }
 
 VulkanContext::~VulkanContext() {

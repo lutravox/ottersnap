@@ -50,6 +50,7 @@ class TestImageSessionController : public QObject {
 
         // Disable autoreload to ensure "snapshot on reopen" can be tested
         AppSettings::setAutoreloadImages(false);
+        AppSettings::setAutosaveSnapshots(false);
     }
 
     void cleanup() {
@@ -68,6 +69,85 @@ class TestImageSessionController : public QObject {
         QVERIFY(session != nullptr);
         QCOMPARE(m_controller->openPaths().count(), 1);
         QCOMPARE(m_controller->openPaths().first(), m_testFilePath);
+    }
+
+    void testSelectSnapshot() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        QSignalSpy snapSpy(session, &ImageSession::snapshotCreated);
+        session->saveSnapshot();
+        QVERIFY(snapSpy.wait(2000));
+
+        auto snapshots = session->snapshots();
+        QVERIFY(!snapshots.isEmpty());
+        QUuid   firstUuid = snapshots.first().uuid;
+        QString uuid = firstUuid.toString(QUuid::WithoutBraces);
+
+        m_controller->selectSnapshot(uuid);
+
+        QCOMPARE(session->currentUuid(), uuid);
+    }
+
+    void testSaveSnapshot() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        QSignalSpy snapSpy(session, &ImageSession::snapshotCreated);
+
+        int initialCount = session->snapshots().count();
+        m_controller->saveSnapshot();
+
+        QVERIFY(snapSpy.wait(2000));
+        QCOMPARE(session->snapshots().count(), initialCount + 1);
+    }
+
+    void testDeleteSnapshot() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        session->saveSnapshot();
+        QSignalSpy snapSpy(session, &ImageSession::snapshotCreated);
+        QVERIFY(snapSpy.wait(2000));
+
+        QUuid uuid = session->snapshots().first().uuid;
+        qDebug() << "Deleting snapshot:" << uuid;
+
+        QSignalSpy imageSpy(session, &ImageSession::imageChanged);
+        m_controller->deleteSnapshot(uuid);
+
+        if (!imageSpy.wait(100)) {
+            qDebug() << "imageChanged not emitted immediately, checking count:" << imageSpy.count();
+        }
+        QVERIFY(imageSpy.count() > 0);
+
+        QCOMPARE(session->snapshots().count(), 0);
+    }
+
+    void testDeleteAllSnapshots() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        session->saveSnapshot();
+        QSignalSpy snapSpy1(session, &ImageSession::snapshotCreated);
+        QVERIFY(snapSpy1.wait(2000));
+
+        QCOMPARE(session->snapshots().count(), 1);
+
+        QSignalSpy snapSpy(session, &ImageSession::snapshotsChanged);
+        m_controller->deleteAllSnapshots();
+
+        if (!snapSpy.wait(100)) {
+            qDebug() << "snapshotsChanged not emitted immediately, checking count:"
+                     << snapSpy.count();
+        }
+        QVERIFY(snapSpy.count() > 0);
+
+        QCOMPARE(session->snapshots().count(), 0);
     }
 
     void testOpenExistingImage() {

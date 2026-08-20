@@ -25,11 +25,25 @@ class ImageSessionController : public QObject {
     /// @param path Absolute path to the image file.
     void closeSession(const QString& path);
 
+    /// @brief Select a snapshot in the active session.
+    void selectSnapshot(const QString& uuid);
+
+    /// @brief Trigger a snapshot of the active session.
+    void saveSnapshot();
+
+    /// @brief Delete a snapshot in the active session.
+    void deleteSnapshot(const QUuid& uuid, bool silent = false);
+
+    /// @brief Delete all snapshots for the active session.
+    void deleteAllSnapshots();
+
     /// @brief Return the session associated with the given path.
     ImageSession *sessionForPath(const QString& path) const;
 
     /// @brief Return the currently active session.
-    ImageSession *activeSession() const { return m_activeSession; }
+    ImageSession *activeSession() const {
+        return m_activeSession;
+    }
 
     /// @brief Set the currently active session.
     void setActiveSession(ImageSession *session);

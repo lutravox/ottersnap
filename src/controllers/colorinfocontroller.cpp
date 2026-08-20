@@ -45,8 +45,11 @@ void ColorInfoController::setSessionController(ImageSessionController *controlle
 }
 
 void ColorInfoController::onActiveSessionChanged(ImageSession *session) {
+    QObject::disconnect(m_sessionImageConnection);
     resetClusterSelection();
     if (session) {
+        m_sessionImageConnection = QObject::connect(
+            session, &ImageSession::imageChanged, this, &ColorInfoController::resetClusterSelection);
         onSessionColorClustersChanged();
     }
 }
@@ -168,11 +171,15 @@ void ColorInfoController::updateIndicatorPos() {
     }
 
     QPointF pos = m_currentIndicatorPos;
-    if (m_sessionController && m_sessionController->isMirrorEnabled()) {
+    ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    if (session && session->mirrorEnabled()) {
         pos.setX(1.0f - pos.x());
     }
 
-    QPointF screenPos = viewer->getViewModel().normalizedToScreen(pos);
+    if (!session)
+        return;
+
+    QPointF screenPos = session->viewModel().normalizedToScreen(pos);
 
     if (screenPos.x() < 0 || screenPos.y() < 0) {
         viewer->setIndicator(QPoint(), Qt::transparent, false);

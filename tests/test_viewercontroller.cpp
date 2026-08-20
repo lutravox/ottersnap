@@ -1,13 +1,13 @@
 #include <QCoreApplication>
-#include <QtTest>
 #include <QSignalSpy>
+#include <QtTest>
 #include "controllers/appsettingscontroller.h"
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/viewercontroller.h"
 #include "core/imagesession.h"
+#include "core/snapshotdb.h"
 #include "core/viewer_interfaces.h"
 #include "core/viewmodel.h"
-#include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
 
 /// Mock implementation of IViewer to verify ViewController interactions.
@@ -19,14 +19,16 @@ class MockViewer : public IViewer {
     void reconstruct(const ReconstructionSequence&) override {
     }
 
-    void setSessionController(ImageSessionController *) override {
+    void setRenderParams(const RenderParams& params) override {
+        m_lastParams = params;
     }
 
     void notifyViewModelChanged() override {
         m_notifyViewModelCalled = true;
     }
 
-    void setReconstructor(std::shared_ptr<VkSnapshotReconstructor>) override {
+    void setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor) override {
+        m_lastReconstructor = reconstructor;
     }
 
     void update() override {
@@ -40,7 +42,7 @@ class MockViewer : public IViewer {
     }
 
     double zoomPercentage() const override {
-        return m_currentState.percentage();
+        return m_lastParams.zoom * 100.0;
     }
 
     QSize getViewportSize() const override {
@@ -54,13 +56,21 @@ class MockViewer : public IViewer {
     bool notifyViewModelCalled() const {
         return m_notifyViewModelCalled;
     }
+    const RenderParams& lastParams() const {
+        return m_lastParams;
+    }
+    std::shared_ptr<VkSnapshotReconstructor> lastReconstructor() const {
+        return m_lastReconstructor;
+    }
     void reset() {
         m_notifyViewModelCalled = false;
     }
 
   private:
-    ViewModel m_currentState;
-    bool      m_notifyViewModelCalled = false;
+    ViewModel                                m_currentState;
+    RenderParams                             m_lastParams;
+    std::shared_ptr<VkSnapshotReconstructor> m_lastReconstructor;
+    bool                                     m_notifyViewModelCalled = false;
 };
 
 class TestViewerController : public QObject {
@@ -82,11 +92,11 @@ class TestViewerController : public QObject {
     }
 
     void testSyncSessionToViewer() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
@@ -94,24 +104,27 @@ class TestViewerController : public QObject {
 
         // Initialize session with dummy image size so state changes are accepted
         session.viewModel().resetState(1000, 1000);
-
-        // Set a specific state in the session
-        ViewModel state;
-        state.resetState(1000, 1000);
-        state.setPercentage(150.0);
-        session.viewModel() = state;
+        session.viewModel().setPercentage(150.0);
+        session.viewModel().setPan(QPointF(0.1f, 0.2f));
 
         controller.syncSessionToViewer();
 
         QCOMPARE(viewer.notifyViewModelCalled(), true);
+        QCOMPARE(viewer.lastParams().imageWidth, 1000.0f);
+        QCOMPARE(viewer.lastParams().imageHeight, 1000.0f);
+        QCOMPARE(viewer.lastParams().zoom, 1.5f);
+        QCOMPARE(viewer.lastParams().panX, 0.1f);
+        QCOMPARE(viewer.lastParams().panY, 0.2f);
+        QCOMPARE(viewer.lastParams().viewportWidth, 800.0f);
+        QCOMPARE(viewer.lastParams().viewportHeight, 600.0f);
     }
 
     void testFitToWindow() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
@@ -126,11 +139,11 @@ class TestViewerController : public QObject {
     }
 
     void testHandleViewportResize() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
@@ -171,11 +184,11 @@ class TestViewerController : public QObject {
     }
 
     void testHandleZoomRequested() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
@@ -183,17 +196,21 @@ class TestViewerController : public QObject {
         session.viewModel().resetState(1000, 1000);
 
         double initialZoom = session.viewModel().percentage();
+        float  initialZoomFactor = session.viewModel().zoom();
+
         controller.handleZoomRequested(true, false); // Zoom In
+
         QVERIFY(session.viewModel().percentage() > initialZoom);
+        QVERIFY(viewer.lastParams().zoom > initialZoomFactor);
         QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testHandlePanRequested() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
@@ -201,41 +218,49 @@ class TestViewerController : public QObject {
         session.viewModel().resetState(1000, 1000);
 
         QPointF initialPan = session.viewModel().pan();
+        float   initialPanX = initialPan.x();
+        float   initialPanY = initialPan.y();
+
         controller.handlePanRequested(10, 20);
+
         QVERIFY(session.viewModel().pan() != initialPan);
+        QVERIFY(viewer.lastParams().panX != initialPanX || viewer.lastParams().panY != initialPanY);
         QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testSecondarySelectionStability() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
+        ViewerController       controller(&settings);
+        ImageSession           session;
 
         QString tempDir = QDir::tempPath();
         QString path = tempDir + "/ottersnap_stability_test_" +
                        QString::number(QRandomGenerator::global()->generate()) + ".png";
 
         SnapshotManager::deleteAllSnapshots(path);
-        
+
         QImage imgA(10, 10, QImage::Format_ARGB32);
         imgA.fill(Qt::red);
         auto snapA = SnapshotManager::saveSnapshot(path, imgA);
-        if (!snapA) QFAIL("Failed to save snapshot A");
+        if (!snapA)
+            QFAIL("Failed to save snapshot A");
         QUuid uuidA = snapA->uuid;
 
         QImage imgB(10, 10, QImage::Format_ARGB32);
         imgB.fill(Qt::blue);
         auto snapB = SnapshotManager::saveSnapshot(path, imgB);
-        if (!snapB) QFAIL("Failed to save snapshot B");
+        if (!snapB)
+            QFAIL("Failed to save snapshot B");
         QUuid uuidB = snapB->uuid;
 
         QImage imgC(10, 10, QImage::Format_ARGB32);
         imgC.fill(Qt::green);
         auto snapC = SnapshotManager::saveSnapshot(path, imgC);
-        if (!snapC) QFAIL("Failed to save snapshot C");
+        if (!snapC)
+            QFAIL("Failed to save snapshot C");
         QUuid uuidC = snapC->uuid;
-        
+
         session.openImage(path);
 
         controller.setSessionController(&sessionController);
@@ -253,6 +278,46 @@ class TestViewerController : public QObject {
         QCOMPARE(controller.secondarySnapshotId(), uuidB.toString(QUuid::WithoutBraces));
 
         QFile::remove(path);
+    }
+
+    void testOnDeviceChangedSyncsReconstructor() {
+        AppSettingsController  settings;
+        ImageSessionController sessionController(&settings);
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
+
+        controller.setSessionController(&sessionController);
+        sessionController.setActiveSession(&session);
+        controller.setViewer(&viewer);
+        session.viewModel().resetState(1000, 1000);
+
+        VulkanContext::instance().notifyDeviceChanged();
+
+        // If the device was initialized, the reconstructor should have been pushed.
+        if (VulkanContext::instance().getUIHandles().device != VK_NULL_HANDLE) {
+            QVERIFY(viewer.lastReconstructor() != nullptr);
+        }
+    }
+
+    void testActiveSessionChangedTriggersSync() {
+        AppSettingsController  settings;
+        ImageSessionController sessionController(&settings);
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
+
+        controller.setSessionController(&sessionController);
+        controller.setViewer(&viewer);
+
+        session.viewModel().resetState(1000, 1000);
+        session.viewModel().setPercentage(200.0);
+
+        // This should trigger onActiveSessionChanged -> updateViewerState -> syncSessionToViewer
+        sessionController.setActiveSession(&session);
+
+        QCOMPARE(viewer.lastParams().zoom, 2.0f);
+        QCOMPARE(viewer.notifyViewModelCalled(), true);
     }
 
     void testCanSwap() {
@@ -282,35 +347,35 @@ class TestViewerController : public QObject {
     }
 
     void testSecondarySnapshotHandling() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
+        ViewerController       controller(&settings);
+        ImageSession           session;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);
 
         // Test setting and getting
-        QUuid testUuid = QUuid::createUuid();
+        QUuid   testUuid = QUuid::createUuid();
         QString testId = testUuid.toString(QUuid::WithoutBraces);
         controller.setSecondarySnapshot(testId);
         QCOMPARE(controller.secondarySnapshotId(), testId);
 
         // Test signal emission
         QSignalSpy spy(&controller, &ViewerController::secondarySnapshotChanged);
-        QUuid nextUuid = QUuid::createUuid();
-        QString nextId = nextUuid.toString(QUuid::WithoutBraces);
+        QUuid      nextUuid = QUuid::createUuid();
+        QString    nextId = nextUuid.toString(QUuid::WithoutBraces);
         controller.setSecondarySnapshot(nextId);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).value<QString>(), nextId);
     }
 
     void testSetZoomPercentage() {
-        AppSettingsController settings;
+        AppSettingsController  settings;
         ImageSessionController sessionController(&settings);
-        ViewerController      controller(&settings);
-        ImageSession          session;
-        MockViewer            viewer;
+        ViewerController       controller(&settings);
+        ImageSession           session;
+        MockViewer             viewer;
 
         controller.setSessionController(&sessionController);
         sessionController.setActiveSession(&session);

@@ -60,6 +60,7 @@ class ColorInfoController : public QObject {
     ViewerModel            *m_viewerState = nullptr;
     ColorInfo              *m_colorInfo = nullptr;
 
+    QMetaObject::Connection m_sessionImageConnection;
     QPointF m_currentIndicatorPos;
     QColor  m_currentClusterColor;
     bool    m_clusterSelected = false;

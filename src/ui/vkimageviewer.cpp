@@ -1,6 +1,4 @@
 #include "ui/vkimageviewer.h"
-#include "controllers/imagesessioncontroller.h"
-#include "core/viewmodel.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewerrenderer.h"
 
@@ -109,29 +107,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                 auto *me = static_cast<QMouseEvent *>(event);
                 if (me->button() == Qt::LeftButton) {
                     if (m_pickingEnabled) {
-                        auto *session =
-                            m_sessionController ? m_sessionController->activeSession() : nullptr;
-                        if (m_hasImage && session) {
-                            ViewModel state = getViewModel();
-                            QPoint    pixelPos = state.screenToPixel(me->position());
-                            int       px = pixelPos.x();
-                            int       py = pixelPos.y();
-
-                            if (px >= 0 && py >= 0) {
-                                QRgb color = 0;
-
-                                if (session->isCurrentImageSelected()) {
-                                    QImage img = session->diskImage();
-                                    if (!img.isNull()) {
-                                        color = img.pixel(px, py);
-                                    }
-                                } else if (session->uiReconstructor()) {
-                                    color = session->uiReconstructor()->samplePixel(px, py);
-                                }
-
-                                emit colorPicked(QColor::fromRgba(color));
-                            }
-                        }
+                        emit colorPickRequested(me->position());
                         return true;
                     }
 
@@ -255,10 +231,15 @@ void VkImageViewer::setIndicator(QPoint pos, QColor color, bool visible) {
     }
 }
 
-void VkImageViewer::notifyViewModelChanged() {
-    if (auto *s = m_sessionController ? m_sessionController->activeSession() : nullptr) {
-        emit zoomChanged(s->viewModel().percentage());
+void VkImageViewer::setRenderParams(const RenderParams& params) {
+    m_params = params;
+    if (m_renderer) {
+        m_renderer->m_params = params;
     }
+}
+
+void VkImageViewer::notifyViewModelChanged() {
+    emit zoomChanged(m_params.zoom * 100.0);
     update();
 }
 
@@ -299,13 +280,6 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
         return;
     m_renderer->setViewportSize(sz);
     emit viewportResized(sz.width(), sz.height());
-}
-
-void VkImageViewer::setSessionController(ImageSessionController *controller) {
-    m_sessionController = controller;
-    if (m_renderer) {
-        m_renderer->setSessionController(controller);
-    }
 }
 
 void VkImageViewer::setPickingEnabled(bool enabled) {

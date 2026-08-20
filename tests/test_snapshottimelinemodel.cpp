@@ -8,6 +8,7 @@ private slots:
     void init();
     void cleanup();
     void testSetThumbnails();
+    void testRowForUuidString();
     void testNewStatus();
     void testUpdateThumbnail();
     void testSnapshotOnly();
@@ -35,6 +36,20 @@ void TestSnapshotTimelineModel::testSetThumbnails() {
     QCOMPARE(m_model->data(m_model->index(0), SnapshotTimelineModel::LabelRole).toString(), QString("S1"));
     QCOMPARE(m_model->data(m_model->index(1), SnapshotTimelineModel::UuidRole).value<QUuid>(), identities[1]);
     QCOMPARE(m_model->data(m_model->index(2), SnapshotTimelineModel::ThumbnailRole).value<QPixmap>().isNull(), true);
+}
+
+void TestSnapshotTimelineModel::testRowForUuidString() {
+    QVector<QPixmap> thumbs = { QPixmap(), QPixmap() };
+    QVector<QString> labels = { "S1", "S2" };
+    QUuid id1 = QUuid::createUuid();
+    QUuid id2 = QUuid::createUuid();
+    QVector<QUuid> identities = { id1, id2 };
+
+    m_model->setThumbnails(thumbs, labels, identities);
+
+    QCOMPARE(m_model->rowForUuidString(id1.toString(QUuid::WithoutBraces)), 0);
+    QCOMPARE(m_model->rowForUuidString(id2.toString(QUuid::WithoutBraces)), 1);
+    QCOMPARE(m_model->rowForUuidString("non-existent"), -1);
 }
 
 void TestSnapshotTimelineModel::testNewStatus() {

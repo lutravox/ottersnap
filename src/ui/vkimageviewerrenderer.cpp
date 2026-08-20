@@ -46,6 +46,9 @@ void VkImageViewerRenderer::setIndicator(QPoint pos, QColor color, bool visible)
 }
 
 void VkImageViewerRenderer::initResources() {
+    VulkanContext::instance().setUIDevice(
+        m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
+
     m_devFuncs = m_vkWindow->vulkanInstance()->deviceFunctions(m_vkWindow->device());
 
     if (!createSamplers())
@@ -71,26 +74,6 @@ void VkImageViewerRenderer::initResources() {
     // Mark UBO dirty so the first frame writes the current state into the
     // freshly mapped buffer
     m_uboDirty = true;
-
-    // If a session was set before the window was ready, initialize handles
-    // and trigger the initial render.
-    if (m_sessionController) {
-        ImageSession *session = m_sessionController->activeSession();
-        if (session) {
-            VulkanContext::instance().setUIDevice(
-                m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
-
-            VulkanHandles handles = VulkanContext::instance().getUIHandles();
-            session->setUIReconstructorHandles(handles);
-            setReconstructor(session->uiReconstructor());
-
-            if (session->isCurrentImageSelected()) {
-                setImage(session->diskImage(), 0);
-            } else if (auto seq = session->getReconstructionSequence()) {
-                reconstruct(*seq, 0);
-            }
-        }
-    }
 
     // Execute any reconstruction that was deferred because m_vkWindow was null
     if (m_pendingReconstruction) {
@@ -558,37 +541,18 @@ void VkImageViewerRenderer::releaseResources() {
     }
 }
 
-void VkImageViewerRenderer::setSessionController(ImageSessionController *controller) {
-    m_sessionController = controller;
-    if (m_sessionController) {
-        ImageSession *session = m_sessionController->activeSession();
-        if (session && m_vkWindow) {
-            // Initialize session-specific resources
-            VulkanContext::instance().setUIDevice(
-                m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
-
-            VulkanHandles handles = VulkanContext::instance().getUIHandles();
-            session->setUIReconstructorHandles(handles);
-            setReconstructor(session->uiReconstructor());
-        }
-    }
-}
-
 void VkImageViewerRenderer::updateUniformBuffer() {
-    ImageSession *activeSession = session();
-    if (!m_uniformMapped || !activeSession)
+    if (!m_uniformMapped)
         return;
 
-    const ViewModel& state = activeSession->viewModel();
-
-    float vpW = static_cast<float>(m_viewportSize.width());
-    float vpH = static_cast<float>(m_viewportSize.height());
+    float vpW = m_params.viewportWidth;
+    float vpH = m_params.viewportHeight;
 
     if (vpW == 0 || vpH == 0)
         return;
 
-    float imgAspect = (state.imageWidth() > 0 && state.imageHeight() > 0)
-                          ? static_cast<float>(state.imageWidth()) / state.imageHeight()
+    float imgAspect = (m_params.imageWidth > 0 && m_params.imageHeight > 0)
+                          ? m_params.imageWidth / m_params.imageHeight
                           : 1.0f;
     float scaleX = vpW / (imgAspect * vpH);
     float fit = std::min(scaleX, 1.0f);
@@ -596,7 +560,7 @@ void VkImageViewerRenderer::updateUniformBuffer() {
     float fitImgH = fit * vpH;
     float originX = (vpW - fitImgW) * 0.5f;
     float originY = (vpH - fitImgH) * 0.5f;
-    float fitScale = (state.imageWidth() > 0) ? fitImgW / state.imageWidth() : 1.0f;
+    float fitScale = (m_params.imageWidth > 0) ? fitImgW / m_params.imageWidth : 1.0f;
 
     auto *ubo = static_cast<UniformBufferObject *>(m_uniformMapped);
     ubo->uViewport[0] = vpW;
@@ -605,12 +569,12 @@ void VkImageViewerRenderer::updateUniformBuffer() {
     ubo->uFitImgSize[1] = fitImgH;
     ubo->uFitImgOrigin[0] = originX;
     ubo->uFitImgOrigin[1] = originY;
-    ubo->uPanOffset[0] = state.pan().x();
-    ubo->uPanOffset[1] = state.pan().y();
+    ubo->uPanOffset[0] = m_params.panX;
+    ubo->uPanOffset[1] = m_params.panY;
     ubo->uFitScale = fitScale;
-    ubo->uZoomLevel = state.zoom();
-    ubo->uGrayscale = grayscaleEnabled() ? VK_TRUE : VK_FALSE;
-    ubo->uMirror = mirrorEnabled() ? VK_TRUE : VK_FALSE;
+    ubo->uZoomLevel = m_params.zoom;
+    ubo->uGrayscale = m_params.grayscale ? VK_TRUE : VK_FALSE;
+    ubo->uMirror = m_params.mirror ? VK_TRUE : VK_FALSE;
 }
 
 void VkImageViewerRenderer::updateDescriptors(VkDescriptorSet dstSet,
@@ -921,16 +885,10 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint3
         return;
     }
 
-    QElapsedTimer timer;
-    timer.start();
-
     m_sourceImage = seq.base;
     m_uboDirty = true;
 
     reconstructor->reconstruct(seq);
-
-    qDebug() << "[VkImageViewerRenderer] GPU reconstruct took" << timer.elapsed() << "ms ("
-             << seq.deltas.size() << "deltas)";
 }
 
 void VkImageViewerRenderer::performUploads(
@@ -961,12 +919,10 @@ void VkImageViewerRenderer::performUploads(
         }
 
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        ImageSession *activeSession = session();
         if (m_textureImage == VK_NULL_HANDLE || m_textureView == VK_NULL_HANDLE ||
-            (activeSession && (activeSession->viewModel().imageWidth() != m_currentTextureWidth ||
-                               activeSession->viewModel().imageHeight() != m_currentTextureHeight))) {
-            if (createTexture(activeSession ? activeSession->viewModel().imageWidth() : 0,
-                              activeSession ? activeSession->viewModel().imageHeight() : 0) == 0) {
+            (m_params.imageWidth != m_currentTextureWidth ||
+             m_params.imageHeight != m_currentTextureHeight)) {
+            if (createTexture(m_params.imageWidth, m_params.imageHeight) == 0) {
                 qCritical()
                     << "[VkImageViewerRenderer] Failed to create texture for reconstruction";
                 setRenderState(RenderState::Empty, m_currentGeneration);
@@ -974,6 +930,7 @@ void VkImageViewerRenderer::performUploads(
             }
             oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         }
+
 
         // Global memory barrier to ensure compute writes are visible
         VkMemoryBarrier memBarrier{};
@@ -1010,23 +967,17 @@ void VkImageViewerRenderer::performUploads(
                                          &imgBarrier);
 
         // Copy reconstructed buffer to image
-        reconstructor->copyToVulkanImage(cmd,
-                                         m_textureImage,
-                                         activeSession ? activeSession->viewModel().imageWidth() : 0,
-                                         activeSession ? activeSession->viewModel().imageHeight() : 0);
+        reconstructor->copyToVulkanImage(
+            cmd, m_textureImage, m_params.imageWidth, m_params.imageHeight);
 
         // Regenerate mip chain from the updated level 0
-        int maxDim = std::max(activeSession ? activeSession->viewModel().imageWidth() : 0,
-                              activeSession ? activeSession->viewModel().imageHeight() : 0);
+        int maxDim = std::max(m_params.imageWidth, m_params.imageHeight);
         int mipLevels = 0;
         while ((1u << mipLevels) <= static_cast<unsigned>(maxDim)) {
             mipLevels++;
         }
         mipLevels = std::max(1, mipLevels);
-        recordMipChainGeneration(cmd,
-                                 mipLevels,
-                                 activeSession ? activeSession->viewModel().imageWidth() : 0,
-                                 activeSession ? activeSession->viewModel().imageHeight() : 0);
+        recordMipChainGeneration(cmd, mipLevels, m_params.imageWidth, m_params.imageHeight);
 
         // Final transition to SHADER_READ_ONLY_OPTIMAL
         if (mipLevels > 1) {
@@ -1128,9 +1079,10 @@ void VkImageViewerRenderer::startNextFrame() {
         return;
     }
 
-    QSize sz = m_vkWindow->swapChainImageSize();
-    float     currentZoom = session() ? session()->viewModel().zoom() : 1.0f;
+    QSize     sz = m_vkWindow->swapChainImageSize();
+    float     currentZoom = m_params.zoom;
     VkSampler activeSampler = (currentZoom >= 1.0f) ? m_samplerNearest : m_samplerLinear;
+
     if (activeSampler != m_activeSampler) {
         updateDescriptors(m_descriptorSet, m_uniformBuffer, activeSampler, m_textureView);
         m_activeSampler = activeSampler;
@@ -1182,8 +1134,8 @@ void VkImageViewerRenderer::startNextFrame() {
 
     if (m_indicatorVisible && m_indicatorPipeline != VK_NULL_HANDLE) {
         m_devFuncs->vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_indicatorPipeline);
-        float ndcX = (2.0f * m_indicatorPos.x() / sz.width()) - 1.0f;
-        float ndcy = (2.0f * m_indicatorPos.y() / sz.height()) - 1.0f;
+        float              ndcX = (2.0f * m_indicatorPos.x() / sz.width()) - 1.0f;
+        float              ndcy = (2.0f * m_indicatorPos.y() / sz.height()) - 1.0f;
         IndicatorConstants constants{};
         constants.offset[0] = ndcX;
         constants.offset[1] = ndcy;

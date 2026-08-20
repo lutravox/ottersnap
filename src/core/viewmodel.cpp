@@ -15,6 +15,10 @@ void ViewModel::resetState(int width, int height) {
     m_pan = QPointF(0, 0);
 }
 
+void ViewModel::setPan(const QPointF& pan) {
+    m_pan = pan;
+}
+
 void ViewModel::updateImageSize(int width, int height) {
     m_imageWidth = width;
     m_imageHeight = height;

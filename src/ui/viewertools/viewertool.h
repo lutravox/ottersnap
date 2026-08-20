@@ -14,6 +14,9 @@ class IViewerTool : public QObject {
   public:
     virtual ~IViewerTool() = default;
 
+    /// @brief Returns the unique identifier for the tool's action.
+    virtual QString actionId() const = 0;
+
     /// @brief Returns the display name of the tool.
     virtual QString name() const = 0;
 

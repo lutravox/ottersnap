@@ -6,6 +6,7 @@ class GrayscaleTool : public IViewerTool {
   public:
     explicit GrayscaleTool();
     QString name() const override { return "Grayscale"; }
+    QString actionId() const override { return "tool.grayscale"; }
     QString tooltip() const override { return "Grayscale"; }
     QString iconPath() const override;
     QKeySequence shortcut() const override {

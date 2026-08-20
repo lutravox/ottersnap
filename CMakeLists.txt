@@ -108,6 +108,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/controllers/effectscontroller.cpp
     src/controllers/imagesessioncontroller.cpp
     src/controllers/appsettingscontroller.cpp
+    src/controllers/shortcutmanager.cpp
     src/controllers/viewercontroller.cpp
     src/controllers/snapshottimelinecontroller.cpp
     src/controllers/colorinfocontroller.cpp
@@ -122,6 +123,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/ui/statusbar.cpp
     src/ui/viewermodel.cpp
     src/ui/dialogs/settingsdialog.cpp
+    src/ui/dialogs/shortcutsettingspage.cpp
     src/ui/dialogs/snapshotmanagerdialog.cpp
     src/ui/dialogs/aboutdialog.cpp
     src/ui/dialogutils.cpp

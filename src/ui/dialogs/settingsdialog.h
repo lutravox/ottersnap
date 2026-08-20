@@ -4,7 +4,9 @@
 #include <QDialog>
 #include <QRadioButton>
 #include <QSpinBox>
+#include <QTabWidget>
 #include "controllers/appsettingscontroller.h"
+#include "ui/notificationmanager.h"
 
 class QCheckBox;
 class QSpinBox;
@@ -15,8 +17,10 @@ class SettingsDialog : public QDialog {
 
   public:
     /// @brief Construct the settings dialog.
+    /// @param settings The settings controller.
+    /// @param notificationManager The notification manager for feedback.
     /// @param parent Parent widget.
-    explicit SettingsDialog(QWidget *parent = nullptr);
+    explicit SettingsDialog(AppSettingsController *settings, NotificationManager *notificationManager, QWidget *parent = nullptr);
 
   private:
     void resetAllSettings();
@@ -30,5 +34,7 @@ class SettingsDialog : public QDialog {
     QSpinBox             *m_sbDeltaCacheSize;
     QPushButton          *m_btnBackgroundColor;
     QColor                m_bgColor;
-    AppSettingsController m_settings;
+    AppSettingsController *m_settings;
+    NotificationManager   *m_notificationManager;
+    QTabWidget             *m_tabs;
 };

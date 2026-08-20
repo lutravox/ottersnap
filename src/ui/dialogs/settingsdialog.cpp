@@ -17,48 +17,80 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <sys/sysinfo.h>
+#include "ui/dialogs/shortcutsettingspage.h"
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(this) {
+SettingsDialog::SettingsDialog(AppSettingsController *settings,
+                               NotificationManager   *notificationManager,
+                               QWidget               *parent)
+    : QDialog(parent), m_settings(settings), m_notificationManager(notificationManager) {
     setWindowTitle(tr("Settings"));
-    setMinimumWidth(500);
+    setMinimumWidth(600);
 
     auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 10, 0, 10);
 
-    // Create a container for the form to allow it to be centered as a single block
-    auto *formContainer = new QWidget(this);
-    auto *formLayout = new QFormLayout(formContainer);
-    formLayout->setSpacing(15);
-    formLayout->setLabelAlignment(Qt::AlignRight);
+    m_tabs = new QTabWidget(this);
+    m_tabs->setDocumentMode(true);
+    m_tabs->setTabsClosable(false);
+    m_tabs->setStyleSheet("QTabBar { padding: 0px; }");
 
-    // Helper to add a section header and a divider line
-    auto addSection = [formLayout](const QString& title) {
-        auto *header = new QLabel(title);
-        header->setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 20px; "
-                              "margin-bottom: 5px; color: #aaa;");
-        formLayout->addRow(header);
+    // Helper to create a centered page structure that fills the width
+    auto createPage = [this]() {
+        auto *page = new QWidget();
+        auto *pageLayout = new QVBoxLayout(page);
+        pageLayout->setContentsMargins(10, 10, 10, 10);
 
-        auto *line = new QWidget();
-        line->setFixedHeight(1);
-        line->setStyleSheet("background-color: #444;");
-        formLayout->addRow(line);
+        auto *scrollArea = new QScrollArea(page);
+        scrollArea->setWidgetResizable(true);
+        scrollArea->setFrameShape(QFrame::NoFrame);
+        scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+        auto *scrollContent = new QWidget();
+        auto *scrollContentLayout = new QVBoxLayout(scrollContent);
+        scrollContentLayout->setContentsMargins(20, 20, 20, 20);
+        scrollContentLayout->setSpacing(20);
+        scrollContentLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+        scrollArea->setWidget(scrollContent);
+        pageLayout->addWidget(scrollArea);
+
+        return std::make_pair(page, scrollContentLayout);
     };
 
-    addSection(tr("General"));
+    // Helper to create a group box with a form layout
+    auto createGroup = [](QVBoxLayout *parentLayout, const QString& title) {
+        auto *group = new QGroupBox(title);
+        group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        auto *layout = new QFormLayout(group);
+        layout->setSpacing(15);
+        layout->setLabelAlignment(Qt::AlignLeft);
+        layout->setContentsMargins(15, 15, 15, 15);
+        parentLayout->addWidget(group);
+        return layout;
+    };
+
+    // --- General Tab ---
+    auto [generalPage, generalLayout] = createPage();
+    auto *sessionGroup = createGroup(generalLayout, tr("Session"));
     m_cbRestoreSession = new QCheckBox(this);
     m_cbRestoreSession->setChecked(AppSettings::restoreSession());
     m_cbRestoreSession->setToolTip(tr("Reopen all images from the previous session on startup."));
-    formLayout->addRow(tr("Restore session"), m_cbRestoreSession);
+    sessionGroup->addRow(tr("Restore session"), m_cbRestoreSession);
+    m_tabs->addTab(generalPage, tr("General"));
 
-    addSection(tr("Images & Snapshots"));
+    // --- Images Tab ---
+    auto [imagesPage, imagesLayout] = createPage();
+    auto *autoGroup = createGroup(imagesLayout, tr("Automatic Actions"));
     m_cbAutoreload = new QCheckBox(this);
-    m_cbAutoreload->setChecked(m_settings.shouldAutoreloadImages());
+    m_cbAutoreload->setChecked(m_settings->shouldAutoreloadImages());
     m_cbAutoreload->setToolTip(
         tr("Automatically reload the image if the file is modified on disk."));
-    formLayout->addRow(tr("Auto-reload images"), m_cbAutoreload);
+    autoGroup->addRow(tr("Auto-reload images"), m_cbAutoreload);
 
     auto *snapshotGroup = new QButtonGroup(this);
     m_rbNone = new QRadioButton(tr("None"), this);
@@ -75,8 +107,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     snapshotGroup->addButton(m_rbAutosave);
     snapshotGroup->addButton(m_rbSnapshotOnReopen);
 
-    // Initialize radio buttons based on current settings
-    if (m_settings.shouldAutosaveSnapshots()) {
+    if (m_settings->shouldAutosaveSnapshots()) {
         m_rbAutosave->setChecked(true);
     } else if (AppSettings::snapshotOnReopen()) {
         m_rbSnapshotOnReopen->setChecked(true);
@@ -84,11 +115,14 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
         m_rbNone->setChecked(true);
     }
 
-    formLayout->addRow(tr("Autosave snapshot:"), m_rbNone);
-    formLayout->addRow("", m_rbAutosave);
-    formLayout->addRow("", m_rbSnapshotOnReopen);
+    autoGroup->addRow(tr("Autosave snapshot:"), m_rbNone);
+    autoGroup->addRow("", m_rbAutosave);
+    autoGroup->addRow("", m_rbSnapshotOnReopen);
+    m_tabs->addTab(imagesPage, tr("Images"));
 
-    addSection(tr("Performance"));
+    // --- Performance Tab ---
+    auto [perfPage, perfLayout] = createPage();
+    auto          *cacheGroup = createGroup(perfLayout, tr("Cache Memory"));
     struct sysinfo si;
     sysinfo(&si);
     int maxMB = static_cast<int>(si.totalram / (1024 * 1024));
@@ -98,7 +132,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     m_sbThumbCacheSize->setValue(AppSettings::maxThumbnailCacheSizeMB());
     m_sbThumbCacheSize->setToolTip(
         tr("Maximum memory allocated for thumbnail caching. Larger values can speed up browsing."));
-    formLayout->addRow(tr("Thumbnail cache size (MB):"), m_sbThumbCacheSize);
+    cacheGroup->addRow(tr("Thumbnail cache size (MB):"), m_sbThumbCacheSize);
 
     m_sbDeltaCacheSize = new QSpinBox(this);
     m_sbDeltaCacheSize->setRange(c_minCacheSizeMB, maxMB);
@@ -106,9 +140,12 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     m_sbDeltaCacheSize->setToolTip(
         tr("Maximum memory allocated for storing snapshot deltas. Larger "
            "values improve snapshot switching speed."));
-    formLayout->addRow(tr("Snapshot cache size (MB):"), m_sbDeltaCacheSize);
+    cacheGroup->addRow(tr("Snapshot cache size (MB):"), m_sbDeltaCacheSize);
+    m_tabs->addTab(perfPage, tr("Performance"));
 
-    addSection(tr("Appearance"));
+    // --- Appearance Tab ---
+    auto [appPage, appLayout] = createPage();
+    auto *styleGroup = createGroup(appLayout, tr("Viewer Style"));
     auto *bgWidget = new QWidget(this);
     auto *bgHLayout = new QHBoxLayout(bgWidget);
     bgHLayout->setContentsMargins(0, 0, 0, 0);
@@ -124,28 +161,11 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     btnResetBg->setFixedWidth(60);
 
     bgHLayout->addWidget(m_btnBackgroundColor);
-    bgHLayout->addWidget(btnResetBg);
     bgHLayout->addStretch();
+    bgHLayout->addWidget(btnResetBg);
 
-    formLayout->addRow(tr("Viewer background color:"), bgWidget);
-
-    auto *scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
-    auto *scrollContent = new QWidget();
-    auto *scrollContentLayout = new QVBoxLayout(scrollContent);
-    scrollContentLayout->setAlignment(Qt::AlignCenter);
-
-    auto *centerLayout = new QHBoxLayout();
-    centerLayout->addStretch();
-    centerLayout->addWidget(formContainer);
-    centerLayout->addStretch();
-    scrollContentLayout->addLayout(centerLayout);
-
-    scrollArea->setWidget(scrollContent);
-    mainLayout->addWidget(scrollArea);
+    styleGroup->addRow(tr("Viewer background color:"), bgWidget);
+    m_tabs->addTab(appPage, tr("Appearance"));
 
     connect(m_cbAutoreload, &QCheckBox::toggled, [this](bool checked) {
         m_rbAutosave->setEnabled(checked);
@@ -168,12 +188,16 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
         m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
     });
 
-    mainLayout->addStretch();
+    auto *shortcutsPage = new ShortcutSettingsPage(m_settings->shortcutManager(), this);
+    m_tabs->addTab(shortcutsPage, tr("Shortcuts"));
+
+    mainLayout->addWidget(m_tabs);
 
     // Button box (OK / Cancel)
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
     auto *bottomLayout = new QHBoxLayout();
+    bottomLayout->setContentsMargins(10, 0, 10, 0);
     auto *btnResetAll = new QPushButton(tr("Reset All"), this);
     btnResetAll->setToolTip(tr("Reset all settings to their default values."));
 
@@ -186,18 +210,39 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), m_settings(th
     connect(btnResetAll, &QPushButton::clicked, this, &SettingsDialog::resetAllSettings);
 
     connect(buttonBox, &QDialogButtonBox::accepted, this, [this]() {
-        m_settings.setRestoreSession(m_cbRestoreSession->isChecked());
-        m_settings.setAutosaveSnapshots(m_rbAutosave->isChecked());
-        m_settings.setAutoreloadImages(m_cbAutoreload->isChecked());
-        m_settings.setSnapshotOnReopen(m_rbSnapshotOnReopen->isChecked());
-        m_settings.setBackgroundColor(m_bgColor);
-        m_settings.setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
+        m_settings->setRestoreSession(m_cbRestoreSession->isChecked());
+        m_settings->setAutosaveSnapshots(m_rbAutosave->isChecked());
+        m_settings->setAutoreloadImages(m_cbAutoreload->isChecked());
+        m_settings->setSnapshotOnReopen(m_rbSnapshotOnReopen->isChecked());
+        m_settings->setBackgroundColor(m_bgColor);
+        m_settings->setMaxThumbnailCacheSizeMB(m_sbThumbCacheSize->value());
         ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
-        m_settings.setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());
+        m_settings->setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());
         DeltaCache::updateMaxCost(m_sbDeltaCacheSize->value());
+        
+        // Commit pending shortcuts
+        for (int i = 0; i < m_tabs->count(); ++i) {
+            auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(i));
+            if (sp)
+                sp->commitChanges();
+        }
+        
+        m_settings->shortcutManager()->save();
+        
+        if (m_notificationManager) {
+            m_notificationManager->notify(tr("Settings updated successfully."));
+        }
+        
         accept();
     });
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(buttonBox, &QDialogButtonBox::rejected, this, [this]() {
+        for (int i = 0; i < m_tabs->count(); ++i) {
+            auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(i));
+            if (sp)
+                sp->resetPending();
+        }
+        reject();
+    });
 }
 
 void SettingsDialog::resetAllSettings() {
@@ -219,4 +264,12 @@ void SettingsDialog::resetAllSettings() {
 
     m_bgColor = QColor(c_defaultBackgroundColor);
     m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+
+    // Reset pending shortcuts and refresh buttons
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(i));
+        if (sp) {
+            sp->resetPending();
+        }
+    }
 }

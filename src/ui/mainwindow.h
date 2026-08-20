@@ -94,6 +94,7 @@ class MainWindow : public QMainWindow {
     void      updateSnapshotTimeline();
     void      onSnapshotChanged(int index);
     void      syncTimelineSelection();
+    void      updateShortcut(const QString& actionId, const QKeySequence& sequence);
 
     /// @brief Collect file paths from all open tabs.
     QStringList collectOpenPaths() const;
@@ -150,7 +151,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionMirror;
     QAction *m_actionResetEffects;
 
-    QList<QShortcut *> m_toolShortcuts;
+    QMap<QString, QShortcut *> m_toolShortcuts;
     QAction *m_actionSettings;
     QAction *m_actionManageSnapshots;
     QAction *m_actionToggleToolbar;

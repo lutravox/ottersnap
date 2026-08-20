@@ -32,6 +32,9 @@ class ViewerToolbar : public QFrame, public IEffectsUI {
     /// @brief Updates the enabled/disabled state of all tools.
     void updateToolStates();
 
+    /// @brief Updates tooltips based on the current shortcut settings.
+    void updateShortcuts(class ShortcutManager* manager);
+
     /**
      * @brief Activates or toggles a tool by its name.
      * @param name The name of the tool to activate.

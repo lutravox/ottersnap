@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include "controllers/shortcutmanager.h"
 
 /// @brief Controller that manages application settings.
 class AppSettingsController : public QObject {
@@ -8,6 +9,9 @@ class AppSettingsController : public QObject {
 
   public:
     explicit AppSettingsController(QObject *parent = nullptr);
+
+    /// @brief Access the shortcut manager.
+    ShortcutManager* shortcutManager() const { return m_shortcutManager; }
 
     /// @brief Return whether a snapshot should be saved when opening an image that is already open.
     bool shouldSaveSnapshotOnReopen() const;
@@ -54,4 +58,7 @@ class AppSettingsController : public QObject {
 
     /// @brief Set the max delta cache size.
     void setMaxDeltaCacheSizeMB(int size);
+
+  private:
+    ShortcutManager *m_shortcutManager = nullptr;
 };

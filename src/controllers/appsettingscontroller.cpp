@@ -3,6 +3,7 @@
 #include "config/appsettings.h"
 
 AppSettingsController::AppSettingsController(QObject *parent) : QObject(parent) {
+    m_shortcutManager = new ShortcutManager(this);
 }
 
 bool AppSettingsController::shouldSaveSnapshotOnReopen() const {

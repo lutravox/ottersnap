@@ -14,6 +14,9 @@ class ColorPickerTool : public IViewerTool {
     QString name() const override {
         return tr("Color Picker");
     }
+    QString actionId() const override {
+        return "tool.colorPicker";
+    }
     QString tooltip() const override {
         return tr("Color Picker");
     }

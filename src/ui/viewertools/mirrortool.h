@@ -6,6 +6,7 @@ class MirrorTool : public IViewerTool {
   public:
     explicit MirrorTool();
     QString name() const override { return "Mirror"; }
+    QString actionId() const override { return "tool.mirror"; }
     QString tooltip() const override { return "Mirror"; }
     QString iconPath() const override;
     QKeySequence shortcut() const override {

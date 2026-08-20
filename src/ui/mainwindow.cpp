@@ -101,7 +101,32 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     QMainWindow::closeEvent(event);
 }
 
-// Remove the now-redundant collectOpenPaths method
+void MainWindow::updateShortcut(const QString& actionId, const QKeySequence& sequence) {
+    if (actionId == "file.open") m_actionOpen->setShortcut(sequence);
+    else if (actionId == "tab.close") m_actionCloseTab->setShortcut(sequence);
+    else if (actionId == "app.exit") m_actionExit->setShortcut(sequence);
+    else if (actionId == "snapshot.save") m_actionSaveSnapshot->setShortcut(sequence);
+    else if (actionId == "snapshot.delete") m_actionDeleteSnapshot->setShortcut(sequence);
+    else if (actionId == "viewer.scaleWithWindow") m_actionScaleWithWindow->setShortcut(sequence);
+    else if (actionId == "viewer.toggleToolbar") m_actionToggleToolbar->setShortcut(sequence);
+    else if (actionId == "viewer.resetView") m_actionResetView->setShortcut(sequence);
+    else if (actionId == "viewer.actualSize") m_actionActualSize->setShortcut(sequence);
+    else if (actionId == "viewer.zoomIn") m_actionZoomIn->setShortcut(sequence);
+    else if (actionId == "viewer.zoomOut") m_actionZoomOut->setShortcut(sequence);
+    else if (actionId == "viewer.fullScreen") m_actionFullScreen->setShortcut(sequence);
+    else if (actionId == "tool.grayscale") m_actionGrayscale->setShortcut(sequence);
+    else if (actionId == "tool.mirror") m_actionMirror->setShortcut(sequence);
+    else if (actionId == "tool.swap") m_actionSwap->setShortcut(sequence);
+    else if (m_toolShortcuts.contains(actionId)) {
+        m_toolShortcuts[actionId]->setKey(sequence);
+    }
+
+    // Update toolbar tooltips if the shortcut changed
+    if (m_viewerState && m_viewerState->toolbar()) {
+        m_viewerState->toolbar()->updateShortcuts(m_settingsController->shortcutManager());
+    }
+}
+
 void MainWindow::setupUi() {
     setWindowTitle(AppSettings::applicationName());
     resize(c_defaultWidth, c_defaultHeight);
@@ -196,6 +221,11 @@ void MainWindow::setupUi() {
     m_viewerController->setViewer(m_viewerState->viewer());
     m_viewerState->setToolbarVisible(m_viewerController->isToolbarVisible());
 
+    connect(m_settingsController->shortcutManager(),
+            &ShortcutManager::shortcutChanged,
+            this,
+            &MainWindow::updateShortcut);
+
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
 
@@ -280,7 +310,8 @@ void MainWindow::setupUi() {
     // Register shortcuts for toolbar tools
     if (m_viewerState && m_viewerState->toolbar()) {
         for (const auto& tw : m_viewerState->toolbar()->tools()) {
-            QKeySequence shortcut = tw.tool->shortcut();
+            QString actionId = tw.tool->actionId();
+            QKeySequence shortcut = m_settingsController->shortcutManager()->shortcutFor(actionId);
             if (!shortcut.isEmpty()) {
                 QShortcut *s = new QShortcut(shortcut, this);
                 connect(s, &QShortcut::activated, this, [this, name = tw.tool->name()]() {
@@ -288,9 +319,10 @@ void MainWindow::setupUi() {
                         m_viewerState->toolbar()->activateTool(name);
                     }
                 });
-                m_toolShortcuts.append(s);
+                m_toolShortcuts.insert(actionId, s);
             }
         }
+        m_viewerState->toolbar()->updateShortcuts(m_settingsController->shortcutManager());
     }
 
     // Connect image drop and drop on viewer
@@ -300,7 +332,8 @@ void MainWindow::setupUi() {
             [this](const QString& path) { openImageFile(path); });
 
     // Navigation shortcuts
-    auto *shortcutLeft = new QShortcut(QKeySequence(Qt::Key_Left), this);
+    QKeySequence seqLeft = m_settingsController->shortcutManager()->shortcutFor("nav.prev");
+    auto *shortcutLeft = new QShortcut(seqLeft, this);
     connect(shortcutLeft, &QShortcut::activated, this, [this]() {
         if (m_snapshotController) {
             int current = m_snapshotController->currentSelectedIndex();
@@ -310,9 +343,10 @@ void MainWindow::setupUi() {
             }
         }
     });
-    m_toolShortcuts.append(shortcutLeft);
+    m_toolShortcuts.insert("nav.prev", shortcutLeft);
 
-    auto *shortcutRight = new QShortcut(QKeySequence(Qt::Key_Right), this);
+    QKeySequence seqRight = m_settingsController->shortcutManager()->shortcutFor("nav.next");
+    auto *shortcutRight = new QShortcut(seqRight, this);
     connect(shortcutRight, &QShortcut::activated, this, [this]() {
         if (m_snapshotController) {
             int current = m_snapshotController->currentSelectedIndex();
@@ -322,7 +356,7 @@ void MainWindow::setupUi() {
             }
         }
     });
-    m_toolShortcuts.append(shortcutRight);
+    m_toolShortcuts.insert("nav.next", shortcutRight);
 
     setCentralWidget(central);
 
@@ -332,7 +366,7 @@ void MainWindow::setupUi() {
 void MainWindow::setupMenu() {
     m_fileMenu = menuBar()->addMenu(tr("&File"));
     m_actionOpen = m_fileMenu->addAction(tr("&Open Image..."));
-    m_actionOpen->setShortcut(QKeySequence::Open);
+    m_actionOpen->setShortcut(m_settingsController->shortcutManager()->shortcutFor("file.open"));
     connect(m_actionOpen, &QAction::triggered, this, &MainWindow::onFileOpen);
 
     m_recentFilesMenu = m_fileMenu->addMenu(tr("Recent Files"));
@@ -351,7 +385,7 @@ void MainWindow::setupMenu() {
     m_fileMenu->addSeparator();
 
     m_actionCloseTab = m_fileMenu->addAction(tr("Close &Tab"));
-    m_actionCloseTab->setShortcut(QKeySequence::Close);
+    m_actionCloseTab->setShortcut(m_settingsController->shortcutManager()->shortcutFor("tab.close"));
     connect(m_actionCloseTab, &QAction::triggered, this, &MainWindow::onCloseCurrentTab);
 
     m_actionCloseAllTabs = m_fileMenu->addAction(tr("Close All &Tabs"));
@@ -360,18 +394,18 @@ void MainWindow::setupMenu() {
     m_fileMenu->addSeparator();
 
     m_actionExit = m_fileMenu->addAction(tr("E&xit"));
-    m_actionExit->setShortcut(QKeySequence::Quit);
+    m_actionExit->setShortcut(m_settingsController->shortcutManager()->shortcutFor("app.exit"));
     connect(m_actionExit, &QAction::triggered, this, &QWidget::close);
 
     m_editMenu = menuBar()->addMenu(tr("&Edit"));
     m_actionSaveSnapshot = m_editMenu->addAction(tr("&Create Snapshot"));
-    m_actionSaveSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
+    m_actionSaveSnapshot->setShortcut(m_settingsController->shortcutManager()->shortcutFor("snapshot.save"));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
 
     m_editMenu->addSeparator();
 
     m_actionDeleteSnapshot = m_editMenu->addAction(tr("&Delete Snapshot"));
-    m_actionDeleteSnapshot->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    m_actionDeleteSnapshot->setShortcut(m_settingsController->shortcutManager()->shortcutFor("snapshot.delete"));
     connect(m_actionDeleteSnapshot,
             &QAction::triggered,
             this,
@@ -404,41 +438,41 @@ void MainWindow::setupMenu() {
     m_viewMenu = menuBar()->addMenu(tr("&View"));
     m_actionScaleWithWindow = m_viewMenu->addAction(tr("&Scale with Window"));
     m_actionScaleWithWindow->setCheckable(true);
-    m_actionScaleWithWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
+    m_actionScaleWithWindow->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.scaleWithWindow"));
     connect(
         m_actionScaleWithWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
 
     m_actionToggleToolbar = m_viewMenu->addAction(tr("&Show Toolbar"));
     m_actionToggleToolbar->setCheckable(true);
-    m_actionToggleToolbar->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+    m_actionToggleToolbar->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.toggleToolbar"));
     connect(m_actionToggleToolbar, &QAction::triggered, this, &MainWindow::onToggleToolbar);
 
     m_actionSwap = m_viewMenu->addAction(tr("&Swap Comparison"));
     connect(m_actionSwap, &QAction::triggered, this, &MainWindow::onSwap);
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
-    m_actionResetView->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    m_actionResetView->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.resetView"));
     connect(
         m_actionResetView, &QAction::triggered, m_viewerController, &ViewerController::fitToWindow);
 
     m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
-    m_actionActualSize->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    m_actionActualSize->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.actualSize"));
     connect(m_actionActualSize, &QAction::triggered, this, &MainWindow::onActualSize);
 
     m_viewMenu->addSeparator();
 
     m_actionZoomIn = m_viewMenu->addAction(tr("Zoom &In"));
-    m_actionZoomIn->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
+    m_actionZoomIn->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.zoomIn"));
     connect(m_actionZoomIn, &QAction::triggered, this, &MainWindow::onZoomIn);
 
     m_actionZoomOut = m_viewMenu->addAction(tr("Zoom &Out"));
-    m_actionZoomOut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+    m_actionZoomOut->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.zoomOut"));
     connect(m_actionZoomOut, &QAction::triggered, this, &MainWindow::onZoomOut);
 
     m_viewMenu->addSeparator();
 
     m_actionFullScreen = m_viewMenu->addAction(tr("Toggle &Full Screen"));
-    m_actionFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
+    m_actionFullScreen->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.fullScreen"));
     connect(m_actionFullScreen, &QAction::triggered, this, &MainWindow::onToggleFullScreen);
 
     m_effectsMenu = menuBar()->addMenu(tr("&Effects"));
@@ -1063,7 +1097,7 @@ void MainWindow::dropEvent(QDropEvent *event) {
 }
 
 void MainWindow::onSettings() {
-    SettingsDialog dialog(this);
+    SettingsDialog dialog(m_settingsController, m_notificationManager, this);
     dialog.exec();
 }
 

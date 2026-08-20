@@ -176,3 +176,21 @@ bool ViewerToolbar::colorPickerChecked() const {
     }
     return false;
 }
+
+void ViewerToolbar::updateShortcuts(ShortcutManager* manager) {
+    if (!manager)
+        return;
+
+    for (auto& tw : m_tools) {
+        QString actionId = tw.tool->actionId();
+        QKeySequence seq = manager->shortcutFor(actionId);
+        
+        QString tooltipText = tw.tool->tooltip();
+        if (!seq.isEmpty()) {
+            QString shortcutStr = seq.toString();
+            shortcutStr.replace("+", " + ");
+            tooltipText += QString("\n-\n%1").arg(shortcutStr);
+        }
+        tw.button->setToolTip(tooltipText);
+    }
+}

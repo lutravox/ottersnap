@@ -15,6 +15,9 @@ class SwapTool : public IViewerTool {
     QString name() const override {
         return tr("Swap");
     }
+    QString actionId() const override {
+        return "tool.swap";
+    }
     QString tooltip() const override {
         return tr("Swap Comparison");
     }

@@ -1,25 +1,28 @@
-#include "ui/dialogs/shortcutsettingspage.h"
-#include <QVBoxLayout>
-#include <QTableWidget>
-#include <QPushButton>
-#include <QHeaderView>
-#include <QLabel>
-#include <QKeyEvent>
-#include <QMouseEvent>
-#include <QScrollArea>
-#include <QGroupBox>
 #include <QFormLayout>
+#include <QGroupBox>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QTableWidget>
+#include <QVBoxLayout>
+#include "ui/dialogs/shortcutsettingspage.h"
 
-ShortcutButton::ShortcutButton(const QString& actionId, ShortcutManager* manager, QWidget* parent)
+ShortcutButton::ShortcutButton(const QString& actionId, ShortcutManager *manager, QWidget *parent)
     : QPushButton(parent), m_actionId(actionId), m_manager(manager) {
     setText(manager->shortcutFor(actionId).toString());
 
-    connect(m_manager, &ShortcutManager::shortcutChanged, this, [this](const QString& id, const QKeySequence& seq) {
-        if (id == m_actionId) {
-            setText(seq.toString());
-        }
-    });
+    connect(m_manager,
+            &ShortcutManager::shortcutChanged,
+            this,
+            [this](const QString& id, const QKeySequence& seq) {
+                if (id == m_actionId) {
+                    setText(seq.toString());
+                }
+            });
 }
 
 void ShortcutButton::refresh() {
@@ -33,7 +36,7 @@ void ShortcutButton::mousePressEvent(QMouseEvent *event) {
 }
 
 void ShortcutButton::keyPressEvent(QKeyEvent *event) {
-    if (event->key() == Qt::Key_Control || event->key() == Qt::Key_Shift || 
+    if (event->key() == Qt::Key_Control || event->key() == Qt::Key_Shift ||
         event->key() == Qt::Key_Alt || event->key() == Qt::Key_Meta) {
         event->ignore();
         return;
@@ -54,13 +57,15 @@ void ShortcutButton::keyPressEvent(QKeyEvent *event) {
     clearFocus();
 }
 
-void ShortcutSettingsPage::onShortcutRequested(const QString& actionId, const QKeySequence& sequence) {
+void ShortcutSettingsPage::onShortcutRequested(const QString&      actionId,
+                                               const QKeySequence& sequence) {
     if (sequence.isEmpty()) {
         m_pendingShortcuts[actionId] = sequence;
-        
-        auto buttons = findChildren<ShortcutButton*>();
+
+        auto buttons = findChildren<ShortcutButton *>();
         for (auto *btn : buttons) {
-            if (btn->actionId() == actionId) btn->setText("");
+            if (btn->actionId() == actionId)
+                btn->setText("");
         }
         return;
     }
@@ -78,19 +83,22 @@ void ShortcutSettingsPage::onShortcutRequested(const QString& actionId, const QK
     }
 
     if (!duplicateActionId.isEmpty()) {
-        auto result = QMessageBox::question(this, tr("Duplicate Shortcut"),
-            tr("The shortcut %1 is already assigned to another action.\nDo you want to reassign it to the current action?")
-            .arg(sequence.toString()),
-            QMessageBox::Yes | QMessageBox::No);
+        auto result =
+            QMessageBox::question(this,
+                                  tr("Duplicate Shortcut"),
+                                  tr("The shortcut %1 is already assigned to another action.\nDo "
+                                     "you want to reassign it to the current action?")
+                                      .arg(sequence.toString()),
+                                  QMessageBox::Yes | QMessageBox::No);
 
         if (result == QMessageBox::No) {
             // Revert the button text to previous state
-            auto buttons = findChildren<ShortcutButton*>();
+            auto buttons = findChildren<ShortcutButton *>();
             for (auto *btn : buttons) {
                 if (btn->actionId() == actionId) {
-                    QKeySequence oldSeq = m_pendingShortcuts.contains(actionId) 
-                                          ? m_pendingShortcuts[actionId] 
-                                          : m_manager->shortcutFor(actionId);
+                    QKeySequence oldSeq = m_pendingShortcuts.contains(actionId)
+                                              ? m_pendingShortcuts[actionId]
+                                              : m_manager->shortcutFor(actionId);
                     btn->setText(oldSeq.toString());
                 }
             }
@@ -99,7 +107,7 @@ void ShortcutSettingsPage::onShortcutRequested(const QString& actionId, const QK
 
         // Reassign: Clear the duplicate action in pending
         m_pendingShortcuts[duplicateActionId] = QKeySequence();
-        auto buttons = findChildren<ShortcutButton*>();
+        auto buttons = findChildren<ShortcutButton *>();
         for (auto *btn : buttons) {
             if (btn->actionId() == duplicateActionId) {
                 btn->setText("");
@@ -110,7 +118,7 @@ void ShortcutSettingsPage::onShortcutRequested(const QString& actionId, const QK
     m_pendingShortcuts[actionId] = sequence;
 
     // Update the button text immediately
-    auto buttons = findChildren<ShortcutButton*>();
+    auto buttons = findChildren<ShortcutButton *>();
     for (auto *btn : buttons) {
         if (btn->actionId() == actionId) {
             btn->setText(sequence.toString());
@@ -118,7 +126,7 @@ void ShortcutSettingsPage::onShortcutRequested(const QString& actionId, const QK
     }
 }
 
-ShortcutSettingsPage::ShortcutSettingsPage(ShortcutManager* manager, QWidget *parent)
+ShortcutSettingsPage::ShortcutSettingsPage(ShortcutManager *manager, QWidget *parent)
     : QWidget(parent), m_manager(manager) {
     setupUi();
 }
@@ -132,12 +140,23 @@ void ShortcutSettingsPage::commitChanges() {
 
 void ShortcutSettingsPage::resetPending() {
     m_pendingShortcuts.clear();
-    auto buttons = findChildren<ShortcutButton*>();
+    auto buttons = findChildren<ShortcutButton *>();
     for (auto *btn : buttons) {
         btn->refresh();
     }
 }
 
+void ShortcutSettingsPage::resetToDefaults() {
+    const auto& defaults = ShortcutManager::defaults();
+    for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
+        m_pendingShortcuts[it.key()] = it.value();
+    }
+
+    auto buttons = findChildren<ShortcutButton *>();
+    for (auto *btn : buttons) {
+        btn->setText(defaults.value(btn->actionId()).toString());
+    }
+}
 
 void ShortcutSettingsPage::setupUi() {
     auto *mainLayout = new QVBoxLayout(this);
@@ -155,7 +174,7 @@ void ShortcutSettingsPage::setupUi() {
     containerLayout->setAlignment(Qt::AlignTop);
 
     auto shortcuts = m_manager->allShortcuts();
-    
+
     static const QMap<QString, QString> names = {
         {"file.open", tr("Open Image")},
         {"tab.close", tr("Close Tab")},
@@ -177,48 +196,62 @@ void ShortcutSettingsPage::setupUi() {
         {"nav.next", tr("Next Snapshot")},
     };
 
-    auto createGroup = [this, &shortcuts](QVBoxLayout* parent, const QString& title, const QStringList& ids) {
-        auto *group = new QGroupBox(title, this);
-        auto *layout = new QFormLayout(group);
-        layout->setSpacing(15);
-        layout->setLabelAlignment(Qt::AlignLeft);
-        layout->setContentsMargins(15, 15, 15, 15);
+    auto createGroup =
+        [this, &shortcuts](QVBoxLayout *parent, const QString& title, const QStringList& ids) {
+            auto *group = new QGroupBox(title, this);
+            auto *layout = new QFormLayout(group);
+            layout->setSpacing(15);
+            layout->setLabelAlignment(Qt::AlignLeft);
+            layout->setContentsMargins(15, 15, 15, 15);
 
-        for (const QString& id : ids) {
-            if (!shortcuts.contains(id)) continue;
+            for (const QString& id : ids) {
+                if (!shortcuts.contains(id))
+                    continue;
 
-            QString name = names.value(id, id);
-            
-            auto *controls = new QWidget(this);
-            auto *hLayout = new QHBoxLayout(controls);
-            hLayout->setContentsMargins(0, 0, 0, 0);
-            hLayout->setSpacing(5);
+                QString name = names.value(id, id);
 
-            auto *btn = new ShortcutButton(id, m_manager, this);
-            auto *resetBtn = new QPushButton(tr("Reset"), this);
-            resetBtn->setFixedWidth(60);
+                auto *controls = new QWidget(this);
+                auto *hLayout = new QHBoxLayout(controls);
+                hLayout->setContentsMargins(0, 0, 0, 0);
+                hLayout->setSpacing(5);
 
-            hLayout->addStretch();
-            hLayout->addWidget(btn);
-            hLayout->addWidget(resetBtn);
+                auto *btn = new ShortcutButton(id, m_manager, this);
+                auto *resetBtn = new QPushButton(tr("Reset"), this);
+                resetBtn->setFixedWidth(60);
 
-            connect(btn, &ShortcutButton::shortcutRequested, this, &ShortcutSettingsPage::onShortcutRequested);
-            connect(resetBtn, &QPushButton::clicked, [this, id]() {
-                onShortcutRequested(id, ShortcutManager::defaults().value(id));
-            });
+                hLayout->addStretch();
+                hLayout->addWidget(btn);
+                hLayout->addWidget(resetBtn);
 
-            layout->addRow(name, controls);
-        }
-        parent->addWidget(group);
-    };
+                connect(btn,
+                        &ShortcutButton::shortcutRequested,
+                        this,
+                        &ShortcutSettingsPage::onShortcutRequested);
+                connect(resetBtn, &QPushButton::clicked, [this, id]() {
+                    onShortcutRequested(id, ShortcutManager::defaults().value(id));
+                });
+
+                layout->addRow(name, controls);
+            }
+            parent->addWidget(group);
+        };
 
     createGroup(containerLayout, tr("Application"), {"file.open", "tab.close", "app.exit"});
     createGroup(containerLayout, tr("Snapshots"), {"snapshot.save", "snapshot.delete"});
-    createGroup(containerLayout, tr("Viewer"), {"viewer.scaleWithWindow", "viewer.toggleToolbar", "viewer.resetView", "viewer.actualSize", "viewer.zoomIn", "viewer.zoomOut", "viewer.fullScreen"});
-    createGroup(containerLayout, tr("Tools"), {"tool.colorPicker", "tool.grayscale", "tool.mirror", "tool.swap"});
+    createGroup(containerLayout,
+                tr("Viewer"),
+                {"viewer.scaleWithWindow",
+                 "viewer.toggleToolbar",
+                 "viewer.resetView",
+                 "viewer.actualSize",
+                 "viewer.zoomIn",
+                 "viewer.zoomOut",
+                 "viewer.fullScreen"});
+    createGroup(containerLayout,
+                tr("Tools"),
+                {"tool.colorPicker", "tool.grayscale", "tool.mirror", "tool.swap"});
     createGroup(containerLayout, tr("Navigation"), {"nav.prev", "nav.next"});
 
     scrollArea->setWidget(container);
     mainLayout->addWidget(scrollArea);
 }
-

@@ -246,30 +246,44 @@ SettingsDialog::SettingsDialog(AppSettingsController *settings,
 }
 
 void SettingsDialog::resetAllSettings() {
-    m_cbRestoreSession->setChecked(c_defaultRestoreSession);
-    m_cbAutoreload->setChecked(c_defaultAutoreloadImages);
+    int currentIndex = m_tabs->currentIndex();
 
-    // Reset snapshot saving radio buttons
-    if (c_defaultAutosaveSnapshots) {
-        m_rbAutosave->setChecked(true);
-    } else if (c_defaultSnapshotOnReopen) {
-        m_rbSnapshotOnReopen->setChecked(true);
-    } else {
-        m_rbNone->setChecked(true);
-    }
-    m_rbAutosave->setEnabled(c_defaultAutoreloadImages);
+    switch (currentIndex) {
+        case 0: // General
+            m_cbRestoreSession->setChecked(c_defaultRestoreSession);
+            break;
 
-    m_sbThumbCacheSize->setValue(c_defaultThumbnailCacheMB);
-    m_sbDeltaCacheSize->setValue(c_defaultDeltaCacheMB);
+        case 1: // Images
+            m_cbAutoreload->setChecked(c_defaultAutoreloadImages);
+            if (c_defaultAutosaveSnapshots) {
+                m_rbAutosave->setChecked(true);
+            } else if (c_defaultSnapshotOnReopen) {
+                m_rbSnapshotOnReopen->setChecked(true);
+            } else {
+                m_rbNone->setChecked(true);
+            }
+            m_rbAutosave->setEnabled(c_defaultAutoreloadImages);
+            break;
 
-    m_bgColor = QColor(c_defaultBackgroundColor);
-    m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+        case 2: // Performance
+            m_sbThumbCacheSize->setValue(c_defaultThumbnailCacheMB);
+            m_sbDeltaCacheSize->setValue(c_defaultDeltaCacheMB);
+            break;
 
-    // Reset pending shortcuts and refresh buttons
-    for (int i = 0; i < m_tabs->count(); ++i) {
-        auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(i));
-        if (sp) {
-            sp->resetPending();
+        case 3: // Appearance
+            m_bgColor = QColor(c_defaultBackgroundColor);
+            m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+            break;
+
+        case 4: { // Shortcuts
+            auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(currentIndex));
+            if (sp) {
+                sp->resetToDefaults();
+            }
+            break;
         }
+
+        default:
+            break;
     }
 }

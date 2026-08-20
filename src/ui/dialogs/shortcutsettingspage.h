@@ -1,16 +1,17 @@
 #pragma once
 
-#include <QWidget>
 #include <QPushButton>
+#include <QWidget>
 #include "controllers/shortcutmanager.h"
 
 class ShortcutSettingsPage : public QWidget {
     Q_OBJECT
 
   public:
-    explicit ShortcutSettingsPage(ShortcutManager* manager, QWidget *parent = nullptr);
+    explicit ShortcutSettingsPage(ShortcutManager *manager, QWidget *parent = nullptr);
     void commitChanges();
     void resetPending();
+    void resetToDefaults();
 
   private slots:
     void onShortcutRequested(const QString& actionId, const QKeySequence& sequence);
@@ -19,16 +20,18 @@ class ShortcutSettingsPage : public QWidget {
     void setupUi();
     void recordShortcut(const QString& actionId);
 
-    ShortcutManager *m_manager;
+    ShortcutManager            *m_manager;
     QMap<QString, QKeySequence> m_pendingShortcuts;
 };
 
 class ShortcutButton : public QPushButton {
     Q_OBJECT
   public:
-    ShortcutButton(const QString& actionId, ShortcutManager* manager, QWidget* parent = nullptr);
-    void refresh();
-    QString actionId() const { return m_actionId; }
+    ShortcutButton(const QString& actionId, ShortcutManager *manager, QWidget *parent = nullptr);
+    void    refresh();
+    QString actionId() const {
+        return m_actionId;
+    }
 
   protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -38,7 +41,6 @@ class ShortcutButton : public QPushButton {
     void shortcutRequested(const QString& actionId, const QKeySequence& sequence);
 
   private:
-    QString m_actionId;
+    QString          m_actionId;
     ShortcutManager *m_manager;
 };
-

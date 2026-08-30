@@ -6,9 +6,14 @@
 #include <QDir>
 #include <QFile>
 #include <QFuture>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtConcurrent>
+#include <zip.h>
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -46,7 +51,11 @@ class TestSnapshotManager : public QObject {
 
     // Export / Import
     void testExportImportBasic();
-    void testExportImportPrepend();
+    void testExportImportMerge();
+    void testImportInterleavedByTimestamp();
+    void testSaveAfterImportParentsOnNewest();
+    void testDeleteAcrossChains();
+    void testSnapshotChain();
 
     // Delete
     void testDeleteLastSnapshot();
@@ -71,6 +80,14 @@ class TestSnapshotManager : public QObject {
     // Each test gets a unique file path so snapshot keys don't collide.
     static QString testFilePath(const QString& suffix);
     static QImage  makeImage(int width, int height, QColor color);
+    static QImage makeGradientImage(int width, int height, int offset);
+
+    // Build a bundle from an existing snapshot chain, optionally remapping
+    // uuids and timestamps. Unmapped entries keep their originals.
+    static bool makeBundleFromChain(const QString&            sourcePath,
+                                    const QString&            bundlePath,
+                                    const QHash<QUuid, QUuid>& uuidRemap = {},
+                                    const QHash<QUuid, QDateTime>& timeRemap = {});
 };
 
 void TestSnapshotManager::initTestCase() {
@@ -103,6 +120,81 @@ QImage TestSnapshotManager::makeImage(int width, int height, QColor color) {
     QImage img(width, height, QImage::Format_ARGB32);
     img.fill(color);
     return img;
+}
+
+QImage TestSnapshotManager::makeGradientImage(int width, int height, int offset) {
+    QImage img(width, height, QImage::Format_ARGB32);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int v = (x * 7 + y * 13 + offset) % 256;
+            img.setPixel(x, y, qRgb(v, (v * 3) % 256, (v * 5) % 256));
+        }
+    }
+    return img;
+}
+
+bool TestSnapshotManager::makeBundleFromChain(const QString&             sourcePath,
+                                              const QString&             bundlePath,
+                                              const QHash<QUuid, QUuid>& uuidRemap,
+                                              const QHash<QUuid, QDateTime>& timeRemap) {
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(sourcePath);
+    if (snaps.isEmpty())
+        return false;
+
+    const QString sd =
+        SnapshotManager::baseDir() + '/' + SnapshotManager::cacheKeyForPath(sourcePath);
+    if (!QDir(sd).exists())
+        return false;
+
+    QJsonArray array;
+    for (const auto& s : snaps) {
+        QUuid uuid = uuidRemap.value(s.uuid, s.uuid);
+        QUuid parent = s.parentUuid;
+        if (!parent.isNull())
+            parent = uuidRemap.value(parent, parent);
+
+        QJsonObject obj;
+        obj["uuid"] = uuid.toString(QUuid::WithoutBraces);
+        obj["parentUuid"] = parent.toString(QUuid::WithoutBraces);
+        obj["file"] = s.fileName;
+        obj["timestamp"] = timeRemap.value(s.uuid, s.timestamp).toString(Qt::ISODate);
+        obj["checksum"] = s.checksum;
+        obj["isBase"] = s.isBase;
+        array.append(obj);
+    }
+
+    QTemporaryDir dir;
+    if (!dir.isValid())
+        return false;
+
+    QFile metaFile(dir.path() + "/metadata.json");
+    if (!metaFile.open(QIODevice::WriteOnly))
+        return false;
+    metaFile.write(QJsonDocument(array).toJson());
+    metaFile.close();
+
+    int    err = 0;
+    zip_t *archive = zip_open(bundlePath.toUtf8().constData(), ZIP_CREATE | ZIP_TRUNCATE, &err);
+    if (!archive)
+        return false;
+
+    QByteArray metaPath = metaFile.fileName().toUtf8();
+    zip_source_t *metaSource = zip_source_file(archive, metaPath.constData(), 0, 0);
+    if (!metaSource || zip_file_add(archive, "metadata.json", metaSource, 0) < 0)
+        return false;
+
+    for (const auto& s : snaps) {
+        QByteArray filePath = (sd + '/' + s.fileName).toUtf8();
+        zip_source_t *fileSource = zip_source_file(archive, filePath.constData(), 0, 0);
+        if (!fileSource || zip_file_add(archive, ("files/" + s.fileName).toUtf8().constData(),
+                                        fileSource,
+                                        0) < 0) {
+            return false;
+        }
+    }
+
+    zip_close(archive);
+    return true;
 }
 
 // Checksum
@@ -345,41 +437,251 @@ void TestSnapshotManager::testExportImportBasic() {
     QCOMPARE(res2.pixelColor(0, 0), Qt::blue);
 }
 
-void TestSnapshotManager::testExportImportPrepend() {
-    QString sourcePath = testFilePath("prepend_src");
-    QString destPath = testFilePath("prepend_dest");
-    QString bundlePath = QDir::tempPath() + "/prepend_bundle.snaphist";
+void TestSnapshotManager::testExportImportMerge() {
+    QString sourcePath = testFilePath("merge_src");
+    QString destPath = testFilePath("merge_dest");
+    QString bundlePath = QDir::tempPath() + "/merge_bundle.snaphist";
 
     SnapshotManager::deleteAllSnapshots(sourcePath);
     SnapshotManager::deleteAllSnapshots(destPath);
 
-    // Source snapshots (A -> B)
+    // Source snapshots (A -> B), created first (older timestamps)
     QUuid uuidA = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::red))->uuid;
     QUuid uuidB = SnapshotManager::saveSnapshot(sourcePath, makeImage(10, 10, Qt::blue))->uuid;
 
     // Export
     QVERIFY(SnapshotManager::exportHistory(sourcePath, bundlePath));
 
-    // Destination has one snapshot (C)
+    // Destination has one snapshot (C), created later (newer timestamp)
     QUuid uuidC = SnapshotManager::saveSnapshot(destPath, makeImage(10, 10, Qt::green))->uuid;
 
-    // Import Prepend
+    // Import: chains merge chronologically, no re-linking
     QVERIFY(SnapshotManager::importHistory(destPath, bundlePath));
 
-    // Verify chain: A -> B -> C
     QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(destPath);
     QCOMPARE(snapshots.size(), 3);
     QCOMPARE(snapshots[0].uuid, uuidA);
     QCOMPARE(snapshots[1].uuid, uuidB);
     QCOMPARE(snapshots[2].uuid, uuidC);
 
-    // Verify C is now a base image (bridge strategy)
+    // Parent links of both chains are preserved: A and C are independent bases.
+    QVERIFY(snapshots[0].parentUuid.isNull());
+    QVERIFY(snapshots[0].isBase);
+    QCOMPARE(snapshots[1].parentUuid, uuidA);
+    QVERIFY(!snapshots[1].isBase);
+    QVERIFY(snapshots[2].parentUuid.isNull());
     QVERIFY(snapshots[2].isBase);
 
-    // Verify reconstruction of all
+    // Re-import skips duplicates
+    int duplicates = -1;
+    QVERIFY(SnapshotManager::importHistory(destPath, bundlePath, &duplicates));
+    QCOMPARE(duplicates, 2);
+    QCOMPARE(SnapshotManager::loadSnapshots(destPath).size(), 3);
+
+    // Reconstruction works across both chains
     QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidA).pixelColor(0, 0), Qt::red);
     QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidB).pixelColor(0, 0), Qt::blue);
     QCOMPARE(SnapshotManager::reconstructSnapshot(destPath, uuidC).pixelColor(0, 0), Qt::green);
+
+    SnapshotManager::deleteAllSnapshots(sourcePath);
+    SnapshotManager::deleteAllSnapshots(destPath);
+    QFile::remove(bundlePath);
+}
+
+void TestSnapshotManager::testImportInterleavedByTimestamp() {
+    const QString path = testFilePath("interleave");
+    const QString localBundle = QDir::tempPath() + "/interleave_local.snaphist";
+    const QString importBundle = QDir::tempPath() + "/interleave_import.snaphist";
+    SnapshotManager::deleteAllSnapshots(path);
+
+    // Two independent chains built on scratch paths so the bundles carry
+    // real snapshot files, imported with explicit interleaved timestamps:
+    // L0 (10:00) -> I0 (10:30) -> I1 (11:00) -> L1 (12:00).
+    const QString scratchL = testFilePath("interleave_scratchL");
+    const QString scratchI = testFilePath("interleave_scratchI");
+    SnapshotManager::deleteAllSnapshots(scratchL);
+    SnapshotManager::deleteAllSnapshots(scratchI);
+
+    QImage l0 = makeGradientImage(64, 64, 0);
+    QImage l1 = makeGradientImage(64, 64, 100);
+    QUuid  sL0 = SnapshotManager::saveSnapshot(scratchL, l0)->uuid;
+    QUuid  sL1 = SnapshotManager::saveSnapshot(scratchL, l1)->uuid;
+
+    QImage i0 = makeGradientImage(64, 64, 300);
+    QImage i1 = makeGradientImage(64, 64, 400);
+    QUuid  sI0 = SnapshotManager::saveSnapshot(scratchI, i0)->uuid;
+    QUuid  sI1 = SnapshotManager::saveSnapshot(scratchI, i1)->uuid;
+
+    QUuid     uuidL0 = QUuid::createUuid();
+    QUuid     uuidL1 = QUuid::createUuid();
+    QUuid     uuidI0 = QUuid::createUuid();
+    QUuid     uuidI1 = QUuid::createUuid();
+    QDateTime t      = QDateTime::currentDateTimeUtc().addSecs(-7200);
+
+    QVERIFY(makeBundleFromChain(
+        scratchL, localBundle, {{sL0, uuidL0}, {sL1, uuidL1}},
+        {{sL0, t}, {sL1, t.addSecs(7200)}}));
+    QVERIFY(makeBundleFromChain(
+        scratchI, importBundle, {{sI0, uuidI0}, {sI1, uuidI1}},
+        {{sI0, t.addSecs(1800)}, {sI1, t.addSecs(3600)}}));
+
+    QVERIFY(SnapshotManager::importHistory(path, localBundle));
+    QVERIFY(SnapshotManager::importHistory(path, importBundle));
+
+    // Timeline is interleaved by timestamp: L0(10:00) I0(10:30) I1(11:00) L1(12:00)
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 4);
+    QCOMPARE(snaps[0].uuid, uuidL0);
+    QCOMPARE(snaps[1].uuid, uuidI0);
+    QCOMPARE(snaps[2].uuid, uuidI1);
+    QCOMPARE(snaps[3].uuid, uuidL1);
+
+    // Parent links: each chain is intact.
+    QVERIFY(snaps[0].parentUuid.isNull());
+    QVERIFY(snaps[0].isBase);
+    QCOMPARE(snaps[3].parentUuid, uuidL0);
+    QVERIFY(snaps[3].isBase == false);
+    QVERIFY(snaps[1].parentUuid.isNull());
+    QVERIFY(snaps[1].isBase);
+    QCOMPARE(snaps[2].parentUuid, uuidI0);
+    QVERIFY(!snaps[2].isBase);
+
+    // Reconstruction of every snapshot yields its true content: the local
+    // delta L1 must be applied to L0 (not to the older imported base I0).
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, uuidL0), l0);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, uuidL1), l1);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, uuidI0), i0);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, uuidI1), i1);
+
+    SnapshotManager::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(scratchL);
+    SnapshotManager::deleteAllSnapshots(scratchI);
+    QFile::remove(localBundle);
+    QFile::remove(importBundle);
+}
+
+void TestSnapshotManager::testSaveAfterImportParentsOnNewest() {
+    const QString path = testFilePath("save_after_import");
+    const QString bundlePath = QDir::tempPath() + "/save_after_import.snaphist";
+    SnapshotManager::deleteAllSnapshots(path);
+
+    // Import a two-snapshot chain (A -> B) built on a scratch path.
+    QImage img0 = makeImage(10, 10, Qt::red);
+    QImage img1 = makeImage(10, 10, Qt::blue);
+    const QString scratch = testFilePath("save_after_import_scratch");
+    SnapshotManager::deleteAllSnapshots(scratch);
+    QUuid sA = SnapshotManager::saveSnapshot(scratch, img0)->uuid;
+    QUuid sB = SnapshotManager::saveSnapshot(scratch, img1)->uuid;
+
+    QUuid uuidA = QUuid::createUuid();
+    QUuid uuidB = QUuid::createUuid();
+    QVERIFY(makeBundleFromChain(scratch, bundlePath, {{sA, uuidA}, {sB, uuidB}}));
+
+    QVERIFY(SnapshotManager::importHistory(path, bundlePath));
+
+    // A new snapshot parents onto the newest snapshot (the imported head).
+    QImage img2 = makeImage(10, 10, Qt::green);
+    auto     res = SnapshotManager::saveSnapshot(path, img2);
+    QVERIFY(res.has_value());
+
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 3);
+    QCOMPARE(snaps.last().uuid, res->uuid);
+    QCOMPARE(snaps.last().parentUuid, uuidB);
+    QVERIFY(!snaps.last().isBase);
+
+    // Reconstruction walks the imported chain: base A + delta B + new delta.
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, res->uuid), img2);
+
+    SnapshotManager::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(scratch);
+    QFile::remove(bundlePath);
+}
+
+void TestSnapshotManager::testDeleteAcrossChains() {
+    const QString path = testFilePath("delete_chains");
+    const QString bundlePath = QDir::tempPath() + "/delete_chains.snaphist";
+    SnapshotManager::deleteAllSnapshots(path);
+
+    // Local chain: L0 (base) -> L1.
+    QImage l0 = makeImage(10, 10, Qt::red);
+    QImage l1 = makeImage(10, 10, Qt::blue);
+    QUuid  uuidL0 = SnapshotManager::saveSnapshot(path, l0)->uuid;
+    QUuid  uuidL1 = SnapshotManager::saveSnapshot(path, l1)->uuid;
+
+    // Imported chain I0 (base) -> I1 with older timestamps.
+    QImage i0 = makeImage(10, 10, Qt::green);
+    QImage i1 = makeImage(10, 10, Qt::yellow);
+    const QString scratch = testFilePath("delete_chains_scratch");
+    SnapshotManager::deleteAllSnapshots(scratch);
+    QUuid sI0 = SnapshotManager::saveSnapshot(scratch, i0)->uuid;
+    QUuid sI1 = SnapshotManager::saveSnapshot(scratch, i1)->uuid;
+
+    QUuid     uuidI0 = QUuid::createUuid();
+    QUuid     uuidI1 = QUuid::createUuid();
+    QDateTime older  = QDateTime::currentDateTimeUtc().addSecs(-7200);
+    QVERIFY(makeBundleFromChain(
+        scratch, bundlePath, {{sI0, uuidI0}, {sI1, uuidI1}},
+        {{sI0, older}, {sI1, older.addSecs(1800)}}));
+    QVERIFY(SnapshotManager::importHistory(path, bundlePath));
+
+    // Delete I1 (a chain head): no repair, L-chain untouched.
+    QVERIFY(SnapshotManager::deleteSnapshot(path, uuidI1));
+    QVector<ImageSnapshot> after = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(after.size(), 3);
+    for (const auto& s : after) {
+        if (s.uuid == uuidL1)
+            QCOMPARE(s.parentUuid, uuidL0);
+    }
+
+    // Delete I0 (a base): no dependent, no repair.
+    QVERIFY(SnapshotManager::deleteSnapshot(path, uuidI0));
+    after = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(after.size(), 2);
+    QCOMPARE(after[0].uuid, uuidL0);
+    QCOMPARE(after[1].uuid, uuidL1);
+
+    // Delete L0 (the local base): L1 must be rebased within its own chain.
+    QVERIFY(SnapshotManager::deleteSnapshot(path, uuidL0));
+    after = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(after.size(), 1);
+    QCOMPARE(after[0].uuid, uuidL1);
+    QVERIFY(after[0].isBase);
+    QVERIFY(after[0].parentUuid.isNull());
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, uuidL1), l1);
+
+    SnapshotManager::deleteAllSnapshots(path);
+    SnapshotManager::deleteAllSnapshots(scratch);
+    QFile::remove(bundlePath);
+}
+
+void TestSnapshotManager::testSnapshotChain() {
+    const QString path = testFilePath("chain_walk");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue));
+    SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::green));
+
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 3);
+
+    auto chain = SnapshotManager::snapshotChain(snaps, snaps.last());
+    QVERIFY(chain.has_value());
+    QCOMPARE(chain->size(), 3);
+    QVERIFY(chain->first().isBase);
+    QCOMPARE(chain->last().uuid, snaps.last().uuid);
+
+    // Chain of the base itself is a single node.
+    auto baseChain = SnapshotManager::snapshotChain(snaps, snaps.first());
+    QVERIFY(baseChain.has_value());
+    QCOMPARE(baseChain->size(), 1);
+
+    // Missing target yields nullopt.
+    auto missing = SnapshotManager::snapshotChain(snaps, ImageSnapshot{QUuid::createUuid()});
+    QVERIFY(!missing.has_value());
+
+    SnapshotManager::deleteAllSnapshots(path);
 }
 
 void TestSnapshotManager::testDeleteLastSnapshot() {

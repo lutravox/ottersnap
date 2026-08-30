@@ -198,21 +198,12 @@ std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path
     if (!found)
         return std::nullopt;
 
-    // Find the closest preceding base image to determine dimensions
-    int baseIdx = -1;
-    for (int i = 0; i < static_cast<int>(snapList.size()); ++i) {
-        if (snapList[i].isBase) {
-            baseIdx = i;
-        }
-        if (snapList[i].uuid == uuid) {
-            break;
-        }
-    }
-
-    if (baseIdx == -1)
+    // Use the target's own chain base to determine dimensions
+    auto chainOpt = SnapshotManager::snapshotChain(snapList, target);
+    if (!chainOpt)
         return std::nullopt;
 
-    auto optBase = SnapshotManager::loadBaseImage(path, snapList[baseIdx]);
+    auto optBase = SnapshotManager::loadBaseImage(path, chainOpt->first());
     if (!optBase)
         return std::nullopt;
 

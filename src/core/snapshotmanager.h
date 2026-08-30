@@ -86,8 +86,17 @@ class SnapshotManager {
 
     /// @brief Load all snapshot records for an image file.
     /// @param filePath Absolute path of the source image.
-    /// @return A vector of metadata for all snapshots associated with this file.
+    /// @return A vector of metadata for all snapshots associated with this
+    /// file, sorted by timestamp ascending.
     static QVector<ImageSnapshot> loadSnapshots(const QString& filePath);
+
+    /// @brief Walk the parent chain of a snapshot up to its base.
+    /// @param snapshots The full snapshot list for the image.
+    /// @param target The snapshot to build the chain for.
+    /// @return The chain ordered from base to target, or std::nullopt if the
+    /// target is missing or a parent link is broken.
+    static std::optional<QVector<ImageSnapshot>>
+    snapshotChain(const QVector<ImageSnapshot>& snapshots, const ImageSnapshot& target);
 
     /// @brief Delete a specific snapshot for an image file.
     /// @param filePath Absolute path of the source image.
@@ -168,6 +177,10 @@ private:
     /// name for images without a registered key.
     /// @param filePath Absolute path of the source image.
     static QString hashPath(const QString& filePath);
+
+    /// @brief Sort snapshots by timestamp ascending (stable).
+    /// @param snapshots The snapshot list to sort in place.
+    static void sortSnapshots(QVector<ImageSnapshot>& snapshots);
 
     /// @brief Global recursive lock for snapshot store operations to ensure
     /// thread safety. Recursive so loadSnapshots() can safely acquire it

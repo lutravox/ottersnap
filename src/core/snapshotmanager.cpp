@@ -16,6 +16,8 @@
 #include <QJsonObject>
 #include <QStandardPaths>
 #include <QTemporaryFile>
+#include <QUuid>
+#include <algorithm>
 #include <functional>
 #include <zip.h>
 
@@ -146,35 +148,15 @@ SnapshotManager::reconstructSnapshot(const QString&                           fi
     if (!found)
         return {};
 
-    // Trace back the chain using parentUuid
-    QVector<ImageSnapshot> chain;
-    ImageSnapshot          current = target;
-    while (true) {
-        chain.prepend(current);
-        if (current.isBase)
-            break;
+    auto chainOpt = snapshotChain(snapshots, target);
+    if (!chainOpt)
+        return {};
+    const QVector<ImageSnapshot>& chain = *chainOpt;
 
-        // Find parent by UUID
-        bool parentFound = false;
-        for (const auto& s : snapshots) {
-            if (s.uuid == current.parentUuid) {
-                current = s;
-                parentFound = true;
-                break;
-            }
-        }
-
-        if (!parentFound) {
-            qWarning() << "[SnapshotManager] Broken snapshot chain: parent" << current.parentUuid
-                       << "not found";
-            return {};
-        }
-    }
-
-    // Now chain[0] is the base, and chain.last() is the target
+    // chain.first() is the base, chain.last() is the target
     ReconstructionSequence seq;
     seq.baseIdx = 0; // For the sequence, we just need the base image
-    auto optBase = SnapshotManager::loadBaseImage(filePath, chain[0]);
+    auto optBase = SnapshotManager::loadBaseImage(filePath, chain.first());
     if (!optBase)
         return {};
     seq.base = std::move(optBase->image);
@@ -185,7 +167,7 @@ SnapshotManager::reconstructSnapshot(const QString&                           fi
         auto optDelta = SnapshotManager::loadDelta(filePath, chain[i]);
         if (!optDelta)
             return {};
-        seq.deltas.append({key + ":" + chain[i].fileName, std::move(*optDelta)});
+        seq.deltas.append(DeltaEntry{key + ":" + chain[i].fileName, std::move(*optDelta)});
     }
 
     if (!reconstructor) {
@@ -360,14 +342,10 @@ bool SnapshotManager::importHistory(const QString& filePath,
         imported.append(s);
     }
 
-    if (!existing.isEmpty() && !imported.isEmpty()) {
-        ImageSnapshot& firstExisting = existing[0];
-        firstExisting.parentUuid = imported.last().uuid;
-        if (auto bridgeKey = keyForPath(filePath)) {
-            if (!SnapshotDatabase::instance().updateSnapshot(*bridgeKey, firstExisting)) {
-                qWarning() << "[SnapshotManager] Failed to update parent UUID for bridge "
-                              "snapshot in database";
-            }
+    for (const auto& s : imported) {
+        if (s.parentUuid.isNull() && !s.isBase) {
+            qWarning() << "[SnapshotManager] Bundle chain head is not a base; that chain cannot "
+                          "be reconstructed:" << s.uuid.toString(QUuid::WithoutBraces);
         }
     }
 
@@ -429,23 +407,21 @@ bool SnapshotManager::importHistory(const QString& filePath,
 
     zip_close(archive);
 
-    QVector<ImageSnapshot> finalSnapshots;
+    // Merge the chains: imported snapshots keep their own parent links and are
+    // displayed interleaved with the existing history by timestamp.
+    QVector<ImageSnapshot> finalSnapshots = existing;
     for (const auto& s : imported) {
-        finalSnapshots.append(s);
-    }
-
-    for (const auto& s : existing) {
-        bool duplicate = false;
-        for (const auto& imp : imported) {
-            if (s.uuid == imp.uuid) {
-                duplicate = true;
+        bool alreadyExists = false;
+        for (const auto& ex : existing) {
+            if (ex.uuid == s.uuid) {
+                alreadyExists = true;
                 break;
             }
         }
-        if (!duplicate) {
+        if (!alreadyExists)
             finalSnapshots.append(s);
-        }
     }
+    sortSnapshots(finalSnapshots);
     s_snapshotsCache[key] = finalSnapshots;
 
     qDebug() << "[SnapshotManager] Imported snapshot history for" << filePath << "from"
@@ -588,9 +564,47 @@ QVector<ImageSnapshot> SnapshotManager::loadSnapshots(const QString& filePath) {
     }
 
     QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
+    sortSnapshots(snapshots);
 
     s_snapshotsCache[key] = snapshots;
     return snapshots;
+}
+
+std::optional<QVector<ImageSnapshot>> SnapshotManager::snapshotChain(
+    const QVector<ImageSnapshot>& snapshots,
+    const ImageSnapshot&          target) {
+    QHash<QUuid, const ImageSnapshot*> byUuid;
+    for (const auto& s : snapshots)
+        byUuid.insert(s.uuid, &s);
+
+    auto targetIt = byUuid.constFind(target.uuid);
+    if (targetIt == byUuid.constEnd())
+        return std::nullopt;
+    const ImageSnapshot* current = targetIt.value();
+
+    QVector<ImageSnapshot> chain;
+    while (true) {
+        chain.prepend(*current);
+        if ((*current).isBase)
+            break;
+
+        auto parent = byUuid.constFind((*current).parentUuid);
+        if (parent == byUuid.constEnd()) {
+            qWarning() << "[SnapshotManager] Broken snapshot chain: parent"
+                       << (*current).parentUuid.toString(QUuid::WithoutBraces) << "not found";
+            return std::nullopt;
+        }
+        current = parent.value();
+    }
+    return chain;
+}
+
+void SnapshotManager::sortSnapshots(QVector<ImageSnapshot>& snapshots) {
+    // Stable: equal timestamps keep database insertion order.
+    std::stable_sort(snapshots.begin(), snapshots.end(), [](const ImageSnapshot& a,
+                                                             const ImageSnapshot& b) {
+        return a.timestamp < b.timestamp;
+    });
 }
 
 std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const QString& filePath,
@@ -788,11 +802,19 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
 
     const ImageSnapshot& target = snapshots[targetIdx];
 
-    // If we are deleting a snapshot that has dependents (i.e., not the last one), we must
-    // repair the chain to avoid orphaning subsequent snapshots.
-    if (targetIdx < snapshots.size() - 1) {
-        int            nextIdxInList = targetIdx + 1;
-        ImageSnapshot& next = snapshots[nextIdxInList];
+    // Find the dependent: the snapshot whose parent is the target, if any.
+    int dependentIdx = -1;
+    for (int i = 0; i < snapshots.size(); ++i) {
+        if (snapshots[i].parentUuid == target.uuid) {
+            dependentIdx = i;
+            break;
+        }
+    }
+
+    // If the deleted snapshot has a dependent, we must repair the chain to
+    // avoid orphaning it.
+    if (dependentIdx != -1) {
+        ImageSnapshot& next = snapshots[dependentIdx];
 
         QImage imgNext = reconstructSnapshot(filePath, next.uuid);
         if (imgNext.isNull()) {

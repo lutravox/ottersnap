@@ -165,17 +165,20 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         return std::nullopt;
     }
 
+    // Walk the snapshot's own parent chain: other chains interleaved on the
+    // timeline are never part of this sequence.
+    auto chainOpt = SnapshotManager::snapshotChain(m_snapshots, m_snapshots[index]);
+    if (!chainOpt)
+        return std::nullopt;
+    const QVector<ImageSnapshot>& chain = *chainOpt;
+    const ImageSnapshot&          base  = chain.first();
+
     int baseIdx = -1;
-    for (int i = index; i >= 0; --i) {
-        if (m_snapshots[i].isBase) {
+    for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
+        if (m_snapshots[i].uuid == base.uuid) {
             baseIdx = i;
             break;
         }
-    }
-
-    if (baseIdx == -1) {
-        qWarning() << "[ImageSession] No base image found for reconstruction sequence";
-        return std::nullopt;
     }
 
     ReconstructionSequence seq;
@@ -183,24 +186,23 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
 
     if (m_baseCache.index == baseIdx && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;
-        seq.baseChecksum = m_snapshots[baseIdx].checksum;
+        seq.baseChecksum = base.checksum;
     } else {
-        auto optBase = SnapshotManager::loadBaseImage(m_filePath, m_snapshots[baseIdx]);
+        auto optBase = SnapshotManager::loadBaseImage(m_filePath, base);
         if (!optBase)
             return std::nullopt;
 
         seq.base = std::move(optBase->image);
-        seq.baseChecksum = m_snapshots[baseIdx].checksum;
+        seq.baseChecksum = optBase->checksum;
         m_baseCache = {baseIdx, seq.base};
     }
 
     QString imageKey = SnapshotManager::cacheKeyForPath(m_filePath);
-    for (int i = baseIdx + 1; i <= index; ++i) {
-        auto optDelta = SnapshotManager::loadDelta(m_filePath, m_snapshots[i]);
+    for (int i = 1; i < chain.size(); ++i) {
+        auto optDelta = SnapshotManager::loadDelta(m_filePath, chain[i]);
         if (!optDelta)
             return std::nullopt;
-        seq.deltas.append(
-            DeltaEntry{imageKey + ":" + m_snapshots[i].fileName, std::move(*optDelta)});
+        seq.deltas.append(DeltaEntry{imageKey + ":" + chain[i].fileName, std::move(*optDelta)});
     }
 
     return seq;

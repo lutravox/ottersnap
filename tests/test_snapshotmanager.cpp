@@ -60,6 +60,7 @@ class TestSnapshotManager : public QObject {
     // Delete
     void testDeleteLastSnapshot();
     void testDeleteMiddleSnapshotRebase();
+    void testDeleteMiddleSnapshotRebasePersistsAcrossReload();
     void testDeleteFirstSnapshotRebase();
     void testDeleteAllSnapshots();
     void testDeleteBatchContiguousRun();
@@ -741,6 +742,42 @@ void TestSnapshotManager::testDeleteMiddleSnapshotRebase() {
     // Verify structure is correct
     QVERIFY(!snaps[1].uuid.isNull());
     QVERIFY(!snaps[1].isBase);
+}
+
+void TestSnapshotManager::testDeleteMiddleSnapshotRebasePersistsAcrossReload() {
+    QString path = testFilePath("deleteMiddleReload");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QImage img1 = makeImage(10, 10, Qt::red);
+    QImage img2 = makeImage(10, 10, Qt::green);
+    QImage img3 = makeImage(10, 10, Qt::blue);
+
+    SnapshotManager::saveSnapshot(path, img1);
+    SnapshotManager::saveSnapshot(path, img2);
+    SnapshotManager::saveSnapshot(path, img3);
+
+    QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(path);
+    QUuid id2 = snapshots[1].uuid;
+    QUuid id3 = snapshots[2].uuid;
+    QVERIFY(SnapshotManager::deleteSnapshot(path, id2));
+
+    // Simulate an app restart: drop the in-memory cache so the next read
+    // comes straight from the database.
+    SnapshotManager::clearCache();
+
+    QVector<ImageSnapshot> reloaded = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(reloaded.size(), 2);
+    QCOMPARE(reloaded[1].uuid, id3);
+    QCOMPARE(reloaded[1].parentUuid, reloaded[0].uuid);
+
+    // Reconstruction of the rebased snapshot must survive the reload.
+    QImage rebuilt = SnapshotManager::reconstructSnapshot(path, id3);
+    QVERIFY(!rebuilt.isNull());
+
+    // Deleting the rebased snapshot and saving a new one must both work
+    // against the reloaded state.
+    QVERIFY(SnapshotManager::deleteSnapshot(path, id3));
+    QVERIFY(SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::yellow)));
 }
 
 void TestSnapshotManager::testDeleteFirstSnapshotRebase() {

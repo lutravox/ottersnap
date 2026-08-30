@@ -198,9 +198,10 @@ void SnapshotDatabase::pruneImage(const QString& key) {
 
 bool SnapshotDatabase::updateSnapshot(const QString& key, const ImageSnapshot& s) {
     QSqlQuery query(connection());
-    query.prepare("UPDATE snapshots SET timestamp = ?, checksum = ?, "
+    query.prepare("UPDATE snapshots SET parent_uuid = ?, timestamp = ?, checksum = ?, "
                   "is_base = ?, file_name = ? "
                   "WHERE image_key = ? AND uuid = ?");
+    query.addBindValue(s.parentUuid.toString(QUuid::WithoutBraces));
     query.addBindValue(s.timestamp.toString(Qt::ISODate));
     query.addBindValue(s.checksum);
     query.addBindValue(s.isBase ? 1 : 0);

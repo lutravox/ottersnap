@@ -113,6 +113,12 @@ void ImageTab::deleteSnapshot(const QUuid& uuid, bool silent) {
     }
 }
 
+void ImageTab::deleteSnapshots(const QVector<QUuid>& uuids, bool silent) {
+    if (m_controller) {
+        m_controller->deleteSnapshots(uuids, silent);
+    }
+}
+
 void ImageTab::deleteAllSnapshots() {
     if (m_controller) {
         m_controller->deleteAllSnapshots();

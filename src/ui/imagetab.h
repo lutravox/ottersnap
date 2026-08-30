@@ -50,6 +50,7 @@ class ImageTab : public QWidget {
 
     /// @brief Delete a specific snapshot.
     void deleteSnapshot(const QUuid& uuid, bool silent = false);
+    void deleteSnapshots(const QVector<QUuid>& uuids, bool silent = false);
 
     /// @brief Delete all snapshots associated with this image.
     void deleteAllSnapshots();

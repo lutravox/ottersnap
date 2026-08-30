@@ -139,6 +139,12 @@ void ImageSessionController::deleteSnapshot(const QUuid& uuid, bool silent) {
     }
 }
 
+void ImageSessionController::deleteSnapshots(const QVector<QUuid>& uuids, bool silent) {
+    if (m_activeSession) {
+        m_activeSession->deleteSnapshots(uuids, silent);
+    }
+}
+
 void ImageSessionController::deleteAllSnapshots() {
     if (m_activeSession) {
         m_activeSession->deleteAllSnapshots();

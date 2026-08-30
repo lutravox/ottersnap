@@ -297,6 +297,28 @@ void ImageSession::deleteSnapshot(const QUuid& uuid, bool silent) {
     watcher->setFuture(QtConcurrent::run([path, uuid]() { return SnapshotManager::deleteSnapshot(path, uuid); }));
 }
 
+void ImageSession::deleteSnapshots(const QVector<QUuid>& uuids, bool silent) {
+    if (uuids.isEmpty() || m_filePath.isEmpty())
+        return;
+
+    QString path = m_filePath;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    auto    watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
+    connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
+    connect(
+        watcher,
+        &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished,
+        [this, watcher, uuids, silent]() {
+            auto result = watcher->result();
+            watcher->deleteLater();
+
+            applySnapshotDeletions(uuids, silent, result);
+            emit deletionFinished();
+        });
+    watcher->setFuture(
+        QtConcurrent::run([path, uuids]() { return SnapshotManager::deleteSnapshots(path, uuids); }));
+}
+
 void ImageSession::applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result) {
     if (!result) {
         if (!silent)
@@ -316,6 +338,32 @@ void ImageSession::applySnapshotDeletion(const QUuid& uuid, int relativeVersion,
     emit imageChanged();
     if (!silent) {
         emit statusMessage(tr("Snapshot %1 deleted successfully.").arg(relativeVersion));
+    }
+}
+
+void ImageSession::applySnapshotDeletions(const QVector<QUuid>& uuids,
+                                          bool silent,
+                                          const std::optional<QVector<ImageSnapshot>>& result) {
+    if (!result) {
+        if (!silent)
+            emit statusMessage(tr("Failed to delete snapshots!"));
+        return;
+    }
+
+    for (const auto& uuid : uuids) {
+        m_clusterCache.remove(uuid.toString(QUuid::WithoutBraces));
+    }
+    applySnapshotList(*result);
+
+    // Update view state if dimensions change
+    QSize newDims = dimensions();
+    if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+        m_viewState.updateImageSize(newDims.width(), newDims.height());
+    }
+
+    emit imageChanged();
+    if (!silent) {
+        emit statusMessage(tr("Deleted %1 snapshots successfully.").arg(uuids.size()));
     }
 }
 

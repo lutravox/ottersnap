@@ -8,8 +8,8 @@
 #include <QImage>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QUuid>
 #include <QString>
+#include <QUuid>
 #include <QVector>
 
 #include "core/vksnapshotreconstructor.h"
@@ -65,9 +65,9 @@ class SnapshotManager {
 
     /// @brief Outcome of an updateImagePath() call.
     enum class UpdatePathResult {
-        Ok,                       ///< Path re-pointed successfully (or nothing to re-point).
-        TargetAlreadyRegistered,  ///< newPath is registered under a different image key.
-        Failed                    ///< The database update failed.
+        Ok,                      ///< Path re-pointed successfully (or nothing to re-point).
+        TargetAlreadyRegistered, ///< newPath is registered under a different image key.
+        Failed                   ///< The database update failed.
     };
 
     /// @brief Re-point a registered image to a new file path.
@@ -101,8 +101,16 @@ class SnapshotManager {
     /// @brief Delete a specific snapshot for an image file.
     /// @param filePath Absolute path of the source image.
     /// @param uuid The unique identity of the snapshot to remove.
-    /// @return True if the snapshot was successfully deleted, false otherwise.
-    static std::optional<QVector<ImageSnapshot>> deleteSnapshot(const QString& filePath, const QUuid& uuid);
+    /// @return The remaining snapshots, or std::nullopt on failure.
+    static std::optional<QVector<ImageSnapshot>> deleteSnapshot(const QString& filePath,
+                                                                const QUuid&   uuid);
+
+    /// @brief Delete multiple snapshots for an image file in a single operation.
+    /// @param filePath Absolute path of the source image.
+    /// @param uuids The unique identities of the snapshots to remove.
+    /// @return The remaining snapshots, or std::nullopt if none could be deleted.
+    static std::optional<QVector<ImageSnapshot>> deleteSnapshots(const QString&        filePath,
+                                                                 const QVector<QUuid>& uuids);
 
     /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
@@ -141,7 +149,7 @@ class SnapshotManager {
     /// @param targetSize Desired output size; pass QSize() for full resolution.
     static QImage
     reconstructSnapshot(const QString&                           filePath,
-                        const QUuid&                              uuid,
+                        const QUuid&                             uuid,
                         QSize                                    targetSize = {},
                         std::shared_ptr<VkSnapshotReconstructor> reconstructor = nullptr);
 
@@ -165,9 +173,11 @@ class SnapshotManager {
     /// @param bundlePath Path to the .zip bundle file.
     /// @param duplicatesFound Optional pointer to store the number of skipped duplicate snapshots.
     /// @return True if import was successful, false otherwise.
-    static bool importHistory(const QString& filePath, const QString& bundlePath, int* duplicatesFound = nullptr);
+    static bool importHistory(const QString& filePath,
+                              const QString& bundlePath,
+                              int           *duplicatesFound = nullptr);
 
-private:
+  private:
     /// @brief Ensures that the base storage and image-specific directories are ready.
     /// @param filePath Absolute path of the source image.
     /// @return The path to the snapshot directory, or an empty string on failure.

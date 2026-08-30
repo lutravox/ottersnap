@@ -1282,18 +1282,13 @@ void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuid
             tr("Delete"),
             tr("Cancel"))) {
         const int total = uuids.size();
-        auto      pending = QSharedPointer<int>::create(total);
-        connect(
-            tab->session(), &ImageSession::deletionFinished, this, [this, tab, pending, total]() {
-                if (--*pending == 0) {
-                    disconnect(tab->session(), &ImageSession::deletionFinished, this, nullptr);
-                    notify(tr("Deleted %1 snapshots successfully.").arg(total));
-                }
-            });
+        connect(tab->session(),
+                &ImageSession::deletionFinished,
+                this,
+                [this, total]() { notify(tr("Deleted %1 snapshots successfully.").arg(total)); },
+                Qt::SingleShotConnection);
 
-        for (const auto& uuid : uuids) {
-            tab->deleteSnapshot(uuid, true);
-        }
+        tab->deleteSnapshots(uuids, true);
     }
 }
 

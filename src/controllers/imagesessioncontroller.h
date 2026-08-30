@@ -40,6 +40,9 @@ class ImageSessionController : public QObject {
     /// @brief Delete a snapshot in the active session.
     void deleteSnapshot(const QUuid& uuid, bool silent = false);
 
+    /// @brief Delete multiple snapshots in the active session.
+    void deleteSnapshots(const QVector<QUuid>& uuids, bool silent = false);
+
     /// @brief Delete all snapshots for the active session.
     void deleteAllSnapshots();
 

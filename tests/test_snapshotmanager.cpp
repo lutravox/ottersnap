@@ -62,6 +62,10 @@ class TestSnapshotManager : public QObject {
     void testDeleteMiddleSnapshotRebase();
     void testDeleteFirstSnapshotRebase();
     void testDeleteAllSnapshots();
+    void testDeleteBatchContiguousRun();
+    void testDeleteBatchIncludingBase();
+    void testDeleteBatchSuffix();
+    void testDeleteBatchUnknownUuids();
 
     // Edge cases
     void testLoadNonExistentFile();
@@ -775,6 +779,101 @@ void TestSnapshotManager::testDeleteAllSnapshots() {
 
     SnapshotManager::deleteAllSnapshots(path);
     QCOMPARE(SnapshotManager::loadSnapshots(path).size(), 0);
+}
+
+void TestSnapshotManager::testDeleteBatchContiguousRun() {
+    const QString path = testFilePath("delete_batch_run");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QImage s1 = makeImage(10, 10, Qt::red);
+    QImage s5 = makeImage(10, 10, Qt::cyan);
+    QUuid  u1 = SnapshotManager::saveSnapshot(path, s1)->uuid;
+    QUuid  u2 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue))->uuid;
+    QUuid  u3 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::green))->uuid;
+    QUuid  u4 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::yellow))->uuid;
+    QUuid  u5 = SnapshotManager::saveSnapshot(path, s5)->uuid;
+
+    // Oldest-first, as the UI selection produces. The surviving dependent is
+    // rebased once against the nearest surviving ancestor.
+    auto result = SnapshotManager::deleteSnapshots(path, {u2, u3, u4});
+    QVERIFY(result.has_value());
+    QCOMPARE(result->size(), 2);
+
+    QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
+    QCOMPARE(snaps.size(), 2);
+    for (const auto& s : snaps) {
+        if (s.uuid == u5) {
+            QVERIFY(!s.isBase);
+            QCOMPARE(s.parentUuid, u1);
+        }
+    }
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, u5), s5);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, u1), s1);
+
+    SnapshotManager::deleteAllSnapshots(path);
+}
+
+void TestSnapshotManager::testDeleteBatchIncludingBase() {
+    const QString path = testFilePath("delete_batch_base");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QImage s3 = makeImage(10, 10, Qt::green);
+    QUuid  u1 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red))->uuid;
+    QUuid  u2 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue))->uuid;
+    QUuid  u3 = SnapshotManager::saveSnapshot(path, s3)->uuid;
+
+    auto result = SnapshotManager::deleteSnapshots(path, {u1, u2});
+    QVERIFY(result.has_value());
+    QCOMPARE(result->size(), 1);
+    QCOMPARE((*result)[0].uuid, u3);
+    QVERIFY((*result)[0].isBase);
+    QVERIFY((*result)[0].parentUuid.isNull());
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, u3), s3);
+
+    SnapshotManager::deleteAllSnapshots(path);
+}
+
+void TestSnapshotManager::testDeleteBatchSuffix() {
+    const QString path = testFilePath("delete_batch_suffix");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QImage s1 = makeImage(10, 10, Qt::red);
+    QUuid  u1 = SnapshotManager::saveSnapshot(path, s1)->uuid;
+    QUuid  u2 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue))->uuid;
+    QUuid  u3 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::green))->uuid;
+
+    // No surviving snapshot loses its parent: no chain repair needed.
+    auto result = SnapshotManager::deleteSnapshots(path, {u3, u2});
+    QVERIFY(result.has_value());
+    QCOMPARE(result->size(), 1);
+    QCOMPARE((*result)[0].uuid, u1);
+    QCOMPARE(SnapshotManager::reconstructSnapshot(path, u1), s1);
+
+    SnapshotManager::deleteAllSnapshots(path);
+}
+
+void TestSnapshotManager::testDeleteBatchUnknownUuids() {
+    const QString path = testFilePath("delete_batch_unknown");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QUuid u1 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::red))->uuid;
+    QUuid u2 = SnapshotManager::saveSnapshot(path, makeImage(10, 10, Qt::blue))->uuid;
+
+    // Nothing matches: nullopt, nothing deleted.
+    QVERIFY(!SnapshotManager::deleteSnapshots(path, {QUuid::createUuid()}).has_value());
+    QCOMPARE(SnapshotManager::loadSnapshots(path).size(), 2);
+
+    // Empty request: nullopt.
+    QVector<QUuid> none;
+    QVERIFY(!SnapshotManager::deleteSnapshots(path, none).has_value());
+
+    // Mixed: the unknown uuid is skipped, the known one is deleted.
+    auto result = SnapshotManager::deleteSnapshots(path, {QUuid::createUuid(), u2});
+    QVERIFY(result.has_value());
+    QCOMPARE(result->size(), 1);
+    QCOMPARE((*result)[0].uuid, u1);
+
+    SnapshotManager::deleteAllSnapshots(path);
 }
 
 // Edge cases

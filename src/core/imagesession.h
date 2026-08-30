@@ -87,6 +87,10 @@ class ImageSession : public QObject, public IEffectsModel {
     /// updated and deletionFinished() is emitted when the delete completes.
     void deleteSnapshot(const QUuid& uuid, bool silent = false);
 
+    /// @brief Delete multiple snapshots in a single asynchronous operation;
+    /// state is updated once and deletionFinished() is emitted on completion.
+    void deleteSnapshots(const QVector<QUuid>& uuids, bool silent = false);
+
     /// @brief Delete all snapshots of this image. Runs asynchronously; state
     /// is updated and deletionFinished() is emitted when the delete completes.
     void deleteAllSnapshots();
@@ -203,6 +207,7 @@ class ImageSession : public QObject, public IEffectsModel {
     void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher,
                               bool                                                        isAutosave);
     void   applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result);
+    void   applySnapshotDeletions(const QVector<QUuid>& uuids, bool silent, const std::optional<QVector<ImageSnapshot>>& result);
     void   applySnapshotList(const QVector<ImageSnapshot>& list);
     QImage getPlaceholder(int size);
 

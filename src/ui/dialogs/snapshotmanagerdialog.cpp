@@ -265,7 +265,8 @@ void SnapshotManagerDialog::onClearImage() {
 
     if (DialogUtils::confirm(this,
                              tr("Delete All Snapshots"),
-                             tr("Are you sure you want to delete ALL snapshots for this image?"),
+                             tr("Are you sure you want to delete ALL snapshots for this image?\nThis "
+                                "action cannot be undone."),
                              tr("Delete All"),
                              tr("Cancel"))) {
         SnapshotManager::deleteAllSnapshots(img.path);

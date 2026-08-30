@@ -1275,7 +1275,9 @@ void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuid
     if (DialogUtils::confirm(
             this,
             tr("Delete Snapshots"),
-            tr("Are you sure you want to delete %1 selected snapshots?").arg(uuids.size()),
+            tr("Are you sure you want to delete %1 selected snapshots?\nThis action cannot be "
+               "undone.")
+                .arg(uuids.size()),
             tr("Delete"),
             tr("Cancel"))) {
         for (const auto& uuid : uuids) {
@@ -1298,7 +1300,8 @@ void MainWindow::onSnapshotDeletionRequested(const QUuid& uuid) {
 
     if (DialogUtils::confirm(this,
                              tr("Delete Snapshot"),
-                             tr("Are you sure you want to delete snapshot %1?")
+                             tr("Are you sure you want to delete snapshot %1?\nThis action cannot "
+                                "be undone.")
                                  .arg(tab->session()->getRelativeVersion(uuid)),
                              tr("Delete"),
                              tr("Cancel"))) {
@@ -1325,7 +1328,9 @@ void MainWindow::onDeleteAllSnapshotsRequested() {
     if (DialogUtils::confirm(
             this,
             tr("Delete All Snapshots"),
-            tr("Are you sure you want to delete all %1 snapshots?").arg(snapshots.size()),
+            tr("Are you sure you want to delete all %1 snapshots?\nThis action cannot be "
+               "undone.")
+                .arg(snapshots.size()),
             tr("Delete All"),
             tr("Cancel"))) {
         tab->deleteAllSnapshots();

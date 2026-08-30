@@ -115,8 +115,15 @@ class SnapshotManager {
     /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
     /// @param image The image data to save.
+    /// @param previousImage Full-res state of the latest snapshot, if the
+    ///        caller already holds it. Used for the delta when previousUuid
+    ///        matches the latest snapshot; otherwise it is ignored.
+    /// @param previousUuid Uuid of the snapshot previousImage belongs to.
     /// @return The result containing status and snapshot index, or std::nullopt on failure.
-    static std::optional<SaveResult> saveSnapshot(const QString& filePath, const QImage& image);
+    static std::optional<SaveResult> saveSnapshot(const QString&  filePath,
+                                                  const QImage&   image,
+                                                  const QImage&   previousImage = {},
+                                                  const QUuid&    previousUuid  = {});
 
     /// @brief Load a base image from the snapshot store.
     /// @param filePath Absolute path of the source image.

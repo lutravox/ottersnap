@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include "core/snapshotdecompressor.h"
 #include "core/snapshot_types.h"
+#include "core/zstdutils.h"
 
 class TestSnapshotDecompressor : public QObject {
     Q_OBJECT
@@ -18,7 +19,7 @@ private:
         stream << version << tileW << tileH << (uint32_t)tiles.size();
         
         for (const auto& tile : tiles) {
-            stream << tile.first << qCompress(tile.second);
+            stream << tile.first << ZstdUtils::compress(tile.second);
         }
         
         return data;
@@ -43,7 +44,7 @@ private slots:
     }
 
     void testInvalidVersion() {
-        QByteArray data = createDeltaBlob(2, 16, 16, {}); // Version 2 instead of 1
+        QByteArray data = createDeltaBlob(3, 16, 16, {}); // Unsupported version
         DeltaEntry delta = {"test", data};
         DecompressedDelta out;
         

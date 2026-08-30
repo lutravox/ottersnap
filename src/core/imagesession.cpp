@@ -265,7 +265,6 @@ void ImageSession::saveSnapshot() {
     if (m_diskImage.isNull())
         return;
 
-    QApplication::setOverrideCursor(Qt::WaitCursor);
     performSave(m_diskImage, false);
 }
 
@@ -478,18 +477,30 @@ void ImageSession::updateColorClusters() {
 }
 
 void ImageSession::performSave(const QImage& img, bool isAutosave) {
+    if (m_saveInFlight) {
+        // One save at a time; re-run with the latest state once it completes.
+        m_saveCoalesced = true;
+        if (!isAutosave)
+            m_saveCoalescedManual = true;
+        return;
+    }
+    m_saveInFlight = true;
+    m_queuedSaveImage = img;
+
     QString path = m_filePath;
 
     auto watcher = new QFutureWatcher<std::optional<SnapshotManager::SaveResult>>(this);
     if (!isAutosave) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
         connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
     }
     connect(watcher,
             &QFutureWatcher<std::optional<SnapshotManager::SaveResult>>::finished,
             [this, watcher, isAutosave]() { handleSaveFinished(watcher, isAutosave); });
 
-    watcher->setFuture(
-        QtConcurrent::run([path, img]() { return SnapshotManager::saveSnapshot(path, img); }));
+    watcher->setFuture(QtConcurrent::run([path, img, prev = m_lastSavedImage, prevUuid = m_lastSavedUuid]() {
+        return SnapshotManager::saveSnapshot(path, img, prev, prevUuid);
+    }));
 }
 
 void ImageSession::handleSaveFinished(
@@ -513,6 +524,23 @@ void ImageSession::handleSaveFinished(
     } else if (!res || (res && res->status != SnapshotManager::SaveStatus::Existing &&
                         res->status != SnapshotManager::SaveStatus::Created)) {
         emit statusMessage("Save failed!");
+    }
+
+    if (res && (res->status == SnapshotManager::SaveStatus::Created ||
+                res->status == SnapshotManager::SaveStatus::Existing)) {
+        m_lastSavedImage = std::move(m_queuedSaveImage);
+        m_lastSavedUuid = res->uuid;
+    } else {
+        m_queuedSaveImage = QImage();
+    }
+
+    m_saveInFlight = false;
+    if (m_saveCoalesced) {
+        m_saveCoalesced = false;
+        bool manual = m_saveCoalescedManual;
+        m_saveCoalescedManual = false;
+        if (!m_diskImage.isNull())
+            performSave(m_diskImage, !manual);
     }
     watcher->deleteLater();
 }

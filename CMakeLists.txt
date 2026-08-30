@@ -11,6 +11,7 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql ShaderTools QuickWidgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBZIP REQUIRED libzip)
+pkg_check_modules(LIBZSTD REQUIRED IMPORTED_TARGET libzstd)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 
@@ -143,6 +144,7 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/vksnapshotreconstructor.cpp
     src/core/cpusnapshotreconstructor.cpp
     src/core/snapshotdecompressor.cpp
+    src/core/zstdutils.cpp
     src/core/vulkancontext.cpp
     src/core/vulkanutils.cpp
     src/core/viewmodel.cpp
@@ -158,7 +160,7 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets ${LIBZIP_LIBRARIES})
+target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets ${LIBZIP_LIBRARIES} PkgConfig::LIBZSTD)
 
 add_executable(${PROJECT_NAME}
 

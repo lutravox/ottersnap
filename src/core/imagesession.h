@@ -215,6 +215,12 @@ class ImageSession : public QObject, public IEffectsModel {
     QDateTime              m_lastModified;
     QString                m_filePath;
     QImage                 m_diskImage;
+    bool                   m_saveInFlight = false;
+    bool                   m_saveCoalesced = false;
+    bool                   m_saveCoalescedManual = false;
+    QImage                 m_lastSavedImage;
+    QUuid                  m_lastSavedUuid;
+    QImage                 m_queuedSaveImage;
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
     QString m_currentUuid = c_currentId;

@@ -4,6 +4,7 @@
 #include <QVector>
 #include "core/cpusnapshotreconstructor.h"
 #include "core/snapshot_types.h"
+#include "core/zstdutils.h"
 
 class TestCPUSnapshotReconstructor : public QObject {
     Q_OBJECT
@@ -21,7 +22,7 @@ private:
         stream << version << tileW << tileH << (uint32_t)indices.size();
         
         for (size_t i = 0; i < indices.size(); ++i) {
-            stream << indices[i] << qCompress(tilePixels[i]);
+            stream << indices[i] << ZstdUtils::compress(tilePixels[i]);
         }
         
         return {"test-delta", data};

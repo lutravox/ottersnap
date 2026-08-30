@@ -1,4 +1,5 @@
 #include "core/snapshotdecompressor.h"
+#include "core/zstdutils.h"
 #include <QDataStream>
 #include <QDebug>
 #include <qlogging.h>
@@ -55,9 +56,11 @@ bool SnapshotDecompressor::decompress(const DeltaEntry& delta, DecompressedDelta
     QVector<UncompressedTile> uncompressed;
     uncompressed.reserve(numTiles);
 
+    const size_t tileSize = static_cast<size_t>(out.tileW) * out.tileH * 4;
+
     for (const auto& td : tiles) {
-        QByteArray data = qUncompress(td.compressed);
-        if (data.isEmpty()) {
+        QByteArray data = ZstdUtils::decompress(td.compressed, tileSize);
+        if (data.size() != static_cast<int>(tileSize)) {
             qCritical() << "[SnapshotDecompressor] Failed to decompress tile" << td.index;
             return false;
         }

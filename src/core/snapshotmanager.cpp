@@ -4,8 +4,8 @@
 #include "core/diskutils.h"
 #include "core/snapshotdb.h"
 #include "core/thumbnailmanager.h"
+#include "core/zstdutils.h"
 
-#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDebug>
 #include <QDir>
@@ -17,7 +17,11 @@
 #include <QStandardPaths>
 #include <QTemporaryFile>
 #include <QUuid>
+#include <QtConcurrent>
+#include <QThreadPool>
 #include <algorithm>
+#include <cstring>
+#include <numeric>
 #include <functional>
 #include <zip.h>
 
@@ -31,18 +35,69 @@ static const int      c_tileWidth = 256;
 static const int      c_tileHeight = 256;
 static const uint32_t c_sparseFormatVersion = 1;
 
+static const uint32_t c_baseMagic   = 0x4253544F; // 'OTSB'
+static const uint32_t c_baseVersion = 1;
+static const QString  c_baseExtension = ".base";
+
 static QString snapshotDirPath(const QString& key) {
     return SnapshotManager::baseDir() + '/' + key;
 }
 
-static bool saveImageFile(const QString& path, const QImage& img) {
-    return DiskUtils::atomicWrite(path, [&img](const QString& tmp) {
-        if (!img.save(tmp, "PNG")) {
-            qWarning() << "[SnapshotManager] Failed to save image:" << tmp;
-            return false;
-        }
-        return true;
-    });
+static bool saveFile(const QString& targetPath, const QByteArray& data);
+
+static QByteArray encodeBaseImage(const QImage& image) {
+    QImage img = image.format() == QImage::Format_ARGB32
+                     ? image
+                     : image.convertToFormat(QImage::Format_ARGB32);
+    if (img.isNull() || !img.constBits())
+        return {};
+
+    QByteArray packed;
+    packed.reserve(img.width() * img.height() * 4);
+    for (int y = 0; y < img.height(); ++y)
+        packed.append(reinterpret_cast<const char*>(img.constScanLine(y)), img.width() * 4);
+
+    QByteArray compressed = ZstdUtils::compress(packed, ZstdUtils::kDefaultLevel);
+    if (compressed.isEmpty())
+        return {};
+
+    QByteArray out;
+    QDataStream stream(&out, QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream << c_baseMagic << c_baseVersion << (quint32)img.width() << (quint32)img.height();
+    out.append(compressed);
+    return out;
+}
+
+static QImage decodeBaseImage(const QByteArray& data) {
+    QDataStream stream(data);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    uint32_t magic = 0, version = 0, width = 0, height = 0;
+    stream >> magic >> version >> width >> height;
+    if (magic != c_baseMagic || version != c_baseVersion || width == 0 || height == 0 ||
+        width > 32768 || height > 32768 || stream.status() != QDataStream::Ok) {
+        return QImage();
+    }
+
+    size_t     expected = static_cast<size_t>(width) * height * 4;
+    QByteArray pixels = ZstdUtils::decompress(data.mid(static_cast<int>(stream.device()->pos())),
+                                              expected);
+    if (pixels.size() != static_cast<int>(expected))
+        return QImage();
+
+    return QImage(reinterpret_cast<const uchar*>(pixels.constData()), width, height, width * 4,
+                  QImage::Format_ARGB32)
+        .copy();
+}
+
+static bool writeBaseFile(const QString& path, const QImage& img) {
+    QByteArray data = encodeBaseImage(img);
+    if (data.isEmpty()) {
+        qWarning() << "[SnapshotManager] Failed to encode base image:" << path;
+        return false;
+    }
+    return saveFile(path, data);
 }
 
 static bool saveFile(const QString& targetPath, const QByteArray& data) {
@@ -59,31 +114,33 @@ static bool saveFile(const QString& targetPath, const QByteArray& data) {
 }
 
 static QByteArray computeDelta(const QImage& current, const QImage& previous) {
-    QImage cur = current.convertToFormat(QImage::Format_ARGB32);
-    QImage prev = previous.convertToFormat(QImage::Format_ARGB32);
+    QImage cur = current.format() == QImage::Format_ARGB32
+                     ? current
+                     : current.convertToFormat(QImage::Format_ARGB32);
+    QImage prev = previous.format() == QImage::Format_ARGB32
+                      ? previous
+                      : previous.convertToFormat(QImage::Format_ARGB32);
 
-    if (cur.size() != prev.size()) {
+    if (cur.size() != prev.size() || cur.isNull()) {
         qDebug() << "[SnapshotManager] computeDelta: Current and previous images size mismatch";
         return {};
     }
 
-    int width = cur.width();
-    int height = cur.height();
-    int tilesX = (width + c_tileWidth - 1) / c_tileWidth;
-    int tilesY = (height + c_tileHeight - 1) / c_tileHeight;
+    const int width = cur.width();
+    const int height = cur.height();
+    const int rowBytes = width * 4;
+    const int tilesX = (width + c_tileWidth - 1) / c_tileWidth;
+    const int tilesY = (height + c_tileHeight - 1) / c_tileHeight;
 
-    QByteArray  result;
-    QDataStream stream(&result, QIODevice::WriteOnly);
-    stream.setByteOrder(QDataStream::LittleEndian);
-
-    // Header
-    stream << (uint32_t)c_sparseFormatVersion;
-    stream << (uint32_t)c_tileWidth;
-    stream << (uint32_t)c_tileHeight;
+    QVector<bool> rowChanged(height, false);
+    for (int y = 0; y < height; ++y) {
+        if (std::memcmp(cur.scanLine(y), prev.scanLine(y), static_cast<size_t>(rowBytes)) != 0)
+            rowChanged[y] = true;
+    }
 
     struct TileChange {
         uint32_t   index;
-        QByteArray data;
+        QByteArray pixels;
     };
     QVector<TileChange> changes;
 
@@ -93,37 +150,76 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
             int yStart = ty * c_tileHeight;
             int xEnd = std::min(xStart + c_tileWidth, width);
             int yEnd = std::min(yStart + c_tileHeight, height);
-            int tileW = xEnd - xStart;
+            const int tileW = xEnd - xStart;
 
-            bool       changed = false;
-            QByteArray tileDelta;
-            tileDelta.resize(static_cast<int>(c_tileWidth) * static_cast<int>(c_tileHeight) * 4);
-            tileDelta.fill(0);
-            uchar *dBits = reinterpret_cast<uchar *>(tileDelta.data());
-
+            int firstRow = -1;
             for (int y = yStart; y < yEnd; ++y) {
-                const uchar *curRow = cur.scanLine(y) + static_cast<int>(xStart) * 4;
-                const uchar *prevRow = prev.scanLine(y) + static_cast<int>(xStart) * 4;
-                uchar       *destRow = dBits + static_cast<int>((y - yStart) * c_tileWidth * 4);
+                if (rowChanged[y]) {
+                    firstRow = y;
+                    break;
+                }
+            }
+            if (firstRow < 0)
+                continue;
 
-                for (int x = 0; x < tileW * 4; ++x) {
-                    uchar xorVal = curRow[x] ^ prevRow[x];
-                    destRow[x] = xorVal;
-                    if (xorVal != 0)
-                        changed = true;
+            QByteArray tileDelta(c_tileWidth * c_tileHeight * 4, 0);
+            uint32_t*  dBase = reinterpret_cast<uint32_t*>(tileDelta.data());
+            bool       tileChanged = false;
+
+            for (int y = firstRow; y < yEnd; ++y) {
+                if (!rowChanged[y])
+                    continue;
+                const uint32_t* curRow =
+                    reinterpret_cast<const uint32_t*>(cur.scanLine(y)) + xStart;
+                const uint32_t* prevRow =
+                    reinterpret_cast<const uint32_t*>(prev.scanLine(y)) + xStart;
+                uint32_t* destRow = dBase + static_cast<size_t>(y - yStart) * c_tileWidth;
+
+                for (int x = 0; x < tileW; ++x) {
+                    uint32_t v = curRow[x] ^ prevRow[x];
+                    destRow[x] = v;
+                    tileChanged |= (v != 0);
                 }
             }
 
-            if (changed) {
-                changes.append({(uint32_t)(ty * tilesX + tx), qCompress(tileDelta)});
+            if (tileChanged) {
+                changes.append({(uint32_t)(ty * tilesX + tx), std::move(tileDelta)});
             }
         }
     }
 
+    QVector<QByteArray> compressed(changes.size());
+    if (!changes.isEmpty()) {
+        // Dedicated pool: saveSnapshot itself runs on the global pool, and a
+        // blocking map there can starve when several saves queue up.
+        static QThreadPool* compressionPool = [] {
+            auto* p = new QThreadPool;
+            p->setMaxThreadCount(4);
+            return p;
+        }();
+        QVector<int> indices(changes.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        QtConcurrent::blockingMap(compressionPool, std::as_const(indices),
+                                  [&](int i) { compressed[i] = ZstdUtils::compress(changes[i].pixels); });
+        for (const QByteArray& c : compressed) {
+            if (c.isEmpty()) {
+                qWarning() << "[SnapshotManager] Failed to compress delta tile";
+                return {};
+            }
+        }
+    }
+
+    QByteArray  result;
+    QDataStream stream(&result, QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    stream << (uint32_t)c_sparseFormatVersion;
+    stream << (uint32_t)c_tileWidth;
+    stream << (uint32_t)c_tileHeight;
     stream << (uint32_t)changes.size();
-    for (const auto& change : changes) {
-        stream << change.index;
-        stream << change.data;
+    for (int i = 0; i < changes.size(); ++i) {
+        stream << changes[i].index;
+        stream << compressed[i];
     }
 
     return result;
@@ -572,13 +668,19 @@ QString SnapshotManager::ensureStorageReady(const QString& filePath) {
 }
 
 QString SnapshotManager::computeChecksum(const QImage& image) {
-    QByteArray ba;
-    QBuffer    buffer(&ba);
-    if (!image.save(&buffer, "PNG")) {
-        qWarning() << "[SnapshotManager] Failed to save image to buffer for checksum";
+    QImage img = image.format() == QImage::Format_ARGB32
+                     ? image
+                     : image.convertToFormat(QImage::Format_ARGB32);
+    if (img.isNull() || !img.constBits()) {
+        qWarning() << "[SnapshotManager] Failed to compute checksum: image has no pixel data";
         return {};
     }
-    return QString::fromUtf8(QCryptographicHash::hash(ba, QCryptographicHash::Sha256).toHex());
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for (int y = 0; y < img.height(); ++y)
+        hash.addData(QByteArrayView(reinterpret_cast<const char*>(img.constScanLine(y)),
+                                    img.width() * 4));
+    return QString::fromUtf8(hash.result().toHex());
 }
 
 QVector<ImageSnapshot> SnapshotManager::loadSnapshots(const QString& filePath) {
@@ -636,8 +738,8 @@ void SnapshotManager::sortSnapshots(QVector<ImageSnapshot>& snapshots) {
         });
 }
 
-std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const QString& filePath,
-                                                                         const QImage&  image) {
+std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(
+    const QString& filePath, const QImage& image, const QImage& previousImage, const QUuid& previousUuid) {
     QMutexLocker locker(&s_opMutex);
     QString      checksum = computeChecksum(image);
     if (checksum.isEmpty()) {
@@ -682,7 +784,11 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
 
     QImage prevImg;
     if (!snapshots.isEmpty()) {
-        prevImg = reconstructSnapshot(filePath, snapshots.last().uuid);
+        const ImageSnapshot& last = snapshots.last();
+        if (previousUuid == last.uuid && !previousImage.isNull())
+            prevImg = previousImage;
+        else
+            prevImg = reconstructSnapshot(filePath, last.uuid);
     }
 
     if (!shouldBeBase && !prevImg.isNull()) {
@@ -694,9 +800,9 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
     s.isBase = shouldBeBase;
 
     if (s.isBase) {
-        s.fileName = QString("%1.png").arg(s.uuid.toString(QUuid::WithoutBraces));
+        s.fileName = QString("%1%2").arg(s.uuid.toString(QUuid::WithoutBraces), c_baseExtension);
         QString imgPath = sd + '/' + s.fileName;
-        if (!saveImageFile(imgPath, image.convertToFormat(QImage::Format_ARGB32))) {
+        if (!writeBaseFile(imgPath, image)) {
             qWarning() << "[SnapshotManager] Failed to create snapshot file:" << imgPath;
             return std::nullopt;
         }
@@ -755,9 +861,11 @@ std::optional<SnapshotManager::BaseImage> SnapshotManager::loadBaseImage(const Q
     if (!keyOpt)
         return std::nullopt;
     QString sd = snapshotDirPath(*keyOpt);
-    QImage  img;
-    if (img.load(sd + '/' + s.fileName)) {
-        return BaseImage{img, s.checksum};
+    QFile   f(sd + '/' + s.fileName);
+    if (f.open(QFile::ReadOnly)) {
+        QImage img = decodeBaseImage(f.readAll());
+        if (!img.isNull())
+            return BaseImage{img, s.checksum};
     }
     return std::nullopt;
 }
@@ -894,10 +1002,11 @@ SnapshotManager::deleteSnapshots(const QString& filePath, const QVector<QUuid>& 
         if (!survivor) {
             // The deleted run reached the base. The dependent becomes the new base.
             next.isBase = true;
-            next.fileName = QString("%1.png").arg(next.uuid.toString(QUuid::WithoutBraces));
+            next.fileName = QString("%1%2").arg(next.uuid.toString(QUuid::WithoutBraces),
+                                                c_baseExtension);
             next.parentUuid = QUuid();
 
-            if (!saveImageFile(sd + '/' + next.fileName, imgNext)) {
+            if (!writeBaseFile(sd + '/' + next.fileName, imgNext)) {
                 qWarning() << "[SnapshotManager] Failed to save new base image during chain repair:"
                            << next.fileName;
                 return std::nullopt;

@@ -7,6 +7,7 @@
 #include <QVulkanDeviceFunctions>
 #include <QVulkanInstance>
 #include <vulkan/vulkan.h>
+#include "core/snapshot_types.h"
 
 /// @brief A simple container for core Vulkan handles.
 struct VulkanHandles {
@@ -21,18 +22,4 @@ struct VulkanHandles {
         return device != VK_NULL_HANDLE && deviceFunctions != nullptr &&
                commandPool != VK_NULL_HANDLE;
     }
-};
-
-/// @brief A single uncompressed delta file within a reconstruction sequence.
-struct DeltaEntry {
-    QString    id;
-    QByteArray data;
-};
-
-/// @brief The reconstruction sequence containing the base and deltas.
-struct ReconstructionSequence {
-    int                 baseIdx;
-    QImage              base;
-    QString             baseChecksum;
-    QVector<DeltaEntry> deltas;
 };

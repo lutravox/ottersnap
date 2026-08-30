@@ -262,9 +262,9 @@ void VkImageViewer::setImage(const QImage& image) {
     m_renderer->setImage(image, ++m_generation);
 }
 
-void VkImageViewer::reconstruct(const ReconstructionSequence& seq) {
+bool VkImageViewer::reconstruct(const ReconstructionSequence& seq) {
     m_hasImage = true;
-    m_renderer->reconstruct(seq, ++m_generation);
+    return m_renderer->reconstruct(seq, ++m_generation);
 }
 
 void VkImageViewer::clear() {

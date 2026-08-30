@@ -53,9 +53,8 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     void setImage(const QImage& img, uint32_t generation);
 
     /// @brief Triggers a reconstruction of the image from a snapshot sequence.
-    /// @param seq The sequence to reconstruct.
-    /// @param generation The request ID associated with this reconstruction.
-    void reconstruct(const ReconstructionSequence& seq, uint32_t generation);
+    /// @return True if reconstruction was successful, false otherwise.
+    bool reconstruct(const ReconstructionSequence& seq, uint32_t generation);
 
     /// @brief Marks the uniform buffer as dirty, triggering an update on the next frame.
     void markUboDirty() {

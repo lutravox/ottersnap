@@ -51,7 +51,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     void setImage(const QImage& image) override;
 
     /// @brief Reconstructs a snapshot from a base image and a series of deltas.
-    void reconstruct(const ReconstructionSequence& seq) override;
+    /// @return True if reconstruction was successful, false otherwise.
+    bool reconstruct(const ReconstructionSequence& seq) override;
 
     /// @brief Return the current zoom level as a percentage (100.0 = 1:1).
     double zoomPercentage() const override {

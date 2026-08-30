@@ -12,6 +12,7 @@ constexpr bool c_defaultAutosaveSnapshots = true;
 constexpr bool c_defaultAutoreloadImages = true;
 constexpr bool c_defaultSnapshotOnReopen = false;
 constexpr bool c_defaultToolbarVisible = true;
+constexpr bool c_defaultForceCpuReconstruction = false;
 // UI range
 constexpr int c_minCacheSizeMB = 16;
 // Setting keys
@@ -21,6 +22,7 @@ constexpr std::string_view c_keyAutosaveSnapshots = "General/autosaveSnapshots";
 constexpr std::string_view c_keyAutoreloadImages = "General/autoreloadImages";
 constexpr std::string_view c_keySnapshotOnReopen = "General/snapshotOnReopen";
 constexpr std::string_view c_keyToolbarVisible = "General/toolbarVisible";
+constexpr std::string_view c_keyForceCpuReconstruction = "Debug/forceCpuReconstruction";
 constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
 constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
 constexpr std::string_view c_keyDeltaCacheSizeMB = "General/maxDeltaCacheSizeMB";
@@ -76,6 +78,11 @@ class AppSettings {
     static bool snapshotOnReopen();
     /// @brief Set the snapshot-on-reopen preference.
     static void setSnapshotOnReopen(bool value);
+
+    /// @brief Return whether GPU reconstruction should be bypassed in favor of CPU reconstruction.
+    static bool forceCpuReconstruction();
+    /// @brief Set whether GPU reconstruction should be bypassed.
+    static void setForceCpuReconstruction(bool value);
 
     /// @brief Return the interval between base snapshots.
     static int baseInterval();

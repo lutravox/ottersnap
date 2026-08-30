@@ -79,6 +79,18 @@ void AppSettings::setSnapshotOnReopen(bool value) {
     settings().setValue(c_keySnapshotOnReopen, value);
 }
 
+bool AppSettings::forceCpuReconstruction() {
+    QByteArray env = qgetenv("OTTERSNAP_FORCE_CPU_RECONSTRUCTION");
+    if (!env.isEmpty()) {
+        return env == "1" || env.toLower() == "true";
+    }
+    return settings().value(c_keyForceCpuReconstruction, c_defaultForceCpuReconstruction).toBool();
+}
+
+void AppSettings::setForceCpuReconstruction(bool value) {
+    settings().setValue(c_keyForceCpuReconstruction, value);
+}
+
 int AppSettings::baseInterval() {
     return settings().value(c_keyBaseInterval, c_defaultBaseInterval).toInt();
 }

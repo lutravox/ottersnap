@@ -9,6 +9,7 @@
 #include <qlogging.h>
 #include "core/vksnapshotreconstructor.h"
 #include "core/deltacache.h"
+#include "core/snapshotdecompressor.h"
 #include "core/vulkancontext.h"
 #include "core/vulkanutils.h"
 
@@ -86,7 +87,8 @@ void VkSnapshotReconstructor::cleanup() {
     }
 
     if (m_sampleStagingBuffer) {
-        VulkanUtils::destroyResource(df, dev, m_sampleStagingBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
+        VulkanUtils::destroyResource(
+            df, dev, m_sampleStagingBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
         VulkanUtils::freeMemory(df, dev, m_sampleStagingMemory);
         m_sampleStagingBuffer = VK_NULL_HANDLE;
         m_sampleStagingMemory = VK_NULL_HANDLE;
@@ -239,98 +241,19 @@ bool VkSnapshotReconstructor::parseAndDecompressDelta(const DeltaEntry&  delta,
                                                       QByteArray&        packedPixels,
                                                       QVector<uint32_t>& tileIndices,
                                                       QVector<uint32_t>& tileOffsets) {
-    const QByteArray& compressedDelta = delta.data;
-    const QString&    deltaId = delta.id;
-
-    // Check cache — skip decompression if already cached
-    {
-        auto cached = DeltaCache::get(deltaId);
-        if (cached) {
-            tileW = cached->tileW;
-            tileH = cached->tileH;
-            packedPixels = std::move(cached->packedPixels);
-            tileIndices = std::move(cached->tileIndices);
-            tileOffsets = std::move(cached->tileOffsets);
-            return true;
-        }
-    }
-
-    qDebug() << "[VkSnapshotReconstructor] Delta cache MISS";
-
-    QDataStream stream(compressedDelta);
-    stream.setByteOrder(QDataStream::LittleEndian);
-
-    uint32_t version = 0;
-    stream >> version;
-    if (version != 1) {
-        qWarning() << "[VkSnapshotReconstructor] Unsupported delta format version:" << version;
+    DecompressedDelta decoded;
+    if (!SnapshotDecompressor::decompress(delta, decoded)) {
         return false;
     }
 
-    uint32_t numTiles = 0;
-    stream >> tileW >> tileH >> numTiles;
-
-    if (numTiles == 0) {
-        return true;
-    }
-
-    if (tileW == 0 || tileH == 0 || tileW > 4096 || tileH > 4096) {
-        qCritical() << "[VkSnapshotReconstructor] Delta corruption: invalid tile dimensions ("
-                    << tileW << "x" << tileH << ")";
-        return false;
-    }
-
-    if (numTiles > 1000000) {
-        qCritical() << "[VkSnapshotReconstructor] Delta corruption: numTiles too large ("
-                    << numTiles << ")";
-        return false;
-    }
-
-    struct TileData {
-        uint32_t   index;
-        QByteArray compressed;
-    };
-    QVector<TileData> tiles;
-    tiles.reserve(numTiles);
-    for (uint32_t i = 0; i < numTiles; ++i) {
-        uint32_t   idx = 0;
-        QByteArray compressed;
-        stream >> idx >> compressed;
-        tiles.append({idx, compressed});
-    }
-
-    struct UncompressedTile {
-        uint32_t   index;
-        QByteArray pixels;
-    };
-    QVector<UncompressedTile> uncompressed;
-    uncompressed.reserve(numTiles);
-
-    for (const auto& td : tiles) {
-        QByteArray data = qUncompress(td.compressed);
-        if (data.isEmpty()) {
-            qCritical() << "[VkSnapshotReconstructor] Failed to decompress tile" << td.index;
-            return false;
-        }
-        uncompressed.append({td.index, std::move(data)});
-    }
-
-    packedPixels.clear();
-    tileIndices.clear();
-    tileOffsets.clear();
-    packedPixels.reserve(numTiles * tileW * tileH * 4);
-    tileIndices.reserve(numTiles);
-    tileOffsets.reserve(numTiles);
-
-    for (const auto& tile : uncompressed) {
-        tileOffsets.append(packedPixels.size() / sizeof(uint32_t));
-        packedPixels.append(tile.pixels);
-        tileIndices.append(tile.index);
-    }
+    tileW = decoded.tileW;
+    tileH = decoded.tileH;
+    packedPixels = std::move(decoded.packedPixels);
+    tileIndices = std::move(decoded.tileIndices);
+    tileOffsets = std::move(decoded.tileOffsets);
 
     // Cache the decompressed delta for future reconstructions
-    DeltaCache::insert(deltaId,
-                       DecompressedDelta{tileW, tileH, packedPixels, tileIndices, tileOffsets});
+    DeltaCache::insert(delta.id, decoded);
 
     return true;
 }
@@ -962,15 +885,15 @@ bool VkSnapshotReconstructor::recordBaseUploadCommands(bool isCached, VkDeviceSi
         barrier.offset = 0;
         barrier.size = size;
         df->vkCmdPipelineBarrier(m_uploadCmdBuffer,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   0,
-                                   0,
-                                   nullptr,
-                                   1,
-                                   &barrier,
-                                   0,
-                                   nullptr);
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &barrier,
+                                 0,
+                                 nullptr);
 
         df->vkCmdCopyBuffer(
             m_uploadCmdBuffer, m_pendingStateBuffer, m_cachedBaseBuffer, 1, &copyRegion);
@@ -1265,26 +1188,21 @@ QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
 }
 
 QImage VkSnapshotReconstructor::reconstructToImage(const ReconstructionSequence& seq,
-                                                   QSize                         targetSize,
-                                                   VkSnapshotReconstructor      *worker) {
+                                                   QSize                         targetSize) {
     std::unique_lock<std::recursive_mutex>   lock(m_mutex);
-    std::unique_ptr<VkSnapshotReconstructor> localWorker = nullptr;
-    VkSnapshotReconstructor                 *activeWorker = worker;
+    std::unique_ptr<VkSnapshotReconstructor> localWorker =
+        std::make_unique<VkSnapshotReconstructor>(m_handles, m_context);
 
-    if (!activeWorker) {
-        localWorker = std::make_unique<VkSnapshotReconstructor>(m_handles, m_context);
-        activeWorker = localWorker.get();
-    }
-
-    if (!activeWorker->reconstruct(seq)) {
-        activeWorker->cancelBaseUpload();
+    // Using a local worker to keep the base cache active for normal reconstructions
+    if (!localWorker->reconstruct(seq)) {
+        localWorker->cancelBaseUpload();
         return QImage();
     }
 
-    VkBuffer     srcBuffer = activeWorker->stateBuffer();
-    VkDeviceSize srcBufferSize = activeWorker->stateBufferSize();
-    uint32_t     srcW = activeWorker->width();
-    uint32_t     srcH = activeWorker->height();
+    VkBuffer     srcBuffer = localWorker->stateBuffer();
+    VkDeviceSize srcBufferSize = localWorker->stateBufferSize();
+    uint32_t     srcW = localWorker->width();
+    uint32_t     srcH = localWorker->height();
 
     if (srcBuffer == VK_NULL_HANDLE || srcBufferSize == 0) {
         return QImage();
@@ -1313,7 +1231,8 @@ QRgb VkSnapshotReconstructor::samplePixel(int x, int y) {
     auto df = m_handles.deviceFunctions;
     auto dev = m_handles.device;
 
-    VkDeviceSize offset = static_cast<VkDeviceSize>(y) * m_width * 4 + static_cast<VkDeviceSize>(x) * 4;
+    VkDeviceSize offset =
+        static_cast<VkDeviceSize>(y) * m_width * 4 + static_cast<VkDeviceSize>(x) * 4;
     VkDeviceSize size = 4;
 
     if (!m_sampleStagingBuffer) {
@@ -1374,7 +1293,7 @@ QRgb VkSnapshotReconstructor::samplePixel(int x, int y) {
     submit.pCommandBuffers = &m_sampleCmdBuffer;
 
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence fence = VK_NULL_HANDLE;
+    VkFence           fence = VK_NULL_HANDLE;
     df->vkCreateFence(dev, &fci, nullptr, &fence);
     df->vkQueueSubmit(m_handles.queue, 1, &submit, fence);
 

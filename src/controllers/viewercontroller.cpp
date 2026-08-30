@@ -1,6 +1,8 @@
 #include <QDebug>
 #include "controllers/viewercontroller.h"
+#include "config/appsettings.h"
 #include "controllers/appsettingscontroller.h"
+#include "core/cpusnapshotreconstructor.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewer.h"
 
@@ -85,18 +87,58 @@ void ViewerController::updateViewerState() {
     if (!session || !m_viewer)
         return;
 
-    // ORCHESTRATION: Prepare session for rendering
+    // Prepare session for rendering
     VulkanHandles handles = VulkanContext::instance().getUIHandles();
-    if (handles.device != VK_NULL_HANDLE) {
+    bool          gpuSupported =
+        (handles.device != VK_NULL_HANDLE) && !AppSettings::forceCpuReconstruction();
+
+    if (gpuSupported) {
         session->setUIReconstructorHandles(handles);
         m_viewer->setReconstructor(session->uiReconstructor());
+    }
 
-        if (session->isCurrentImageSelected()) {
-            m_viewer->setImage(session->diskImage());
-        } else if (auto seq = session->getReconstructionSequence()) {
-            m_viewer->reconstruct(*seq);
+    if (session->isCurrentImageSelected()) {
+        m_cpuReconstructionActive = false;
+        m_viewer->setImage(session->diskImage());
+        return;
+    }
+
+    const std::optional<ReconstructionSequence> seq = session->getReconstructionSequence();
+    if (!seq)
+        return;
+
+    if (gpuSupported && m_viewer->reconstruct(*seq)) {
+        m_cpuReconstructionActive = false;
+        return;
+    }
+
+    if (!m_cpuReconstructionActive) {
+        m_cpuReconstructionActive = true;
+        if (AppSettings::forceCpuReconstruction()) {
+            qDebug() << "[ViewerController] CPU reconstruction forced by setting";
+        } else if (gpuSupported) {
+            qInfo() << "[ViewerController] GPU reconstruction failed, falling back to CPU";
+        } else if (VulkanContext::instance().getUtilityDevice() != VK_NULL_HANDLE) {
+            qInfo() << "[ViewerController] GPU UI context not yet initialized, using CPU temporary "
+                       "reconstruction";
+        } else {
+            qInfo() << "[ViewerController] GPU unavailable, using CPU reconstruction";
         }
     }
+
+    if (!performCpuReconstruction(*seq)) {
+        qCritical() << "[ViewerController] CPU reconstruction failed!";
+    }
+}
+
+bool ViewerController::performCpuReconstruction(const ReconstructionSequence& seq) {
+    CPUSnapshotReconstructor cpuReconstructor;
+    QImage                   cpuImage = cpuReconstructor.reconstructToImage(seq);
+    if (!cpuImage.isNull()) {
+        m_viewer->setImage(cpuImage);
+        return true;
+    }
+    return false;
 }
 
 void ViewerController::onSessionImageChanged() {

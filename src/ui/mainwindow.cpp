@@ -268,7 +268,10 @@ void MainWindow::setupUi() {
             m_viewerController,
             &ViewerController::handleViewportResize);
 
-    connect(m_viewerController, &ViewerController::colorPicked, this, &MainWindow::onColorPicked);
+    connect(m_viewerController,
+            &ViewerController::colorPicked,
+            this,
+            &MainWindow::onColorPicked);
 
     connect(m_viewerState->statusBar(),
             &StatusBar::colorInfoToggled,

@@ -1,16 +1,22 @@
 #pragma once
 
-#include <mutex>
-#include <vulkan/vulkan.h>
+#include "core/snapshotreconstructor.h"
 #include "core/vulkan_types.h"
+#include <mutex>
 
 class VulkanContext;
 
 /// @brief Handles GPU-accelerated reconstruction of images from a base image and deltas.
-class VkSnapshotReconstructor {
+class VkSnapshotReconstructor : public ISnapshotReconstructor {
   public:
     explicit VkSnapshotReconstructor(const VulkanHandles& handles, VulkanContext *context);
     ~VkSnapshotReconstructor();
+
+    bool reconstruct(const ReconstructionSequence& seq) override;
+    bool resetToBase(const QImage& base, const QString& checksum) override;
+    bool applyDelta(const DeltaEntry& delta) override;
+    QImage reconstructToImage(const ReconstructionSequence& seq, QSize targetSize = QSize()) override;
+    QRgb samplePixel(int x, int y) override;
 
     /// @brief Performs cleanup of all GPU resources managed by the reconstructor.
     void cleanup();
@@ -23,22 +29,6 @@ class VkSnapshotReconstructor {
     VkSnapshotReconstructor(const VkSnapshotReconstructor&) = delete;
     VkSnapshotReconstructor& operator=(const VkSnapshotReconstructor&) = delete;
 
-    /// @brief Reconstructs a snapshot from a base image and a series of deltas.
-    /// @param seq The reconstruction sequence containing the base and deltas.
-    /// @return True if reconstruction succeeded, false otherwise.
-    bool reconstruct(const ReconstructionSequence& seq);
-
-    /// @brief Resets the current state to a base image.
-    /// @param base The base image to reset to.
-    /// @param checksum The checksum of the base image for verification.
-    /// @return True if reset succeeded, false otherwise.
-    bool resetToBase(const QImage& base, const QString& checksum);
-
-    /// @brief Applies a delta to the current state using the compute shader.
-    /// @param delta The delta data to apply.
-    /// @return True if delta was applied successfully, false otherwise.
-    bool applyDelta(const DeltaEntry& delta);
-
     /// @brief Copies the current state buffer to a Vulkan image for rendering.
     /// @param cmd Command buffer to record the copy command into.
     /// @param targetImage The destination image.
@@ -47,14 +37,6 @@ class VkSnapshotReconstructor {
     /// @return True if the copy was successfully recorded, false otherwise.
     bool
     copyToVulkanImage(VkCommandBuffer cmd, VkImage targetImage, uint32_t width, uint32_t height);
-
-    /// @brief Reconstructs a snapshot and returns the result as a QImage.
-    /// @param seq The reconstruction sequence containing the base and deltas.
-    /// @param targetSize Optional target size for GPU-based downsampling.
-    /// @return A QImage containing the reconstructed pixels, or an empty image on failure.
-    QImage reconstructToImage(const ReconstructionSequence& seq,
-                              QSize                         targetSize = QSize(),
-                              VkSnapshotReconstructor      *worker = nullptr);
 
     /// @brief Checks if a pending base image upload has completed and swaps
     /// it into the active state.
@@ -98,12 +80,6 @@ class VkSnapshotReconstructor {
     /// @brief Returns true if the internal state has been updated and needs to be uploaded to the
     /// renderer.
     bool isDirty() const;
-
-    /// @brief Samples a single pixel from the current reconstructed state.
-    /// @param x X coordinate in image pixels.
-    /// @param y Y coordinate in image pixels.
-    /// @return The color of the pixel, or an empty color on failure.
-    QRgb samplePixel(int x, int y);
 
 
   private:

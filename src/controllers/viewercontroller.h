@@ -108,6 +108,7 @@ class ViewerController : public QObject {
     void onActiveSessionChanged(ImageSession *session);
     void onSessionImageChanged();
     void onDeviceChanged();
+    bool performCpuReconstruction(const ReconstructionSequence& seq);
 
   signals:
     void grayscaleToggled(bool enabled);
@@ -122,7 +123,7 @@ class ViewerController : public QObject {
     AppSettingsController  *m_settings;
     ImageSessionController *m_sessionController = nullptr;
     IViewer                *m_viewer = nullptr;
-    QSize                   m_lastViewportSize;
+    bool                    m_cpuReconstructionActive = false;
     bool                    m_pickingEnabled = false;
     QMetaObject::Connection m_effectsConnection;
     QMetaObject::Connection m_imageChangedConnection;

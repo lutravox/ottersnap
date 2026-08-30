@@ -44,7 +44,8 @@ class IViewer {
     virtual void setImage(const QImage& image) = 0;
 
     /// @brief Reconstructs a snapshot from a base image and a series of deltas.
-    virtual void reconstruct(const ReconstructionSequence& seq) = 0;
+    /// @return True if reconstruction was successful, false otherwise.
+    virtual bool reconstruct(const ReconstructionSequence& seq) = 0;
 
     /// @brief Update the viewer's viewport state.
     virtual void notifyViewModelChanged() = 0;

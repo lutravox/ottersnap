@@ -4,15 +4,7 @@
 #include <QCache>
 #include <QMutex>
 #include <QVector>
-
-/// @brief The decompressed result of a delta file.
-struct DecompressedDelta {
-    uint32_t          tileW = 0;
-    uint32_t          tileH = 0;
-    QByteArray        packedPixels;
-    QVector<uint32_t> tileIndices;
-    QVector<uint32_t> tileOffsets;
-};
+#include "core/snapshot_types.h"
 
 /// @brief LRU cache for whole decompressed deltas.
 class DeltaCache {

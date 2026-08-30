@@ -862,16 +862,16 @@ void VkImageViewerRenderer::setImage(const QImage& img, uint32_t generation) {
     m_uboDirty = true;
 }
 
-void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint32_t generation) {
+bool VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint32_t generation) {
     // Defer reconstruction until the Vulkan window is ready (e.g. during session restore)
     if (!m_vkWindow) {
         m_pendingReconstruction = seq;
         m_pendingGeneration = generation;
-        return;
+        return true; // We've deferred it, so it's "successful" in terms of request handling
     }
 
     if (!setRenderState(RenderState::Reconstructing, generation))
-        return;
+        return false;
 
     std::shared_ptr<VkSnapshotReconstructor> reconstructor;
     {
@@ -882,13 +882,13 @@ void VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint3
     if (!reconstructor) {
         qWarning() << "[VkImageViewerRenderer] reconstruct: Null reconstructor";
         setRenderState(RenderState::Empty, m_currentGeneration);
-        return;
+        return false;
     }
 
     m_sourceImage = seq.base;
     m_uboDirty = true;
 
-    reconstructor->reconstruct(seq);
+    return reconstructor->reconstruct(seq);
 }
 
 void VkImageViewerRenderer::performUploads(

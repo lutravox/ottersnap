@@ -141,6 +141,8 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/snapshotmanager.cpp
     src/core/snapshotdb.cpp
     src/core/vksnapshotreconstructor.cpp
+    src/core/cpusnapshotreconstructor.cpp
+    src/core/snapshotdecompressor.cpp
     src/core/vulkancontext.cpp
     src/core/vulkanutils.cpp
     src/core/viewmodel.cpp

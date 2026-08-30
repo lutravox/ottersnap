@@ -1,9 +1,9 @@
 #include "core/snapshotmanager.h"
 #include "config/appsettings.h"
+#include "core/cpusnapshotreconstructor.h"
 #include "core/diskutils.h"
 #include "core/snapshotdb.h"
 #include "core/thumbnailmanager.h"
-#include "core/vulkancontext.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -188,24 +188,19 @@ SnapshotManager::reconstructSnapshot(const QString&                           fi
     }
 
     if (!reconstructor) {
-        reconstructor = VulkanContext::instance().getUtilityReconstructor();
+        CPUSnapshotReconstructor cpu;
+        return cpu.reconstructToImage(seq, targetSize);
     }
-    if (!reconstructor)
-        return {};
-
-    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
+    return reconstructor->reconstructToImage(seq, targetSize);
 }
 
 QImage SnapshotManager::resizeImage(const QImage& image, QSize targetSize) {
-    auto reconstructor = VulkanContext::instance().getUtilityReconstructor();
-    if (!reconstructor)
-        return {};
-
     ReconstructionSequence seq;
     seq.base = image;
     seq.baseChecksum = "";
 
-    return reconstructor->reconstructToImage(seq, targetSize, reconstructor.get());
+    CPUSnapshotReconstructor cpu;
+    return cpu.reconstructToImage(seq, targetSize);
 }
 
 bool SnapshotManager::exportHistory(const QString& filePath, const QString& bundlePath) {
@@ -307,7 +302,7 @@ bool SnapshotManager::exportHistory(const QString& filePath, const QString& bund
 
 bool SnapshotManager::importHistory(const QString& filePath,
                                     const QString& bundlePath,
-                                    int* duplicatesFound) {
+                                    int           *duplicatesFound) {
     if (duplicatesFound)
         *duplicatesFound = 0;
 
@@ -362,7 +357,8 @@ bool SnapshotManager::importHistory(const QString& filePath,
         ImageSnapshot& firstExisting = existing[0];
         firstExisting.parentUuid = imported.last().uuid;
         if (!SnapshotDatabase::instance().updateSnapshot(key, firstExisting)) {
-            qWarning() << "[SnapshotManager] Failed to update parent UUID for bridge snapshot in database";
+            qWarning()
+                << "[SnapshotManager] Failed to update parent UUID for bridge snapshot in database";
         }
     }
 

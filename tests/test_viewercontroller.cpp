@@ -16,7 +16,8 @@ class MockViewer : public IViewer {
     void setImage(const QImage&) override {
     }
 
-    void reconstruct(const ReconstructionSequence&) override {
+    bool reconstruct(const ReconstructionSequence&) override {
+        return true;
     }
 
     void setRenderParams(const RenderParams& params) override {

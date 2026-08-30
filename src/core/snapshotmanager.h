@@ -4,6 +4,7 @@
 
 #include <QCache>
 #include <QDateTime>
+#include <QHash>
 #include <QImage>
 #include <QMutex>
 #include <QMutexLocker>
@@ -46,9 +47,34 @@ class SnapshotManager {
     /// @return Absolute path to the thumbnail cache directory.
     static QString thumbnailDir();
 
-    /// @brief Compute a SHA-256 based key from a file path.
+    /// @brief Normalize a file path for registry lookups.
+    /// @param filePath Path to normalize.
+    /// @return Canonical path if the file exists, otherwise an absolute path.
+    static QString normalizePath(const QString& filePath);
+
+    /// @brief Look up the image key registered for a file path.
     /// @param filePath Absolute path of the source image.
-    static QString imageKey(const QString& filePath);
+    /// @return The registered image key, or std::nullopt if the path has no
+    /// registered snapshots.
+    static std::optional<QString> keyForPath(const QString& filePath);
+
+    /// @brief Return a stable cache/directory name for a file path.
+    /// @param filePath Absolute path of the source image.
+    /// @return The registered image key, or a path hash for unregistered paths.
+    static QString cacheKeyForPath(const QString& filePath);
+
+    /// @brief Outcome of an updateImagePath() call.
+    enum class UpdatePathResult {
+        Ok,                       ///< Path re-pointed successfully (or nothing to re-point).
+        TargetAlreadyRegistered,  ///< newPath is registered under a different image key.
+        Failed                    ///< The database update failed.
+    };
+
+    /// @brief Re-point a registered image to a new file path.
+    /// @param oldPath Current absolute path of the source image.
+    /// @param newPath New absolute path of the source image.
+    /// @return The outcome of the update.
+    static UpdatePathResult updateImagePath(const QString& oldPath, const QString& newPath);
 
     /// @brief Ensure the base directory exists on disk.
     static void ensureDir();
@@ -138,11 +164,19 @@ private:
     /// @return The path to the snapshot directory, or an empty string on failure.
     static QString ensureStorageReady(const QString& filePath);
 
+    /// @brief Compute a SHA-256 based name from a file path, used as a cache
+    /// name for images without a registered key.
+    /// @param filePath Absolute path of the source image.
+    static QString hashPath(const QString& filePath);
+
     /// @brief Global recursive lock for snapshot store operations to ensure
     /// thread safety. Recursive so loadSnapshots() can safely acquire it
     /// both directly and from within saveSnapshot().
     static QRecursiveMutex s_mutex;
 
-    /// @brief In-memory cache of all snapshot records, keyed by image key (hash of filePath).
+    /// @brief In-memory cache of all snapshot records, keyed by image key.
     static QHash<QString, QVector<ImageSnapshot>> s_snapshotsCache;
+
+    /// @brief In-memory cache of registered file paths to image keys.
+    static QHash<QString, QString> s_pathKeyCache;
 };

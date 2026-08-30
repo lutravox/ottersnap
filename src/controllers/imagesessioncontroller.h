@@ -25,6 +25,12 @@ class ImageSessionController : public QObject {
     /// @param path Absolute path to the image file.
     void closeSession(const QString& path);
 
+    /// @brief Re-point the active session to a new location of its image file.
+    /// @param newPath New absolute path to the image file.
+    /// @return True on success, false if there is no active session, the new
+    /// path is already open, or the update failed.
+    bool changeActiveSessionPath(const QString& newPath);
+
     /// @brief Select a snapshot in the active session.
     void selectSnapshot(const QString& uuid);
 

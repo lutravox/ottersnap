@@ -2,6 +2,7 @@
 #include <QFile>
 #include <QImage>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QtTest>
 #include "config/appsettings.h"
@@ -30,6 +31,9 @@ class TestImageSession : public QObject {
     void testGetReconstructionSequence();
     void testThumbnailGeneration();
     void testUIReconstructorInitialization();
+    void testSetFilePath();
+    void testSetFilePathFailure();
+    void testSetFilePathFromSnapshotOnly();
 
   private:
     QTemporaryFile *m_tempFile = nullptr;
@@ -339,6 +343,85 @@ void TestImageSession::testUIReconstructorInitialization() {
     session.setUIReconstructorHandles(handles);
     auto recon2 = session.uiReconstructor();
     QCOMPARE(recon1, recon2);
+}
+
+void TestImageSession::testSetFilePath() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QString newPath = tempDir.filePath("moved.png");
+    QImage  movedImg(100, 100, QImage::Format_ARGB32);
+    movedImg.fill(Qt::blue);
+    QVERIFY(movedImg.save(newPath));
+
+    // Start from a clean slate: earlier tests may have left snapshots of the
+    // current file state, which would be deduplicated on save.
+    SnapshotManager::deleteAllSnapshots(m_testFilePath);
+
+    ImageSession session;
+    QVERIFY(session.openImage(m_testFilePath));
+
+    QSignalSpy createdSpy(&session, &ImageSession::snapshotCreated);
+    session.saveSnapshot();
+    QTRY_VERIFY_WITH_TIMEOUT(createdSpy.count() >= 1, 5000);
+    QCOMPARE(SnapshotManager::loadSnapshots(m_testFilePath).size(), 1);
+
+    QSignalSpy changedSpy(&session, &ImageSession::imageChanged);
+    QVERIFY(session.setFilePath(newPath));
+    QVERIFY(changedSpy.count() >= 1);
+
+    QCOMPARE(session.filePath(), SnapshotManager::normalizePath(newPath));
+    // History follows the file to the new path.
+    QCOMPARE(session.snapshots().size(), 1);
+    QCOMPARE(SnapshotManager::loadSnapshots(newPath).size(), 1);
+    QVERIFY(SnapshotManager::loadSnapshots(m_testFilePath).isEmpty());
+    QVERIFY(!SnapshotManager::keyForPath(m_testFilePath).has_value());
+    // Disk image reloaded from the new location.
+    QCOMPARE(session.diskImage(), movedImg);
+}
+
+void TestImageSession::testSetFilePathFromSnapshotOnly() {
+    // A missing file with history opens in snapshot-only mode.
+    QString missingPath =
+        QString("/tmp/ottersnap_test_missing_%1.png").arg(QRandomGenerator::global()->generate());
+    SnapshotManager::deleteAllSnapshots(missingPath);
+    QImage img(50, 50, QImage::Format_ARGB32);
+    img.fill(Qt::cyan);
+    auto res = SnapshotManager::saveSnapshot(missingPath, img);
+    QVERIFY(res.has_value());
+
+    ImageSession session;
+    session.setSnapshotOnly(true);
+    QVERIFY(session.openImage(missingPath));
+    QVERIFY(session.isSnapshotOnly());
+
+    // Finding the file again exits snapshot-only mode and keeps the history.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QString newPath = tempDir.filePath("found.png");
+    QImage  foundImg(50, 50, QImage::Format_ARGB32);
+    foundImg.fill(Qt::magenta);
+    QVERIFY(foundImg.save(newPath));
+
+    QVERIFY(session.setFilePath(newPath));
+    QVERIFY(!session.isSnapshotOnly());
+    QCOMPARE(session.filePath(), SnapshotManager::normalizePath(newPath));
+    QCOMPARE(session.snapshots().size(), 1);
+    QCOMPARE(session.diskImage(), foundImg);
+
+    SnapshotManager::deleteAllSnapshots(newPath);
+}
+
+void TestImageSession::testSetFilePathFailure() {
+    ImageSession session;
+    QVERIFY(session.openImage(m_testFilePath));
+    QString oldPath = session.filePath();
+    QImage  oldImage = session.diskImage();
+
+    // Non-existent target: update must fail and leave the session unchanged.
+    QVERIFY(!session.setFilePath("/nonexistent/ottersnap/nope.png"));
+    QCOMPARE(session.filePath(), oldPath);
+    QCOMPARE(session.diskImage(), oldImage);
 }
 
 QTEST_MAIN(TestImageSession)

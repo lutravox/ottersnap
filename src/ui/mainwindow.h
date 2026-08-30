@@ -66,6 +66,7 @@ class MainWindow : public QMainWindow {
     void onExportSnapshot();
     void onExportHistory();
     void onImportHistory();
+    void onUpdateImagePath();
     void onResetEffects();
     void onSettings();
     void onToggleToolbar();
@@ -96,7 +97,7 @@ class MainWindow : public QMainWindow {
     void      syncTimelineSelection();
     void      updateShortcut(const QString& actionId, const QKeySequence& sequence);
 
-    /// @brief Collect file paths from all open tabs.
+    /// @brief Collect file paths from all open tabs, in tab order.
     QStringList collectOpenPaths() const;
 
     /// @brief Update the viewer when the active tab changes.
@@ -135,6 +136,7 @@ class MainWindow : public QMainWindow {
     QAction *m_actionExportSnapshot;
     QAction *m_actionExportHistory;
     QAction *m_actionImportHistory;
+    QAction *m_actionUpdatePath;
     QAction *m_actionDeleteSnapshot;
     QAction *m_actionDeleteSelectedSnapshots;
     QAction *m_actionDeleteAllSnapshots;

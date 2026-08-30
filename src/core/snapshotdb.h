@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <QDateTime>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -25,6 +27,8 @@
 /// - checksum: TEXT NOT NULL (Data integrity checksum)
 /// - is_base: INTEGER NOT NULL (1 = Full base image, 0 = Delta)
 /// - file_name: TEXT NOT NULL (Filename of the snapshot on disk)
+///
+/// `images.file_path` is unique: a path is registered under at most one image key.
 class SnapshotDatabase {
   public:
     static SnapshotDatabase& instance();
@@ -34,6 +38,18 @@ class SnapshotDatabase {
 
     /// @brief Store an image and its associated path.
     bool registerImage(const QString& key, const QString& path);
+
+    /// @brief Look up the image key registered for a file path.
+    /// @param path Absolute path of the image file.
+    /// @return The registered image key, or std::nullopt if the path is unknown.
+    std::optional<QString> keyForPath(const QString& path);
+
+    /// @brief Re-point a registered image to a new file path.
+    /// @param key The image key to update.
+    /// @param newPath New absolute path for the image.
+    /// @return True on success; false if the key is unknown or newPath is already
+    /// registered under a different key.
+    bool setImagePath(const QString& key, const QString& newPath);
 
     /// @brief Add a snapshot record for an image.
     bool addSnapshot(const QString& key, const ImageSnapshot& s);

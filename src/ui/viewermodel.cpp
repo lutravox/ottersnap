@@ -29,7 +29,9 @@ ViewerModel::ViewerModel(QWidget *parent) : QWidget(parent) {
 
     layout->addWidget(m_snapshotTimeline, 0);
 
-    m_snapshotOnlyLabel = new QLabel(tr("Original image not found. Viewing only snapshots."), this);
+    m_snapshotOnlyLabel = new QLabel(
+        tr("Original image not found. Viewing only snapshots. Use File > Update Image Path to re-attach the file."),
+        this);
     m_snapshotOnlyLabel->setObjectName("snapshotOnlyLabel");
     m_snapshotOnlyLabel->setAlignment(Qt::AlignCenter);
     m_snapshotOnlyLabel->setVisible(false);

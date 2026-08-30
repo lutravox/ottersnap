@@ -44,7 +44,7 @@ bool SnapshotDatabase::init(const QString& dbPath) {
     // Images table
     if (!query.exec("CREATE TABLE IF NOT EXISTS images ("
                     "image_key TEXT PRIMARY KEY, "
-                    "file_path TEXT NOT NULL)")) {
+                    "file_path TEXT NOT NULL UNIQUE)")) {
         qWarning() << "[SnapshotDb] Failed to create images table:" << query.lastError().text();
         return false;
     }
@@ -75,6 +75,34 @@ bool SnapshotDatabase::registerImage(const QString& key, const QString& path) {
     query.addBindValue(key);
     query.addBindValue(path);
     return query.exec();
+}
+
+std::optional<QString> SnapshotDatabase::keyForPath(const QString& path) {
+    QSqlQuery query(connection());
+    query.prepare("SELECT image_key FROM images WHERE file_path = ?");
+    query.addBindValue(path);
+    if (!query.exec()) {
+        qWarning() << "[SnapshotDb] Failed to look up key for" << path << ":"
+                   << query.lastError().text();
+        return std::nullopt;
+    }
+    if (query.next()) {
+        return query.value(0).toString();
+    }
+    return std::nullopt;
+}
+
+bool SnapshotDatabase::setImagePath(const QString& key, const QString& newPath) {
+    QSqlQuery query(connection());
+    query.prepare("UPDATE images SET file_path = ? WHERE image_key = ?");
+    query.addBindValue(newPath);
+    query.addBindValue(key);
+    if (!query.exec()) {
+        qWarning() << "[SnapshotDb] Failed to update path for" << key << ":"
+                   << query.lastError().text();
+        return false;
+    }
+    return query.numRowsAffected() == 1;
 }
 
 bool SnapshotDatabase::addSnapshot(const QString& key, const ImageSnapshot& s) {

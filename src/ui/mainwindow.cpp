@@ -77,7 +77,7 @@ MainWindow::~MainWindow() {
     qDeleteAll(m_toolShortcuts);
 }
 
-void MainWindow::closeEvent(QCloseEvent *event) {
+QStringList MainWindow::collectOpenPaths() const {
     QStringList openPaths;
     if (m_tabBar) {
         for (int i = 0; i < m_tabBar->count(); ++i) {
@@ -86,7 +86,11 @@ void MainWindow::closeEvent(QCloseEvent *event) {
             }
         }
     }
-    m_session.save(openPaths);
+    return openPaths;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    m_session.save(collectOpenPaths());
 
     //  Cleanup tab session resources
     if (m_tabBar) {
@@ -102,21 +106,36 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 }
 
 void MainWindow::updateShortcut(const QString& actionId, const QKeySequence& sequence) {
-    if (actionId == "file.open") m_actionOpen->setShortcut(sequence);
-    else if (actionId == "tab.close") m_actionCloseTab->setShortcut(sequence);
-    else if (actionId == "app.exit") m_actionExit->setShortcut(sequence);
-    else if (actionId == "snapshot.save") m_actionSaveSnapshot->setShortcut(sequence);
-    else if (actionId == "snapshot.delete") m_actionDeleteSnapshot->setShortcut(sequence);
-    else if (actionId == "viewer.scaleWithWindow") m_actionScaleWithWindow->setShortcut(sequence);
-    else if (actionId == "viewer.toggleToolbar") m_actionToggleToolbar->setShortcut(sequence);
-    else if (actionId == "viewer.resetView") m_actionResetView->setShortcut(sequence);
-    else if (actionId == "viewer.actualSize") m_actionActualSize->setShortcut(sequence);
-    else if (actionId == "viewer.zoomIn") m_actionZoomIn->setShortcut(sequence);
-    else if (actionId == "viewer.zoomOut") m_actionZoomOut->setShortcut(sequence);
-    else if (actionId == "viewer.fullScreen") m_actionFullScreen->setShortcut(sequence);
-    else if (actionId == "tool.grayscale") m_actionGrayscale->setShortcut(sequence);
-    else if (actionId == "tool.mirror") m_actionMirror->setShortcut(sequence);
-    else if (actionId == "tool.swap") m_actionSwap->setShortcut(sequence);
+    if (actionId == "file.open")
+        m_actionOpen->setShortcut(sequence);
+    else if (actionId == "tab.close")
+        m_actionCloseTab->setShortcut(sequence);
+    else if (actionId == "app.exit")
+        m_actionExit->setShortcut(sequence);
+    else if (actionId == "snapshot.save")
+        m_actionSaveSnapshot->setShortcut(sequence);
+    else if (actionId == "snapshot.delete")
+        m_actionDeleteSnapshot->setShortcut(sequence);
+    else if (actionId == "viewer.scaleWithWindow")
+        m_actionScaleWithWindow->setShortcut(sequence);
+    else if (actionId == "viewer.toggleToolbar")
+        m_actionToggleToolbar->setShortcut(sequence);
+    else if (actionId == "viewer.resetView")
+        m_actionResetView->setShortcut(sequence);
+    else if (actionId == "viewer.actualSize")
+        m_actionActualSize->setShortcut(sequence);
+    else if (actionId == "viewer.zoomIn")
+        m_actionZoomIn->setShortcut(sequence);
+    else if (actionId == "viewer.zoomOut")
+        m_actionZoomOut->setShortcut(sequence);
+    else if (actionId == "viewer.fullScreen")
+        m_actionFullScreen->setShortcut(sequence);
+    else if (actionId == "tool.grayscale")
+        m_actionGrayscale->setShortcut(sequence);
+    else if (actionId == "tool.mirror")
+        m_actionMirror->setShortcut(sequence);
+    else if (actionId == "tool.swap")
+        m_actionSwap->setShortcut(sequence);
     else if (m_toolShortcuts.contains(actionId)) {
         m_toolShortcuts[actionId]->setKey(sequence);
     }
@@ -268,10 +287,7 @@ void MainWindow::setupUi() {
             m_viewerController,
             &ViewerController::handleViewportResize);
 
-    connect(m_viewerController,
-            &ViewerController::colorPicked,
-            this,
-            &MainWindow::onColorPicked);
+    connect(m_viewerController, &ViewerController::colorPicked, this, &MainWindow::onColorPicked);
 
     connect(m_viewerState->statusBar(),
             &StatusBar::colorInfoToggled,
@@ -313,7 +329,7 @@ void MainWindow::setupUi() {
     // Register shortcuts for toolbar tools
     if (m_viewerState && m_viewerState->toolbar()) {
         for (const auto& tw : m_viewerState->toolbar()->tools()) {
-            QString actionId = tw.tool->actionId();
+            QString      actionId = tw.tool->actionId();
             QKeySequence shortcut = m_settingsController->shortcutManager()->shortcutFor(actionId);
             if (!shortcut.isEmpty()) {
                 QShortcut *s = new QShortcut(shortcut, this);
@@ -336,7 +352,7 @@ void MainWindow::setupUi() {
 
     // Navigation shortcuts
     QKeySequence seqLeft = m_settingsController->shortcutManager()->shortcutFor("nav.prev");
-    auto *shortcutLeft = new QShortcut(seqLeft, this);
+    auto        *shortcutLeft = new QShortcut(seqLeft, this);
     connect(shortcutLeft, &QShortcut::activated, this, [this]() {
         if (m_snapshotController) {
             int current = m_snapshotController->currentSelectedIndex();
@@ -349,7 +365,7 @@ void MainWindow::setupUi() {
     m_toolShortcuts.insert("nav.prev", shortcutLeft);
 
     QKeySequence seqRight = m_settingsController->shortcutManager()->shortcutFor("nav.next");
-    auto *shortcutRight = new QShortcut(seqRight, this);
+    auto        *shortcutRight = new QShortcut(seqRight, this);
     connect(shortcutRight, &QShortcut::activated, this, [this]() {
         if (m_snapshotController) {
             int current = m_snapshotController->currentSelectedIndex();
@@ -387,8 +403,14 @@ void MainWindow::setupMenu() {
 
     m_fileMenu->addSeparator();
 
+    m_actionUpdatePath = m_fileMenu->addAction(tr("Update Image &Path..."));
+    connect(m_actionUpdatePath, &QAction::triggered, this, &MainWindow::onUpdateImagePath);
+
+    m_fileMenu->addSeparator();
+
     m_actionCloseTab = m_fileMenu->addAction(tr("Close &Tab"));
-    m_actionCloseTab->setShortcut(m_settingsController->shortcutManager()->shortcutFor("tab.close"));
+    m_actionCloseTab->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("tab.close"));
     connect(m_actionCloseTab, &QAction::triggered, this, &MainWindow::onCloseCurrentTab);
 
     m_actionCloseAllTabs = m_fileMenu->addAction(tr("Close All &Tabs"));
@@ -402,13 +424,15 @@ void MainWindow::setupMenu() {
 
     m_editMenu = menuBar()->addMenu(tr("&Edit"));
     m_actionSaveSnapshot = m_editMenu->addAction(tr("&Create Snapshot"));
-    m_actionSaveSnapshot->setShortcut(m_settingsController->shortcutManager()->shortcutFor("snapshot.save"));
+    m_actionSaveSnapshot->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("snapshot.save"));
     connect(m_actionSaveSnapshot, &QAction::triggered, this, &MainWindow::onSaveSnapshot);
 
     m_editMenu->addSeparator();
 
     m_actionDeleteSnapshot = m_editMenu->addAction(tr("&Delete Snapshot"));
-    m_actionDeleteSnapshot->setShortcut(m_settingsController->shortcutManager()->shortcutFor("snapshot.delete"));
+    m_actionDeleteSnapshot->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("snapshot.delete"));
     connect(m_actionDeleteSnapshot,
             &QAction::triggered,
             this,
@@ -441,41 +465,48 @@ void MainWindow::setupMenu() {
     m_viewMenu = menuBar()->addMenu(tr("&View"));
     m_actionScaleWithWindow = m_viewMenu->addAction(tr("&Scale with Window"));
     m_actionScaleWithWindow->setCheckable(true);
-    m_actionScaleWithWindow->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.scaleWithWindow"));
+    m_actionScaleWithWindow->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.scaleWithWindow"));
     connect(
         m_actionScaleWithWindow, &QAction::triggered, this, &MainWindow::onToggleScaleWithWindow);
 
     m_actionToggleToolbar = m_viewMenu->addAction(tr("&Show Toolbar"));
     m_actionToggleToolbar->setCheckable(true);
-    m_actionToggleToolbar->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.toggleToolbar"));
+    m_actionToggleToolbar->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.toggleToolbar"));
     connect(m_actionToggleToolbar, &QAction::triggered, this, &MainWindow::onToggleToolbar);
 
     m_actionSwap = m_viewMenu->addAction(tr("&Swap Comparison"));
     connect(m_actionSwap, &QAction::triggered, this, &MainWindow::onSwap);
 
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
-    m_actionResetView->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.resetView"));
+    m_actionResetView->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.resetView"));
     connect(
         m_actionResetView, &QAction::triggered, m_viewerController, &ViewerController::fitToWindow);
 
     m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
-    m_actionActualSize->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.actualSize"));
+    m_actionActualSize->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.actualSize"));
     connect(m_actionActualSize, &QAction::triggered, this, &MainWindow::onActualSize);
 
     m_viewMenu->addSeparator();
 
     m_actionZoomIn = m_viewMenu->addAction(tr("Zoom &In"));
-    m_actionZoomIn->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.zoomIn"));
+    m_actionZoomIn->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.zoomIn"));
     connect(m_actionZoomIn, &QAction::triggered, this, &MainWindow::onZoomIn);
 
     m_actionZoomOut = m_viewMenu->addAction(tr("Zoom &Out"));
-    m_actionZoomOut->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.zoomOut"));
+    m_actionZoomOut->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.zoomOut"));
     connect(m_actionZoomOut, &QAction::triggered, this, &MainWindow::onZoomOut);
 
     m_viewMenu->addSeparator();
 
     m_actionFullScreen = m_viewMenu->addAction(tr("Toggle &Full Screen"));
-    m_actionFullScreen->setShortcut(m_settingsController->shortcutManager()->shortcutFor("viewer.fullScreen"));
+    m_actionFullScreen->setShortcut(
+        m_settingsController->shortcutManager()->shortcutFor("viewer.fullScreen"));
     connect(m_actionFullScreen, &QAction::triggered, this, &MainWindow::onToggleFullScreen);
 
     m_effectsMenu = menuBar()->addMenu(tr("&Effects"));
@@ -526,6 +557,7 @@ void MainWindow::updateMenuBar() {
             m_actionCloseAllTabs->setVisible(false);
             m_actionScaleWithWindow->setVisible(false);
             m_actionResetView->setVisible(false);
+            m_actionUpdatePath->setVisible(false);
             m_actionGrayscale->setVisible(false);
             m_actionMirror->setVisible(false);
             m_actionSwap->setVisible(false);
@@ -546,6 +578,7 @@ void MainWindow::updateMenuBar() {
             m_actionScaleWithWindow->setVisible(true);
             m_actionScaleWithWindow->setChecked(m_viewerController->isScaleWithWindowEnabled());
             m_actionResetView->setVisible(true);
+            m_actionUpdatePath->setVisible(true);
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
             m_actionSwap->setVisible(true);
@@ -568,6 +601,7 @@ void MainWindow::updateMenuBar() {
         m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
         m_actionExportHistory->setEnabled(!snapshots.isEmpty());
         m_actionImportHistory->setEnabled(true);
+        m_actionUpdatePath->setEnabled(true);
         m_actionManageSnapshots->setEnabled(true);
 
         // Handle multi-selection action
@@ -585,6 +619,7 @@ void MainWindow::updateMenuBar() {
         m_actionDeleteAllSnapshots->setEnabled(false);
         m_actionExportHistory->setEnabled(false);
         m_actionImportHistory->setEnabled(false);
+        m_actionUpdatePath->setEnabled(false);
         m_actionManageSnapshots->setEnabled(true);
         m_actionDeleteSelectedSnapshots->setVisible(false);
     }
@@ -673,7 +708,7 @@ void MainWindow::updateRecentFilesMenu() {
         QAction *action = m_recentFilesMenu->addAction(QFileInfo(path).fileName());
 
         // Attempt to show a thumbnail of the first snapshot (or disk image if no snapshots)
-        QString                key = SnapshotManager::imageKey(path);
+        QString                key = SnapshotManager::cacheKeyForPath(path);
         QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
 
         int  index = 0;
@@ -773,6 +808,48 @@ void MainWindow::onImportHistory() {
     } else {
         notify(tr("Failed to import snapshot history."));
     }
+}
+
+void MainWindow::onUpdateImagePath() {
+    auto *tab = currentTab();
+    if (!tab || !tab->session()) {
+        notify(tr("No image open to update the path for."));
+        return;
+    }
+
+    const QString currentPath = tab->filePath();
+    QString       path = QFileDialog::getOpenFileName(this,
+                                                      tr("Update Image Path"),
+                                                      QFileInfo(currentPath).absoluteFilePath(),
+                                                      AppSettings::fileFilter());
+    if (path.isEmpty())
+        return;
+
+    const QString newPath = SnapshotManager::normalizePath(path);
+    if (newPath == currentPath)
+        return;
+
+    if (m_tabPaths.contains(newPath)) {
+        notify(tr("Image is already open in another tab."));
+        return;
+    }
+
+    if (!m_sessionController->changeActiveSessionPath(newPath)) {
+        return;
+    }
+
+    ImageTab *t = m_tabPaths.take(currentPath);
+    m_tabPaths.insert(newPath, t);
+
+    int index = m_tabBar->indexOf(t);
+    if (index != -1) {
+        m_tabBar->setTabText(index, QFileInfo(newPath).fileName());
+        m_tabBar->setTabToolTip(index, newPath);
+    }
+
+    updateViewer(tab);
+    updateSnapshotTimeline();
+    m_session.save(collectOpenPaths());
 }
 
 void MainWindow::onExportSnapshot() {

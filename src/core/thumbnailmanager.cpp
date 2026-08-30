@@ -23,7 +23,7 @@ QImage ThumbnailManager::getThumbnail(int                           index,
     if (index < 0 || index > static_cast<int>(snapshots.size()))
         return QImage();
 
-    QString key = SnapshotManager::imageKey(filePath);
+    QString key = SnapshotManager::cacheKeyForPath(filePath);
     QUuid uuid = (isCurrent || index == static_cast<int>(snapshots.size())) ? QUuid()
                                                                             : snapshots[index].uuid;
     QString idStr = getIdentityString(uuid);
@@ -103,7 +103,7 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
         // Cache in memory
         QString idStr = getIdentityString(request.uuid);
         QString cacheKey = QString("%1:%2:%3x%4")
-                               .arg(SnapshotManager::imageKey(request.filePath))
+                               .arg(SnapshotManager::cacheKeyForPath(request.filePath))
                                .arg(idStr)
                                .arg(ThumbnailConstants::StorageSize)
                                .arg(ThumbnailConstants::StorageSize);
@@ -122,7 +122,7 @@ void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QIm
 void ThumbnailManager::saveThumbnail(const QString& filePath,
                                      const QUuid&   uuid,
                                      const QImage&  image) {
-    QString key = SnapshotManager::imageKey(filePath);
+    QString key = SnapshotManager::cacheKeyForPath(filePath);
     QString sd = SnapshotManager::thumbnailDir() + '/' + key;
     if (!DiskUtils::ensureDir(sd))
         return;

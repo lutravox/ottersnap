@@ -20,6 +20,7 @@
 #include <zip.h>
 
 QHash<QString, QVector<ImageSnapshot>> SnapshotManager::s_snapshotsCache;
+QHash<QString, QString>                SnapshotManager::s_pathKeyCache;
 QRecursiveMutex                        SnapshotManager::s_mutex;
 
 static const QString  c_baseSubDir = QLatin1String("snapshots");
@@ -179,7 +180,7 @@ SnapshotManager::reconstructSnapshot(const QString&                           fi
     seq.base = std::move(optBase->image);
     seq.baseChecksum = optBase->checksum;
 
-    QString key = SnapshotManager::imageKey(filePath);
+    QString key = SnapshotManager::cacheKeyForPath(filePath);
     for (int i = 1; i < chain.size(); ++i) {
         auto optDelta = SnapshotManager::loadDelta(filePath, chain[i]);
         if (!optDelta)
@@ -262,8 +263,15 @@ bool SnapshotManager::exportHistory(const QString& filePath, const QString& bund
         return false;
     }
 
-    QString       key = imageKey(filePath);
-    QString       sd = snapshotDirPath(key);
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt) {
+        qWarning() << "[SnapshotManager] No registered key for" << filePath;
+        zip_close(archive);
+        tempDir.removeRecursively();
+        return false;
+    }
+
+    QString       sd = snapshotDirPath(*keyOpt);
     QDir          srcDir(sd);
     QFileInfoList files = srcDir.entryInfoList(QDir::Files);
 
@@ -307,7 +315,6 @@ bool SnapshotManager::importHistory(const QString& filePath,
         *duplicatesFound = 0;
 
     QMutexLocker           locker(&s_mutex);
-    QString                key = imageKey(filePath);
     QVector<ImageSnapshot> existing = loadSnapshots(filePath);
 
     int    err = 0;
@@ -356,9 +363,11 @@ bool SnapshotManager::importHistory(const QString& filePath,
     if (!existing.isEmpty() && !imported.isEmpty()) {
         ImageSnapshot& firstExisting = existing[0];
         firstExisting.parentUuid = imported.last().uuid;
-        if (!SnapshotDatabase::instance().updateSnapshot(key, firstExisting)) {
-            qWarning()
-                << "[SnapshotManager] Failed to update parent UUID for bridge snapshot in database";
+        if (auto bridgeKey = keyForPath(filePath)) {
+            if (!SnapshotDatabase::instance().updateSnapshot(*bridgeKey, firstExisting)) {
+                qWarning() << "[SnapshotManager] Failed to update parent UUID for bridge "
+                              "snapshot in database";
+            }
         }
     }
 
@@ -367,6 +376,13 @@ bool SnapshotManager::importHistory(const QString& filePath,
         zip_close(archive);
         return false;
     }
+
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt) {
+        zip_close(archive);
+        return false;
+    }
+    const QString& key = *keyOpt;
 
     for (const auto& s : imported) {
         // Skip if this snapshot already exists in the local history
@@ -438,8 +454,10 @@ bool SnapshotManager::importHistory(const QString& filePath,
 }
 
 qint64 SnapshotManager::calculateStorageUsage(const QString& filePath) {
-    QString key = imageKey(filePath);
-    QString sd = snapshotDirPath(key);
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return 0;
+    QString sd = snapshotDirPath(*keyOpt);
     QDir    dir(sd);
     if (!dir.exists()) {
         return 0;
@@ -460,9 +478,65 @@ QString SnapshotManager::thumbnailDir() {
     return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
 }
 
-QString SnapshotManager::imageKey(const QString& filePath) {
+QString SnapshotManager::normalizePath(const QString& filePath) {
+    QFileInfo fi(filePath);
+    QString   canonical = fi.canonicalFilePath();
+    return canonical.isEmpty() ? fi.absoluteFilePath() : canonical;
+}
+
+QString SnapshotManager::hashPath(const QString& filePath) {
     QByteArray hash = QCryptographicHash::hash(filePath.toUtf8(), QCryptographicHash::Sha256);
     return QString::fromUtf8(hash.left(16).toHex());
+}
+
+std::optional<QString> SnapshotManager::keyForPath(const QString& filePath) {
+    QMutexLocker locker(&s_mutex);
+    const QString path = normalizePath(filePath);
+
+    auto cached = s_pathKeyCache.constFind(path);
+    if (cached != s_pathKeyCache.constEnd()) {
+        return cached.value();
+    }
+
+    auto key = SnapshotDatabase::instance().keyForPath(path);
+    if (key) {
+        s_pathKeyCache.insert(path, *key);
+    }
+    return key;
+}
+
+QString SnapshotManager::cacheKeyForPath(const QString& filePath) {
+    if (auto key = keyForPath(filePath)) {
+        return *key;
+    }
+    return hashPath(normalizePath(filePath));
+}
+
+SnapshotManager::UpdatePathResult
+SnapshotManager::updateImagePath(const QString& oldPath, const QString& newPath) {
+    QMutexLocker locker(&s_mutex);
+    const QString old = normalizePath(oldPath);
+    const QString next = normalizePath(newPath);
+
+    if (old.isEmpty() || next.isEmpty() || old == next)
+        return UpdatePathResult::Failed;
+
+    if (auto existing = keyForPath(next)) {
+        auto oldKey = keyForPath(old);
+        if (!oldKey || *existing != *oldKey)
+            return UpdatePathResult::TargetAlreadyRegistered;
+    }
+
+    if (auto oldKey = keyForPath(old)) {
+        if (!SnapshotDatabase::instance().setImagePath(*oldKey, next))
+            return UpdatePathResult::Failed;
+        s_pathKeyCache.remove(old);
+        s_pathKeyCache.insert(next, *oldKey);
+        return UpdatePathResult::Ok;
+    }
+
+    // No snapshots registered for the old path; nothing to re-point.
+    return UpdatePathResult::Ok;
 }
 
 void SnapshotManager::ensureDir() {
@@ -472,9 +546,20 @@ void SnapshotManager::ensureDir() {
 
 QString SnapshotManager::ensureStorageReady(const QString& filePath) {
     ensureDir();
-    QString key = imageKey(filePath);
-    SnapshotDatabase::instance().registerImage(key, filePath);
-    QString sd = snapshotDirPath(key);
+    const QString path = normalizePath(filePath);
+
+    QMutexLocker locker(&s_mutex);
+    auto         key = keyForPath(path);
+    if (!key) {
+        key = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        if (!SnapshotDatabase::instance().registerImage(*key, path)) {
+            qWarning() << "[SnapshotManager] Failed to register image" << path;
+            return QString();
+        }
+        s_pathKeyCache.insert(path, *key);
+    }
+
+    QString sd = snapshotDirPath(*key);
     if (!DiskUtils::ensureDir(sd)) {
         return QString();
     }
@@ -493,7 +578,11 @@ QString SnapshotManager::computeChecksum(const QImage& image) {
 
 QVector<ImageSnapshot> SnapshotManager::loadSnapshots(const QString& filePath) {
     QMutexLocker locker(&s_mutex);
-    QString      key = imageKey(filePath);
+    auto         keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return {};
+    const QString& key = *keyOpt;
+
     if (s_snapshotsCache.contains(key)) {
         return s_snapshotsCache.value(key);
     }
@@ -513,7 +602,6 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
         return std::nullopt;
     }
 
-    QString                key = imageKey(filePath);
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
     // Skip if latest snapshot is identical
@@ -530,6 +618,12 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
     if (sd.isEmpty()) {
         return std::nullopt;
     }
+
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt) {
+        return std::nullopt;
+    }
+    const QString& key = *keyOpt;
 
     ImageSnapshot s;
     s.uuid = QUuid::createUuid();
@@ -607,8 +701,10 @@ std::optional<SnapshotManager::BaseImage> SnapshotManager::loadBaseImage(const Q
     if (!s.isBase)
         return std::nullopt;
 
-    QString key = imageKey(filePath);
-    QString sd = snapshotDirPath(key);
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return std::nullopt;
+    QString sd = snapshotDirPath(*keyOpt);
     QImage  img;
     if (img.load(sd + '/' + s.fileName)) {
         return BaseImage{img, s.checksum};
@@ -621,8 +717,10 @@ std::optional<QByteArray> SnapshotManager::loadDelta(const QString&       filePa
     if (s.isBase)
         return std::nullopt;
 
-    QString key = imageKey(filePath);
-    QString sd = snapshotDirPath(key);
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return std::nullopt;
+    QString sd = snapshotDirPath(*keyOpt);
     QFile   f(sd + '/' + s.fileName);
     if (f.open(QFile::ReadOnly)) {
         return f.readAll();
@@ -631,7 +729,11 @@ std::optional<QByteArray> SnapshotManager::loadDelta(const QString&       filePa
 }
 
 void SnapshotManager::deleteAllSnapshots(const QString& filePath) {
-    QString key = imageKey(filePath);
+    auto keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return;
+    const QString& key = *keyOpt;
+
     QString sd = snapshotDirPath(key);
     QDir    dir(sd);
     if (dir.exists()) {
@@ -654,6 +756,7 @@ void SnapshotManager::deleteAllSnapshots(const QString& filePath) {
         }
     }
     s_snapshotsCache.remove(key);
+    s_pathKeyCache.remove(normalizePath(filePath));
     SnapshotDatabase::instance().clearImage(key);
 }
 
@@ -662,8 +765,11 @@ void SnapshotManager::clearCache() {
 }
 
 bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid) {
-    QMutexLocker           locker(&s_mutex);
-    QString                key = imageKey(filePath);
+    QMutexLocker locker(&s_mutex);
+    auto         keyOpt = keyForPath(filePath);
+    if (!keyOpt)
+        return false;
+    const QString&           key = *keyOpt;
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
     int targetIdx = -1;

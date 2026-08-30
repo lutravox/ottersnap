@@ -44,6 +44,10 @@ class MainWindowTestWrapper : public MainWindow {
     void testOnTabChanged(int index) {
         onTabChanged(index);
     }
+
+    QAction *updatePathAction() {
+        return m_actionUpdatePath;
+    }
 };
 
 class TestMainWindow : public QObject {
@@ -201,6 +205,18 @@ class TestMainWindow : public QObject {
         // Accessing the private method via a trick or just adding it to wrapper
         // For now, let's just verify the tab bar state which collectOpenPaths uses.
         QCOMPARE(m_window->tabBar()->count(), 2);
+    }
+
+    void testUpdatePathActionState() {
+        // Empty state: action hidden.
+        QVERIFY(!m_window->updatePathAction()->isVisible());
+
+        m_window->testOpenImageFile(m_testFiles[0]);
+        QVERIFY(m_window->updatePathAction()->isVisible());
+        QVERIFY(m_window->updatePathAction()->isEnabled());
+
+        m_window->testOnCloseTab(0);
+        QVERIFY(!m_window->updatePathAction()->isVisible());
     }
 
   private:

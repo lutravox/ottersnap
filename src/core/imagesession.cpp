@@ -36,7 +36,7 @@ ImageSession::~ImageSession() {
 }
 
 bool ImageSession::openImage(const QString& filePath) {
-    ThumbnailCache::invalidate(SnapshotManager::imageKey(filePath),
+    ThumbnailCache::invalidate(SnapshotManager::cacheKeyForPath(filePath),
                                ThumbnailConstants::CurrentVersion);
 
     m_filePath = filePath;
@@ -72,6 +72,57 @@ bool ImageSession::openImage(const QString& filePath) {
     }
     m_viewState.resetState(dims.width(), dims.height());
 
+    emit imageChanged();
+    return true;
+}
+
+bool ImageSession::setFilePath(const QString& newPath) {
+    if (m_filePath.isEmpty())
+        return false;
+
+    QString normalized = SnapshotManager::normalizePath(newPath);
+    if (normalized == m_filePath)
+        return false;
+
+    QString oldPath = m_filePath;
+    switch (SnapshotManager::updateImagePath(oldPath, normalized)) {
+        case SnapshotManager::UpdatePathResult::Ok:
+            break;
+        case SnapshotManager::UpdatePathResult::TargetAlreadyRegistered:
+            emit statusMessage(tr("Cannot update path: that file already has its own "
+                                  "snapshot history."));
+            return false;
+        case SnapshotManager::UpdatePathResult::Failed:
+            emit statusMessage(tr("Failed to update image path: %1").arg(normalized));
+            return false;
+    }
+
+    QImage newImage = DiskUtils::loadImage(normalized);
+    if (newImage.isNull()) {
+        SnapshotManager::updateImagePath(normalized, oldPath);
+        emit statusMessage(tr("Failed to load image at new path: %1").arg(normalized));
+        return false;
+    }
+
+    m_filePath = normalized;
+    m_lastModified = QFileInfo(m_filePath).lastModified();
+    m_diskImage = newImage;
+    m_isSnapshotOnly = false;
+    ThumbnailCache::invalidate(SnapshotManager::cacheKeyForPath(m_filePath),
+                               ThumbnailConstants::CurrentVersion);
+    m_baseCache = {-1, QImage()};
+    m_clusterCache.clear();
+    m_monitor->watch(m_filePath);
+
+    rebuildSnapshotList();
+    updateColorClusters();
+
+    QSize dims = dimensions();
+    if (dims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+        m_viewState.updateImageSize(dims.width(), dims.height());
+    }
+
+    emit statusMessage(tr("Image path updated to: %1").arg(m_filePath));
     emit imageChanged();
     return true;
 }
@@ -143,7 +194,7 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
         m_baseCache = {baseIdx, seq.base};
     }
 
-    QString imageKey = SnapshotManager::imageKey(m_filePath);
+    QString imageKey = SnapshotManager::cacheKeyForPath(m_filePath);
     for (int i = baseIdx + 1; i <= index; ++i) {
         auto optDelta = SnapshotManager::loadDelta(m_filePath, m_snapshots[i]);
         if (!optDelta)
@@ -299,7 +350,7 @@ void ImageSession::reloadImage() {
         if (newImage.isNull() || newImage == m_diskImage)
             return;
 
-        ThumbnailCache::invalidate(SnapshotManager::imageKey(m_filePath),
+        ThumbnailCache::invalidate(SnapshotManager::cacheKeyForPath(m_filePath),
                                    ThumbnailConstants::CurrentVersion);
 
         if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {

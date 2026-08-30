@@ -1,6 +1,7 @@
 #include <QFileInfo>
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/appsettingscontroller.h"
+#include "core/snapshotmanager.h"
 
 ImageSessionController::ImageSessionController(AppSettingsController *settings, QObject *parent)
     : QObject(parent), m_settings(settings) {
@@ -32,6 +33,26 @@ ImageSession *ImageSessionController::openImage(const QString& path, bool snapsh
 
     m_sessions.insert(path, session);
     return session;
+}
+
+bool ImageSessionController::changeActiveSessionPath(const QString& newPath) {
+    if (!m_activeSession)
+        return false;
+
+    const QString normalized = SnapshotManager::normalizePath(newPath);
+    const QString oldPath = m_activeSession->filePath();
+    if (normalized.isEmpty() || normalized == oldPath)
+        return false;
+
+    if (m_sessions.contains(normalized))
+        return false;
+
+    if (!m_activeSession->setFilePath(normalized))
+        return false;
+
+    ImageSession *session = m_sessions.take(oldPath);
+    m_sessions.insert(normalized, session);
+    return true;
 }
 
 void ImageSessionController::closeSession(const QString& path) {

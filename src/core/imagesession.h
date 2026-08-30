@@ -48,6 +48,10 @@ class ImageSession : public QObject, public IEffectsModel {
 
     /// @brief Open an image file and initialize the session.
     bool openImage(const QString& filePath);
+    /// @brief Re-point the session to a new location of the same image file.
+    /// @param newPath New absolute path to the image file.
+    /// @return True on success; the session is left unchanged on failure.
+    bool setFilePath(const QString& newPath);
     /// @brief Close the current image and release resources.
     void close();
 

@@ -9,6 +9,9 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtConcurrent>
+
+#include <sys/stat.h>
+#include <unistd.h>
 #include "core/deltacache.h"
 #include "core/snapshotdb.h"
 #include "core/vulkancontext.h"
@@ -56,6 +59,13 @@ class TestSnapshotManager : public QObject {
     void testCorruptedSnapshot();
     void testExtremeResolution();
     void testConcurrentSaves();
+
+    // Path registry
+    void testKeyForPathUnregistered();
+    void testKeyForPathRegisteredUuidShape();
+    void testUpdateImagePath();
+    void testUpdateImagePathCollision();
+    void testPathNormalization();
 
   private:
     // Each test gets a unique file path so snapshot keys don't collide.
@@ -483,8 +493,9 @@ void TestSnapshotManager::testCorruptedSnapshot() {
     QVERIFY(res.has_value());
 
     // Find the file on disk to corrupt it
-    QString     key = SnapshotManager::imageKey(path);
-    QDir        dir(SnapshotManager::baseDir() + "/" + key);
+    auto keyOpt = SnapshotManager::keyForPath(path);
+    QVERIFY(keyOpt.has_value());
+    QDir dir(SnapshotManager::baseDir() + "/" + *keyOpt);
     QStringList files = dir.entryList(QDir::Files);
     QVERIFY(!files.isEmpty());
 
@@ -538,6 +549,126 @@ void TestSnapshotManager::testConcurrentSaves() {
 
     QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
     QCOMPARE(snaps.size(), numThreads);
+}
+
+void TestSnapshotManager::testKeyForPathUnregistered() {
+    QString path = testFilePath("unregistered");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    QVERIFY(!SnapshotManager::keyForPath(path).has_value());
+}
+
+void TestSnapshotManager::testKeyForPathRegisteredUuidShape() {
+    QString path = testFilePath("uuidshape");
+    SnapshotManager::deleteAllSnapshots(path);
+
+    auto res = SnapshotManager::saveSnapshot(path, makeImage(16, 16, Qt::green));
+    QVERIFY(res.has_value());
+
+    auto key = SnapshotManager::keyForPath(path);
+    QVERIFY(key.has_value());
+    // New keys are UUID-shaped (dashes included, no braces).
+    QCOMPARE(key->size(), 36);
+    QVERIFY(!key->contains(QChar('{')));
+    QVERIFY(!QUuid::fromString(*key).isNull());
+
+    SnapshotManager::deleteAllSnapshots(path);
+}
+
+void TestSnapshotManager::testUpdateImagePath() {
+    QString oldPath = testFilePath("move_old");
+    QString newPath = testFilePath("move_new");
+    SnapshotManager::deleteAllSnapshots(oldPath);
+    SnapshotManager::deleteAllSnapshots(newPath);
+
+    SnapshotManager::saveSnapshot(oldPath, makeImage(12, 12, Qt::red));
+    SnapshotManager::saveSnapshot(oldPath, makeImage(12, 12, Qt::blue));
+
+    QVector<ImageSnapshot> before = SnapshotManager::loadSnapshots(oldPath);
+    QCOMPARE(before.size(), 2);
+    auto oldKey = SnapshotManager::keyForPath(oldPath);
+    QVERIFY(oldKey.has_value());
+
+    QCOMPARE(SnapshotManager::updateImagePath(oldPath, newPath),
+             SnapshotManager::UpdatePathResult::Ok);
+
+    // Snapshots are visible under the new path with the same UUIDs.
+    QVector<ImageSnapshot> after = SnapshotManager::loadSnapshots(newPath);
+    QCOMPARE(after.size(), before.size());
+    for (int i = 0; i < before.size(); ++i) {
+        QCOMPARE(after[i].uuid, before[i].uuid);
+    }
+
+    // The old path no longer resolves.
+    QVERIFY(!SnapshotManager::keyForPath(oldPath).has_value());
+    QVERIFY(SnapshotManager::loadSnapshots(oldPath).isEmpty());
+
+    // Storage stayed under the original key (no directory migration).
+    QCOMPARE(SnapshotManager::keyForPath(newPath), oldKey);
+    QVERIFY(QDir(SnapshotManager::baseDir() + "/" + *oldKey).exists());
+
+    // The registry reflects the new path.
+    bool found = false;
+    for (const auto& rec : SnapshotDatabase::instance().getAllSnapshottedImages()) {
+        if (rec.path == newPath) {
+            found = true;
+            QCOMPARE(rec.key, *oldKey);
+        }
+    }
+    QVERIFY(found);
+
+    SnapshotManager::deleteAllSnapshots(newPath);
+}
+
+void TestSnapshotManager::testUpdateImagePathCollision() {
+    QString pathA = testFilePath("collision_a");
+    QString pathB = testFilePath("collision_b");
+    SnapshotManager::deleteAllSnapshots(pathA);
+    SnapshotManager::deleteAllSnapshots(pathB);
+
+    SnapshotManager::saveSnapshot(pathA, makeImage(8, 8, Qt::red));
+    SnapshotManager::saveSnapshot(pathB, makeImage(8, 8, Qt::blue));
+
+    auto keyA = SnapshotManager::keyForPath(pathA);
+    auto keyB = SnapshotManager::keyForPath(pathB);
+    QVERIFY(keyA.has_value());
+    QVERIFY(keyB.has_value());
+    QVERIFY(*keyA != *keyB);
+
+    // Re-pointing A to B must fail: B is registered under a different key.
+    QCOMPARE(SnapshotManager::updateImagePath(pathA, pathB),
+             SnapshotManager::UpdatePathResult::TargetAlreadyRegistered);
+
+    // Both histories are intact and unchanged.
+    QCOMPARE(SnapshotManager::loadSnapshots(pathA).size(), 1);
+    QCOMPARE(SnapshotManager::loadSnapshots(pathB).size(), 1);
+    QCOMPARE(SnapshotManager::keyForPath(pathA), keyA);
+    QCOMPARE(SnapshotManager::keyForPath(pathB), keyB);
+
+    SnapshotManager::deleteAllSnapshots(pathA);
+    SnapshotManager::deleteAllSnapshots(pathB);
+}
+
+void TestSnapshotManager::testPathNormalization() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QString realPath = tempDir.filePath("real.png");
+    QImage img(4, 4, QImage::Format_RGB32);
+    img.fill(Qt::black);
+    QVERIFY(img.save(realPath));
+
+    SnapshotManager::saveSnapshot(realPath, img);
+    auto realKey = SnapshotManager::keyForPath(realPath);
+    QVERIFY(realKey.has_value());
+
+    // A symlink variant of the path resolves to the same key.
+    QString linkPath = tempDir.filePath("link.png");
+    QVERIFY(::symlink(realPath.toLocal8Bit().constData(), linkPath.toLocal8Bit().constData()) == 0);
+    QCOMPARE(SnapshotManager::keyForPath(linkPath), realKey);
+    QCOMPARE(SnapshotManager::loadSnapshots(linkPath).size(), 1);
+
+    SnapshotManager::deleteAllSnapshots(realPath);
 }
 
 QTEST_MAIN(TestSnapshotManager)

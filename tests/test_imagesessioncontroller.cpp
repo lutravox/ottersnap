@@ -1,4 +1,6 @@
 #include <QDir>
+#include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QtTest>
 #include "config/appsettings.h"
@@ -209,6 +211,62 @@ class TestImageSessionController : public QObject {
 
         m_controller->closeSession(m_testFilePath);
         QCOMPARE(m_controller->openPaths().count(), 0);
+    }
+
+    void testChangeActiveSessionPath() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        QSignalSpy createdSpy(session, &ImageSession::snapshotCreated);
+        session->saveSnapshot();
+        QTRY_VERIFY_WITH_TIMEOUT(createdSpy.count() >= 1, 5000);
+        QCOMPARE(SnapshotManager::loadSnapshots(m_testFilePath).size(), 1);
+
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QString newPath = tempDir.filePath("moved.png");
+        QImage  movedImg(100, 100, QImage::Format_ARGB32);
+        movedImg.fill(Qt::green);
+        QVERIFY(movedImg.save(newPath));
+
+        QVERIFY(m_controller->changeActiveSessionPath(newPath));
+
+        QCOMPARE(m_controller->activeSession(), session);
+        QCOMPARE(m_controller->sessionForPath(SnapshotManager::normalizePath(newPath)),
+                 session);
+        QCOMPARE(m_controller->sessionForPath(m_testFilePath), nullptr);
+        QCOMPARE(session->filePath(), SnapshotManager::normalizePath(newPath));
+        QCOMPARE(SnapshotManager::loadSnapshots(newPath).size(), 1);
+        QCOMPARE(SnapshotManager::loadSnapshots(m_testFilePath).size(), 0);
+    }
+
+    void testChangeActiveSessionPathRejected() {
+        ImageSession *session = m_controller->openImage(m_testFilePath);
+        QVERIFY(session != nullptr);
+        m_controller->setActiveSession(session);
+
+        // Same path is rejected.
+        QVERIFY(!m_controller->changeActiveSessionPath(m_testFilePath));
+
+        // A path already open in another session is rejected.
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QString otherPath = tempDir.filePath("other.png");
+        QImage otherImg(50, 50, QImage::Format_ARGB32);
+        otherImg.fill(Qt::yellow);
+        QVERIFY(otherImg.save(otherPath));
+
+        ImageSession *other = m_controller->openImage(otherPath);
+        QVERIFY(other != nullptr);
+        m_controller->setActiveSession(session);
+
+        QVERIFY(!m_controller->changeActiveSessionPath(otherPath));
+        QCOMPARE(m_controller->sessionForPath(m_testFilePath), session);
+    }
+
+    void testChangeActiveSessionPathNoActive() {
+        QVERIFY(!m_controller->changeActiveSessionPath("/tmp/ottersnap_none.png"));
     }
 };
 

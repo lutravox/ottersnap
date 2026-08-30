@@ -44,11 +44,10 @@ void ViewerController::onActiveSessionChanged(ImageSession *session) {
     }
 
     if (m_viewer) {
-        // Sync current viewport size to the new session's view state
+        // Sync current viewport size to the new session's view state.
         QSize sz = m_viewer->getViewportSize();
         if (!sz.isEmpty()) {
             session->viewModel().setViewportSize(sz.width(), sz.height());
-            session->viewModel().updateZoomRatio();
         }
 
         if (auto *vkViewer = dynamic_cast<VkImageViewer *>(m_viewer)) {
@@ -235,6 +234,10 @@ void ViewerController::syncSessionToViewer() {
 
 void ViewerController::fitToWindow() {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
+    fitToWindow(session);
+}
+
+void ViewerController::fitToWindow(ImageSession *session) {
     if (!session || !m_viewer)
         return;
 
@@ -245,8 +248,10 @@ void ViewerController::fitToWindow() {
 
     state.fitToWindow();
 
-    syncSessionToViewer();
-    m_viewer->notifyViewModelChanged();
+    if (m_sessionController && session == m_sessionController->activeSession()) {
+        syncSessionToViewer();
+        m_viewer->notifyViewModelChanged();
+    }
 }
 
 void ViewerController::setZoomPercentage(double pct) {

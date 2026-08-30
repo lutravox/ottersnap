@@ -482,8 +482,9 @@ void MainWindow::setupMenu() {
     m_actionResetView = m_viewMenu->addAction(tr("Reset &View"));
     m_actionResetView->setShortcut(
         m_settingsController->shortcutManager()->shortcutFor("viewer.resetView"));
-    connect(
-        m_actionResetView, &QAction::triggered, m_viewerController, &ViewerController::fitToWindow);
+    connect(m_actionResetView, &QAction::triggered, this, [this]() {
+        m_viewerController->fitToWindow();
+    });
 
     m_actionActualSize = m_viewMenu->addAction(tr("&Actual Size (100%)"));
     m_actionActualSize->setShortcut(
@@ -1011,7 +1012,7 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
             m_tabBar->setCurrentWidget(tab);
         }
         updateViewer(tab);
-        m_viewerController->fitToWindow();
+        m_viewerController->fitToWindow(tab->session());
     }
 
     return tab;
@@ -1282,12 +1283,13 @@ void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuid
             tr("Cancel"))) {
         const int total = uuids.size();
         auto      pending = QSharedPointer<int>::create(total);
-        connect(tab->session(), &ImageSession::deletionFinished, this, [this, tab, pending, total]() {
-            if (--*pending == 0) {
-                disconnect(tab->session(), &ImageSession::deletionFinished, this, nullptr);
-                notify(tr("Deleted %1 snapshots successfully.").arg(total));
-            }
-        });
+        connect(
+            tab->session(), &ImageSession::deletionFinished, this, [this, tab, pending, total]() {
+                if (--*pending == 0) {
+                    disconnect(tab->session(), &ImageSession::deletionFinished, this, nullptr);
+                    notify(tr("Deleted %1 snapshots successfully.").arg(total));
+                }
+            });
 
         for (const auto& uuid : uuids) {
             tab->deleteSnapshot(uuid, true);

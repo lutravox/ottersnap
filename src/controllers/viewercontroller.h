@@ -38,6 +38,7 @@ class ViewerController : public QObject {
 
     /// @brief Command the viewer to fit the image to the window.
     void fitToWindow();
+    void fitToWindow(ImageSession *session);
 
     /// @brief Set whether images should scale with window on resize.
     /// @param enabled True to enable scaling.

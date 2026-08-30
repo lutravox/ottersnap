@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QPainter>
 #include <QStandardPaths>
+#include <QThread>
 #include "core/thumbnailcache.h"
 #include "config/appsettings.h"
 
@@ -12,7 +13,7 @@ QThreadPool *ThumbnailThreadPool::instance() {
 }
 
 ThumbnailThreadPool::ThumbnailThreadPool() {
-    setMaxThreadCount(1);
+    setMaxThreadCount(qMax(1, qMin(4, QThread::idealThreadCount())));
 }
 
 QCache<QString, QImage> ThumbnailCache::s_thumbnailCache;
@@ -54,14 +55,7 @@ void ThumbnailCache::remove(const QString& key) {
 }
 
 void ThumbnailCache::invalidate(const QString& imageKey, const QString& version) {
-    const int storageSize = ThumbnailConstants::StorageSize;
-
-    QString cacheKey =
-        (version == ThumbnailConstants::CurrentVersion)
-            ? QString("%1:current:%2x%3").arg(imageKey).arg(storageSize).arg(storageSize)
-            : QString("%1:%2:%3x%4").arg(imageKey).arg(version).arg(storageSize).arg(storageSize);
-
-    ThumbnailCache::remove(cacheKey);
+    ThumbnailCache::remove(keyFor(imageKey, version));
 
     QString baseThumbDir =
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
@@ -71,13 +65,17 @@ void ThumbnailCache::invalidate(const QString& imageKey, const QString& version)
     QFile::remove(thumbPath);
 }
 
-QImage ThumbnailCache::loadThumbnail(const QString& imageKey, const QString& version, const QSize& size) {
+QString ThumbnailCache::keyFor(const QString& imageKey, const QString& version) {
     const int storageSize = ThumbnailConstants::StorageSize;
+    return QString("%1:%2:%3x%4")
+        .arg(imageKey)
+        .arg(version)
+        .arg(storageSize)
+        .arg(storageSize);
+}
 
-    QString cacheKey =
-        (version == ThumbnailConstants::CurrentVersion)
-            ? QString("%1:current:%2x%3").arg(imageKey).arg(storageSize).arg(storageSize)
-            : QString("%1:%2:%3x%4").arg(imageKey).arg(version).arg(storageSize).arg(storageSize);
+QImage ThumbnailCache::loadThumbnail(const QString& imageKey, const QString& version, const QSize& size) {
+    const QString cacheKey = keyFor(imageKey, version);
 
     QImage cachedImg;
     {

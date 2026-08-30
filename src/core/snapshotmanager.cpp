@@ -129,53 +129,58 @@ static QByteArray computeDelta(const QImage& current, const QImage& previous) {
     return result;
 }
 
-QImage
-SnapshotManager::reconstructSnapshot(const QString&                           filePath,
-                                     const QUuid&                             uuid,
-                                     QSize                                    targetSize,
-                                     std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
+std::optional<ReconstructionSequence>
+SnapshotManager::buildReconstructionSequence(const QString& filePath, const QUuid& uuid) {
     QVector<ImageSnapshot> snapshots = SnapshotManager::loadSnapshots(filePath);
 
-    ImageSnapshot target;
-    bool          found = false;
+    const ImageSnapshot *target = nullptr;
     for (const auto& s : snapshots) {
         if (s.uuid == uuid) {
-            target = s;
-            found = true;
+            target = &s;
             break;
         }
     }
+    if (!target)
+        return std::nullopt;
 
-    if (!found)
-        return {};
-
-    auto chainOpt = snapshotChain(snapshots, target);
+    auto chainOpt = snapshotChain(snapshots, *target);
     if (!chainOpt)
-        return {};
+        return std::nullopt;
     const QVector<ImageSnapshot>& chain = *chainOpt;
 
     // chain.first() is the base, chain.last() is the target
-    ReconstructionSequence seq;
-    seq.baseIdx = 0; // For the sequence, we just need the base image
     auto optBase = SnapshotManager::loadBaseImage(filePath, chain.first());
     if (!optBase)
-        return {};
+        return std::nullopt;
+
+    ReconstructionSequence seq;
     seq.base = std::move(optBase->image);
-    seq.baseChecksum = optBase->checksum;
+    seq.baseChecksum = std::move(optBase->checksum);
 
     QString key = SnapshotManager::cacheKeyForPath(filePath);
     for (int i = 1; i < chain.size(); ++i) {
         auto optDelta = SnapshotManager::loadDelta(filePath, chain[i]);
         if (!optDelta)
-            return {};
+            return std::nullopt;
         seq.deltas.append(DeltaEntry{key + ":" + chain[i].fileName, std::move(*optDelta)});
     }
+    return seq;
+}
+
+QImage
+SnapshotManager::reconstructSnapshot(const QString&                           filePath,
+                                     const QUuid&                             uuid,
+                                     QSize                                    targetSize,
+                                     std::shared_ptr<VkSnapshotReconstructor> reconstructor) {
+    auto seqOpt = buildReconstructionSequence(filePath, uuid);
+    if (!seqOpt)
+        return {};
 
     if (!reconstructor) {
         CPUSnapshotReconstructor cpu;
-        return cpu.reconstructToImage(seq, targetSize);
+        return cpu.reconstructToImage(*seqOpt, targetSize);
     }
-    return reconstructor->reconstructToImage(seq, targetSize);
+    return reconstructor->reconstructToImage(*seqOpt, targetSize);
 }
 
 QImage SnapshotManager::resizeImage(const QImage& image, QSize targetSize) {
@@ -716,14 +721,18 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
         }
     }
 
-    // Trigger thumbnail generation via the manager
-    ThumbnailManager::instance().enqueueRequest(
-        {.index = static_cast<int>(snapshots.size()) + 1, .filePath = filePath, .uuid = s.uuid});
-
     if (!SnapshotDatabase::instance().addSnapshot(key, s)) {
         qWarning() << "[SnapshotManager] Failed to record snapshot in database for" << filePath;
         QFile::remove(sd + '/' + s.fileName);
         return std::nullopt;
+    }
+
+    // Create the thumbnail
+    QImage thumbnail = image.scaled(ThumbnailManager::storageTargetSize(image.size()),
+                                    Qt::KeepAspectRatio,
+                                    Qt::SmoothTransformation);
+    if (!thumbnail.isNull()) {
+        ThumbnailManager::instance().publishThumbnail(filePath, s.uuid, thumbnail);
     }
 
     qDebug() << "[SnapshotManager] Saved snapshot" << s.uuid.toString(QUuid::WithoutBraces)

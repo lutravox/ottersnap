@@ -155,7 +155,6 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence() 
 std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(int index) const {
     if (!m_isSnapshotOnly && index == static_cast<int>(m_snapshots.size())) {
         ReconstructionSequence seq;
-        seq.baseIdx = -1;
         seq.base = m_diskImage;
         seq.baseChecksum = QString("%1:%2").arg(m_filePath, m_lastModified.toString(Qt::ISODate));
         return seq;
@@ -182,7 +181,6 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     }
 
     ReconstructionSequence seq;
-    seq.baseIdx = baseIdx;
 
     if (m_baseCache.index == baseIdx && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;

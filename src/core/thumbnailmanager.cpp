@@ -2,6 +2,7 @@
 #include <QFutureWatcher>
 #include <QPainter>
 #include <QtConcurrent>
+#include "core/cpusnapshotreconstructor.h"
 #include "core/thumbnailmanager.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
@@ -60,63 +61,58 @@ void ThumbnailManager::enqueueRequest(const ThumbnailRequest& request) {
         m_queue.enqueue(request);
     }
 
-    if (!m_isProcessing) {
-        processNext();
-    }
+    processNext();
 }
 
 void ThumbnailManager::processNext() {
-    if (m_queue.isEmpty()) {
-        m_isProcessing = false;
-        return;
+    while (m_inFlight < MaxConcurrentReconstructions && !m_queue.isEmpty()) {
+        ThumbnailRequest request = m_queue.dequeue();
+
+        auto watcher = new QFutureWatcher<std::optional<QImage>>(this);
+
+        connect(watcher, &QFutureWatcher<std::optional<QImage>>::finished, [this, watcher, request]() {
+            onReconstructionFinished(watcher, request);
+        });
+
+        std::function<std::optional<QImage>()> worker;
+        if (request.uuid.isNull()) {
+            worker = [path = request.filePath, img = request.currentImage]() -> std::optional<QImage> {
+                return reconstructDiskImage(path, img);
+            };
+        } else {
+            QUuid uuid = request.uuid;
+            worker = [path = request.filePath, uuid]() { return reconstructThumbnail(path, uuid); };
+        }
+
+        ++m_inFlight;
+        watcher->setFuture(QtConcurrent::run(ThumbnailThreadPool::instance(), worker));
     }
-
-    m_isProcessing = true;
-    ThumbnailRequest request = m_queue.dequeue();
-
-    auto watcher = new QFutureWatcher<std::optional<QImage>>(this);
-
-    connect(watcher, &QFutureWatcher<std::optional<QImage>>::finished, [this, watcher, request]() {
-        onReconstructionFinished(watcher, request);
-    });
-
-    std::function<std::optional<QImage>()> worker;
-    if (request.uuid.isNull()) {
-        worker = [path = request.filePath, img = request.currentImage]() -> std::optional<QImage> {
-            return reconstructDiskImage(path, img);
-        };
-    } else {
-        QUuid uuid = request.uuid;
-        worker = [path = request.filePath, uuid]() { return reconstructThumbnail(path, uuid); };
-    }
-
-    watcher->setFuture(QtConcurrent::run(ThumbnailThreadPool::instance(), worker));
 }
 
 void ThumbnailManager::onReconstructionFinished(QFutureWatcher<std::optional<QImage>> *watcher,
                                                 const ThumbnailRequest&                request) {
     auto res = watcher->result();
     if (res && !res->isNull()) {
-        const QImage& img = *res;
-        saveThumbnail(request.filePath, request.uuid, img);
-
-        // Cache in memory
-        QString idStr = getIdentityString(request.uuid);
-        QString cacheKey = QString("%1:%2:%3x%4")
-                               .arg(SnapshotManager::cacheKeyForPath(request.filePath))
-                               .arg(idStr)
-                               .arg(ThumbnailConstants::StorageSize)
-                               .arg(ThumbnailConstants::StorageSize);
-
-        ThumbnailCache::insert(cacheKey, new QImage(img), img.sizeInBytes());
-
-        emit thumbnailGenerated(request.filePath, request.uuid, img);
+        publishThumbnail(request.filePath, request.uuid, *res);
     }
 
     QString requestKey = getRequestKey(request.filePath, request.uuid);
     m_activeRequests.remove(requestKey);
     watcher->deleteLater();
+    --m_inFlight;
     processNext();
+}
+
+void ThumbnailManager::publishThumbnail(const QString& filePath, const QUuid& uuid, const QImage& image) {
+    saveThumbnail(filePath, uuid, image);
+
+    // Cache in memory
+    QString idStr = getIdentityString(uuid);
+    QString cacheKey = ThumbnailCache::keyFor(SnapshotManager::cacheKeyForPath(filePath), idStr);
+
+    ThumbnailCache::insert(cacheKey, new QImage(image), image.sizeInBytes());
+
+    emit thumbnailGenerated(filePath, uuid, image);
 }
 
 void ThumbnailManager::saveThumbnail(const QString& filePath,
@@ -138,6 +134,13 @@ QString ThumbnailManager::getIdentityString(const QUuid& uuid) const {
 
 QString ThumbnailManager::getRequestKey(const QString& filePath, const QUuid& uuid) const {
     return filePath + ":" + getIdentityString(uuid);
+}
+
+QSize ThumbnailManager::storageTargetSize(const QSize& sourceSize) {
+    float aspect = float(sourceSize.width()) / float(sourceSize.height());
+    int   size = ThumbnailConstants::StorageSize;
+    return (aspect > 1.0f) ? QSize(size, qRound(size / aspect))
+                           : QSize(qRound(size * aspect), size);
 }
 
 QImage ThumbnailManager::formatThumbnail(const QImage& image, int size) {
@@ -171,12 +174,7 @@ std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path
     if (img.isNull())
         return std::nullopt;
 
-    float aspect = float(img.width()) / float(img.height());
-    int   storageSize = 256;
-    QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
-                                       : QSize(qRound(storageSize * aspect), storageSize);
-
-    QImage result = SnapshotManager::resizeImage(img, targetSize);
+    QImage result = SnapshotManager::resizeImage(img, storageTargetSize(img.size()));
     if (result.isNull())
         return std::nullopt;
     return result;
@@ -184,35 +182,12 @@ std::optional<QImage> ThumbnailManager::reconstructDiskImage(const QString& path
 
 std::optional<QImage> ThumbnailManager::reconstructThumbnail(const QString& path,
                                                              const QUuid&   uuid) {
-    auto snapList = SnapshotManager::loadSnapshots(path);
-
-    ImageSnapshot target;
-    bool          found = false;
-    for (const auto& s : snapList) {
-        if (s.uuid == uuid) {
-            target = s;
-            found = true;
-            break;
-        }
-    }
-    if (!found)
+    auto seqOpt = SnapshotManager::buildReconstructionSequence(path, uuid);
+    if (!seqOpt || seqOpt->base.isNull())
         return std::nullopt;
 
-    // Use the target's own chain base to determine dimensions
-    auto chainOpt = SnapshotManager::snapshotChain(snapList, target);
-    if (!chainOpt)
-        return std::nullopt;
-
-    auto optBase = SnapshotManager::loadBaseImage(path, chainOpt->first());
-    if (!optBase)
-        return std::nullopt;
-
-    float aspect = float(optBase->image.width()) / float(optBase->image.height());
-    int   storageSize = 256;
-    QSize targetSize = (aspect > 1.0f) ? QSize(storageSize, qRound(storageSize / aspect))
-                                       : QSize(qRound(storageSize * aspect), storageSize);
-
-    QImage result = SnapshotManager::reconstructSnapshot(path, uuid, targetSize);
+    CPUSnapshotReconstructor cpu;
+    QImage result = cpu.reconstructToImage(*seqOpt, storageTargetSize(seqOpt->base.size()));
     if (result.isNull())
         return std::nullopt;
 

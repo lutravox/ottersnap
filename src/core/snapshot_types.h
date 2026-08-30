@@ -14,7 +14,6 @@ struct DeltaEntry {
 
 /// @brief A sequence of a base image and deltas required to reconstruct a snapshot.
 struct ReconstructionSequence {
-    int                 baseIdx;   ///< Index of the base image in the sequence.
     QImage              base;      ///< The starting image.
     QString             baseChecksum; ///< Checksum to verify base image integrity.
     QVector<DeltaEntry> deltas;    ///< Ordered list of deltas to apply.

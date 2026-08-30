@@ -14,7 +14,7 @@ const QString Format = "WEBP";
 const QString CurrentVersion = "current";
 } // namespace ThumbnailConstants
 
-/// @brief Single-threaded pool for thumbnail reconstructions to prevent GPU memory exhaustion.
+/// @brief Bounded pool for thumbnail reconstructions.
 class ThumbnailThreadPool : public QThreadPool {
   public:
     static QThreadPool *instance();
@@ -44,6 +44,12 @@ class ThumbnailCache {
 
     /// @brief Invalidate a thumbnail from both memory and disk cache.
     static void invalidate(const QString& imageKey, const QString& version);
+
+    /// @brief Build the canonical cache key for a stored thumbnail.
+    /// @param imageKey The image identifier.
+    /// @param version The snapshot identity (or the current-version marker).
+    /// @return The key used by both the memory cache and any writer of entries.
+    static QString keyFor(const QString& imageKey, const QString& version);
 
     /// @brief Retrieves a thumbnail from the disk cache.
     static QImage loadThumbnail(const QString& imageKey, const QString& version, const QSize& size);

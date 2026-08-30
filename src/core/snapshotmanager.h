@@ -143,6 +143,14 @@ class SnapshotManager {
     /// @return Total size in bytes.
     static qint64 calculateStorageUsage(const QString& filePath);
 
+    /// @brief Build the base image and delta chain required to reconstruct a snapshot.
+    /// @param filePath Absolute path of the source image.
+    /// @param uuid The unique identity of the target snapshot.
+    /// @return The reconstruction sequence ordered from base to target, or
+    /// std::nullopt if the target or any link in its chain is missing.
+    static std::optional<ReconstructionSequence>
+    buildReconstructionSequence(const QString& filePath, const QUuid& uuid);
+
     /// @brief Reconstruct a snapshot image from base + deltas.
     /// @param filePath Absolute path of the source image.
     /// @param uuid The unique identity of the snapshot to reconstruct.

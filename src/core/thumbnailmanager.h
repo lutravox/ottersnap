@@ -47,6 +47,17 @@ class ThumbnailManager : public QObject {
     /// @brief Formats a thumbnail of the image, centered on a transparent canvas.
     static QImage formatThumbnail(const QImage& image, int size);
 
+    /// @brief Computes the storage thumbnail size preserving the source aspect ratio.
+    /// @param sourceSize The dimensions of the source image.
+    /// @return A size with at least one dimension equal to the storage size.
+    static QSize storageTargetSize(const QSize& sourceSize);
+
+    /// @brief Persists a thumbnail to disk and the memory cache and notifies listeners.
+    /// @param filePath Absolute path of the source image.
+    /// @param uuid The snapshot identity (null for the current disk image).
+    /// @param image The pre-scaled thumbnail to publish.
+    void publishThumbnail(const QString& filePath, const QUuid& uuid, const QImage& image);
+
   signals:
     void thumbnailGenerated(const QString& filePath, const QUuid& snapshotUuid, const QImage& img);
 
@@ -72,7 +83,9 @@ class ThumbnailManager : public QObject {
     QString getIdentityString(const QUuid& uuid) const;
     QString getRequestKey(const QString& filePath, const QUuid& uuid) const;
 
+    static constexpr int MaxConcurrentReconstructions = 4;
+
     QQueue<ThumbnailRequest> m_queue;
     QSet<QString>            m_activeRequests;
-    bool                     m_isProcessing = false;
+    int                      m_inFlight = 0;
 };

@@ -88,3 +88,26 @@ class SnapshotDatabase {
     bool    m_initialized = false;
     QString m_dbPath;
 };
+
+/// @brief RAII guard for a transaction on the current thread's database
+/// connection. Commits on scope exit unless rollback() is called.
+class SnapshotDbTransaction {
+  public:
+    SnapshotDbTransaction() : m_active(SnapshotDatabase::instance().connection().transaction()) {}
+
+    ~SnapshotDbTransaction() {
+        if (m_active && !m_done)
+            SnapshotDatabase::instance().connection().commit();
+    }
+
+    void rollback() {
+        if (m_active && !m_done) {
+            SnapshotDatabase::instance().connection().rollback();
+            m_done = true;
+        }
+    }
+
+  private:
+    bool m_active = false;
+    bool m_done   = false;
+};

@@ -121,12 +121,9 @@ class TestImageSessionController : public QObject {
         QSignalSpy imageSpy(session, &ImageSession::imageChanged);
         m_controller->deleteSnapshot(uuid);
 
-        if (!imageSpy.wait(100)) {
-            qDebug() << "imageChanged not emitted immediately, checking count:" << imageSpy.count();
-        }
-        QVERIFY(imageSpy.count() > 0);
+        QVERIFY(imageSpy.wait(2000));
 
-        QCOMPARE(session->snapshots().count(), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(session->snapshots().count() == 0, 2000);
     }
 
     void testDeleteAllSnapshots() {
@@ -143,11 +140,7 @@ class TestImageSessionController : public QObject {
         QSignalSpy snapSpy(session, &ImageSession::snapshotsChanged);
         m_controller->deleteAllSnapshots();
 
-        if (!snapSpy.wait(100)) {
-            qDebug() << "snapshotsChanged not emitted immediately, checking count:"
-                     << snapSpy.count();
-        }
-        QVERIFY(snapSpy.count() > 0);
+        QVERIFY(snapSpy.wait(2000));
 
         QCOMPARE(session->snapshots().count(), 0);
     }

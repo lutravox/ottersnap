@@ -83,8 +83,13 @@ class ImageSession : public QObject, public IEffectsModel {
     /// @brief Manually trigger a snapshot of the current image on disk.
     void saveSnapshot();
 
-    /// @brief Delete a snapshot by its UUID.
+    /// @brief Delete a snapshot by its UUID. Runs asynchronously; state is
+    /// updated and deletionFinished() is emitted when the delete completes.
     void deleteSnapshot(const QUuid& uuid, bool silent = false);
+
+    /// @brief Delete all snapshots of this image. Runs asynchronously; state
+    /// is updated and deletionFinished() is emitted when the delete completes.
+    void deleteAllSnapshots();
 
     /// @brief Generate and cache a thumbnail for a specific snapshot.
     QImage generateThumbnail(int index, int size, bool padded = true);
@@ -184,6 +189,8 @@ class ImageSession : public QObject, public IEffectsModel {
     void colorClustersChanged();
     /// @brief Emitted with a status message to show to the user.
     void statusMessage(const QString& message, int timeoutMs = -1);
+    /// @brief Emitted after a snapshot deletion (single or all) has finished.
+    void deletionFinished();
 
   private slots:
     void handleThumbnailGenerated(const QString& path, const QUuid& uuid);
@@ -195,6 +202,8 @@ class ImageSession : public QObject, public IEffectsModel {
     void   performSave(const QImage& img, bool isAutosave);
     void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher,
                               bool                                                        isAutosave);
+    void   applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result);
+    void   applySnapshotList(const QVector<ImageSnapshot>& list);
     QImage getPlaceholder(int size);
 
     bool                   m_isSnapshotOnly = false;

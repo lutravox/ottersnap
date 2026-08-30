@@ -23,7 +23,8 @@
 
 QHash<QString, QVector<ImageSnapshot>> SnapshotManager::s_snapshotsCache;
 QHash<QString, QString>                SnapshotManager::s_pathKeyCache;
-QRecursiveMutex                        SnapshotManager::s_mutex;
+QRecursiveMutex                        SnapshotManager::s_opMutex;
+QMutex                                 SnapshotManager::s_cacheMutex;
 
 static const QString  c_baseSubDir = QLatin1String("snapshots");
 static const int      c_tileWidth = 256;
@@ -187,7 +188,7 @@ QImage SnapshotManager::resizeImage(const QImage& image, QSize targetSize) {
 }
 
 bool SnapshotManager::exportHistory(const QString& filePath, const QString& bundlePath) {
-    QMutexLocker           locker(&s_mutex);
+    QMutexLocker           locker(&s_opMutex);
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
     if (snapshots.isEmpty()) {
@@ -296,7 +297,7 @@ bool SnapshotManager::importHistory(const QString& filePath,
     if (duplicatesFound)
         *duplicatesFound = 0;
 
-    QMutexLocker           locker(&s_mutex);
+    QMutexLocker           locker(&s_opMutex);
     QVector<ImageSnapshot> existing = loadSnapshots(filePath);
 
     int    err = 0;
@@ -362,6 +363,8 @@ bool SnapshotManager::importHistory(const QString& filePath,
     }
     const QString& key = *keyOpt;
 
+    // Phase 1: extract files to disk, collecting the snapshots actually written.
+    QVector<ImageSnapshot> importedNow;
     for (const auto& s : imported) {
         // Skip if this snapshot already exists in the local history
         bool alreadyExists = false;
@@ -398,31 +401,38 @@ bool SnapshotManager::importHistory(const QString& filePath,
             return false;
         }
 
-        if (!SnapshotDatabase::instance().addSnapshot(key, s)) {
-            qWarning() << "[SnapshotManager] Failed to record imported snapshot in database";
-            zip_close(archive);
-            return false;
-        }
+        importedNow.append(s);
     }
 
     zip_close(archive);
 
+    // Phase 2: record all imported snapshots in a single transaction so
+    // readers never observe a partially imported history.
+    if (!importedNow.isEmpty()) {
+        SnapshotDbTransaction tx;
+        bool allOk = true;
+        for (const auto& s : importedNow) {
+            if (!SnapshotDatabase::instance().addSnapshot(key, s))
+                allOk = false;
+        }
+        if (!allOk) {
+            tx.rollback();
+            qWarning() << "[SnapshotManager] Failed to record imported snapshots in database";
+            return false;
+        }
+    }
+
     // Merge the chains: imported snapshots keep their own parent links and are
     // displayed interleaved with the existing history by timestamp.
     QVector<ImageSnapshot> finalSnapshots = existing;
-    for (const auto& s : imported) {
-        bool alreadyExists = false;
-        for (const auto& ex : existing) {
-            if (ex.uuid == s.uuid) {
-                alreadyExists = true;
-                break;
-            }
-        }
-        if (!alreadyExists)
-            finalSnapshots.append(s);
+    for (const auto& s : importedNow) {
+        finalSnapshots.append(s);
     }
     sortSnapshots(finalSnapshots);
-    s_snapshotsCache[key] = finalSnapshots;
+    {
+        QMutexLocker cacheLocker(&s_cacheMutex);
+        s_snapshotsCache[key] = finalSnapshots;
+    }
 
     qDebug() << "[SnapshotManager] Imported snapshot history for" << filePath << "from"
              << bundlePath;
@@ -466,7 +476,11 @@ QString SnapshotManager::hashPath(const QString& filePath) {
 }
 
 std::optional<QString> SnapshotManager::keyForPath(const QString& filePath) {
-    QMutexLocker locker(&s_mutex);
+    QMutexLocker locker(&s_cacheMutex);
+    return keyForPathLocked(filePath);
+}
+
+std::optional<QString> SnapshotManager::keyForPathLocked(const QString& filePath) {
     const QString path = normalizePath(filePath);
 
     auto cached = s_pathKeyCache.constFind(path);
@@ -490,7 +504,7 @@ QString SnapshotManager::cacheKeyForPath(const QString& filePath) {
 
 SnapshotManager::UpdatePathResult
 SnapshotManager::updateImagePath(const QString& oldPath, const QString& newPath) {
-    QMutexLocker locker(&s_mutex);
+    QMutexLocker locker(&s_opMutex);
     const QString old = normalizePath(oldPath);
     const QString next = normalizePath(newPath);
 
@@ -506,8 +520,11 @@ SnapshotManager::updateImagePath(const QString& oldPath, const QString& newPath)
     if (auto oldKey = keyForPath(old)) {
         if (!SnapshotDatabase::instance().setImagePath(*oldKey, next))
             return UpdatePathResult::Failed;
-        s_pathKeyCache.remove(old);
-        s_pathKeyCache.insert(next, *oldKey);
+        {
+            QMutexLocker cacheLocker(&s_cacheMutex);
+            s_pathKeyCache.remove(old);
+            s_pathKeyCache.insert(next, *oldKey);
+        }
         return UpdatePathResult::Ok;
     }
 
@@ -524,15 +541,21 @@ QString SnapshotManager::ensureStorageReady(const QString& filePath) {
     ensureDir();
     const QString path = normalizePath(filePath);
 
-    QMutexLocker locker(&s_mutex);
+    QMutexLocker locker(&s_opMutex);
     auto         key = keyForPath(path);
     if (!key) {
-        key = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        if (!SnapshotDatabase::instance().registerImage(*key, path)) {
+        const QString newKey = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        if (!SnapshotDatabase::instance().registerImage(newKey, path)) {
             qWarning() << "[SnapshotManager] Failed to register image" << path;
             return QString();
         }
-        s_pathKeyCache.insert(path, *key);
+        // Re-fetch the canonical key: if a concurrent registration of the same
+        // path won the race, INSERT OR IGNORE kept that key instead of ours.
+        key = keyForPath(path);
+        if (!key) {
+            qWarning() << "[SnapshotManager] Failed to register image" << path;
+            return QString();
+        }
     }
 
     QString sd = snapshotDirPath(*key);
@@ -553,8 +576,8 @@ QString SnapshotManager::computeChecksum(const QImage& image) {
 }
 
 QVector<ImageSnapshot> SnapshotManager::loadSnapshots(const QString& filePath) {
-    QMutexLocker locker(&s_mutex);
-    auto         keyOpt = keyForPath(filePath);
+    QMutexLocker locker(&s_cacheMutex);
+    auto         keyOpt = keyForPathLocked(filePath);
     if (!keyOpt)
         return {};
     const QString& key = *keyOpt;
@@ -609,7 +632,7 @@ void SnapshotManager::sortSnapshots(QVector<ImageSnapshot>& snapshots) {
 
 std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const QString& filePath,
                                                                          const QImage&  image) {
-    QMutexLocker locker(&s_mutex);
+    QMutexLocker locker(&s_opMutex);
     QString      checksum = computeChecksum(image);
     if (checksum.isEmpty()) {
         qWarning() << "[SnapshotManager] Refused to save: image has null pixel data or save failed";
@@ -705,7 +728,10 @@ std::optional<SnapshotManager::SaveResult> SnapshotManager::saveSnapshot(const Q
     qDebug() << "[SnapshotManager] Saved snapshot" << s.uuid.toString(QUuid::WithoutBraces)
              << (s.isBase ? "(base)" : "(delta)") << "for" << filePath;
     snapshots.append(s);
-    s_snapshotsCache[key] = snapshots;
+    {
+        QMutexLocker cacheLocker(&s_cacheMutex);
+        s_snapshotsCache[key] = snapshots;
+    }
 
     return SaveResult{SaveStatus::Created, s.uuid};
 }
@@ -743,10 +769,16 @@ std::optional<QByteArray> SnapshotManager::loadDelta(const QString&       filePa
 }
 
 void SnapshotManager::deleteAllSnapshots(const QString& filePath) {
+    QMutexLocker locker(&s_opMutex);
+
     auto keyOpt = keyForPath(filePath);
     if (!keyOpt)
         return;
     const QString& key = *keyOpt;
+
+    // Clear the database first (atomic, cascades to snapshots) so that
+    // concurrent readers resolve to an empty history before the files go.
+    SnapshotDatabase::instance().clearImage(key);
 
     QString sd = snapshotDirPath(key);
     QDir    dir(sd);
@@ -769,20 +801,23 @@ void SnapshotManager::deleteAllSnapshots(const QString& filePath) {
                      << filePath;
         }
     }
-    s_snapshotsCache.remove(key);
-    s_pathKeyCache.remove(normalizePath(filePath));
-    SnapshotDatabase::instance().clearImage(key);
+    {
+        QMutexLocker cacheLocker(&s_cacheMutex);
+        s_snapshotsCache.remove(key);
+        s_pathKeyCache.remove(normalizePath(filePath));
+    }
 }
 
 void SnapshotManager::clearCache() {
+    QMutexLocker locker(&s_cacheMutex);
     s_snapshotsCache.clear();
 }
 
-bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid) {
-    QMutexLocker locker(&s_mutex);
+std::optional<QVector<ImageSnapshot>> SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid) {
+    QMutexLocker locker(&s_opMutex);
     auto         keyOpt = keyForPath(filePath);
     if (!keyOpt)
-        return false;
+        return std::nullopt;
     const QString&           key = *keyOpt;
     QVector<ImageSnapshot> snapshots = loadSnapshots(filePath);
 
@@ -797,7 +832,7 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
     if (targetIdx == -1) {
         qWarning() << "[SnapshotManager] Snapshot not found for deletion:"
                    << uuid.toString(QUuid::WithoutBraces);
-        return false;
+        return std::nullopt;
     }
 
     const ImageSnapshot& target = snapshots[targetIdx];
@@ -813,13 +848,15 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
 
     // If the deleted snapshot has a dependent, we must repair the chain to
     // avoid orphaning it.
-    if (dependentIdx != -1) {
-        ImageSnapshot& next = snapshots[dependentIdx];
+    ImageSnapshot *nextSnap = dependentIdx != -1 ? &snapshots[dependentIdx] : nullptr;
+
+    if (nextSnap) {
+        ImageSnapshot& next = *nextSnap;
 
         QImage imgNext = reconstructSnapshot(filePath, next.uuid);
         if (imgNext.isNull()) {
             qWarning() << "[SnapshotManager] Failed to reconstruct next snapshot for chain repair";
-            return false;
+            return std::nullopt;
         }
 
         QString sd = snapshotDirPath(key);
@@ -833,7 +870,7 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
             if (!saveImageFile(sd + '/' + next.fileName, imgNext)) {
                 qWarning() << "[SnapshotManager] Failed to save new base image during chain repair:"
                            << next.fileName;
-                return false;
+                return std::nullopt;
             }
         } else {
             // Rebase the next snapshot against the deleted one's parent
@@ -841,14 +878,14 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
             if (imgParent.isNull()) {
                 qWarning() << "[SnapshotManager] Failed to reconstruct parent for rebasing during "
                               "chain repair";
-                return false;
+                return std::nullopt;
             }
 
             QByteArray delta = computeDelta(imgNext, imgParent);
             if (delta.isEmpty()) {
                 qWarning()
                     << "[SnapshotManager] Failed to compute rebase delta during chain repair";
-                return false;
+                return std::nullopt;
             }
 
             next.isBase = false;
@@ -858,27 +895,36 @@ bool SnapshotManager::deleteSnapshot(const QString& filePath, const QUuid& uuid)
             if (!saveFile(sd + '/' + next.fileName, delta)) {
                 qWarning() << "[SnapshotManager] Failed to save rebase delta during chain repair:"
                            << next.fileName;
-                return false;
+                return std::nullopt;
             }
         }
 
-        // Persist change to database
-        if (!SnapshotDatabase::instance().updateSnapshot(key, next)) {
-            qWarning() << "[SnapshotManager] Failed to update snapshot during chain repair";
-        }
     }
 
     // Delete the target snapshot file
     QString sd = snapshotDirPath(key);
     QFile::remove(sd + '/' + target.fileName);
 
-    // Remove from database
-    if (!SnapshotDatabase::instance().removeSnapshot(key, target.uuid)) {
-        qWarning() << "[SnapshotManager] Failed to remove snapshot from database";
+    // Persist database changes atomically: the chain repair (if any) and the
+    // target removal commit together, so readers never see a dependent
+    // re-based while its old parent row is still present (or vice versa).
+    {
+        SnapshotDbTransaction tx;
+        bool dbOk = true;
+        if (nextSnap)
+            dbOk = SnapshotDatabase::instance().updateSnapshot(key, *nextSnap) && dbOk;
+        dbOk = SnapshotDatabase::instance().removeSnapshot(key, target.uuid) && dbOk;
+        if (!dbOk) {
+            tx.rollback();
+            qWarning() << "[SnapshotManager] Failed to persist snapshot deletion for" << filePath;
+        }
     }
 
     // Update in-memory cache
     snapshots.removeAt(targetIdx);
-    s_snapshotsCache[key] = snapshots;
-    return true;
+    {
+        QMutexLocker cacheLocker(&s_cacheMutex);
+        s_snapshotsCache[key] = snapshots;
+    }
+    return snapshots;
 }

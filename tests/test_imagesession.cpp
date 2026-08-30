@@ -246,6 +246,7 @@ void TestImageSession::testSnapshotDeletion() {
 
     // Scenario A: Delete a snapshot before the current one (e.g., S2)
     session.deleteSnapshot(ids[1]);
+    QTRY_VERIFY_WITH_TIMEOUT(session.snapshots().size() == 2, 5000);
 
     // After deletion, snapshots size is 2. m_currentIndex should be updated to 2.
     QCOMPARE(session.snapshots().size(), 2);
@@ -259,6 +260,7 @@ void TestImageSession::testSnapshotDeletion() {
 
     // Delete S1.
     session.deleteSnapshot(ids[0]);
+    QTRY_VERIFY_WITH_TIMEOUT(session.snapshots().size() == 1, 5000);
 
     // After deletion, snapshots size is 1. S3 is now at index 0.
     // m_currentIndex should have shifted from 1 to 0.
@@ -268,6 +270,7 @@ void TestImageSession::testSnapshotDeletion() {
 
     // Scenario C: Viewing a snapshot and deleting it.
     session.deleteSnapshot(session.snapshots()[0].uuid); // Delete the only remaining snapshot S3
+    QTRY_VERIFY_WITH_TIMEOUT(session.snapshots().size() == 0, 5000);
 
     // Should move back to "Current" (index 0 now)
     QCOMPARE(session.snapshots().size(), 0);

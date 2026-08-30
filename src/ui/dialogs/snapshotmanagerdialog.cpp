@@ -1,5 +1,7 @@
+#include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -8,6 +10,8 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QStyleOption>
+
+#include <QtConcurrent>
 #include "ui/dialogs/snapshotmanagerdialog.h"
 #include "core/snapshotdb.h"
 #include "core/snapshotmanager.h"
@@ -269,12 +273,29 @@ void SnapshotManagerDialog::onClearImage() {
                                 "action cannot be undone."),
                              tr("Delete All"),
                              tr("Cancel"))) {
-        SnapshotManager::deleteAllSnapshots(img.path);
-        SnapshotDatabase::instance().clearImage(img.key);
+        const QString path = img.path;
+        const QString key = img.key;
 
-        emit snapshotChanged(img.path);
-        updateImageGrid();
-        updateDetails();
+        m_btnClearImage->setEnabled(false);
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        auto    watcher = new QFutureWatcher<bool>(this);
+        connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
+        connect(watcher, &QFutureWatcher<bool>::finished, [this, watcher, path, key]() {
+            bool ok = watcher->result();
+            watcher->deleteLater();
+
+            if (ok) {
+                SnapshotDatabase::instance().clearImage(key);
+
+                emit snapshotChanged(path);
+                updateImageGrid();
+                updateDetails();
+            }
+        });
+        watcher->setFuture(QtConcurrent::run([path]() {
+            SnapshotManager::deleteAllSnapshots(path);
+            return true;
+        }));
     }
 }
 

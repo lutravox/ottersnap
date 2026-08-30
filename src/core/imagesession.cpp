@@ -275,10 +275,7 @@ void ImageSession::deleteSnapshot(const QUuid& uuid, bool silent) {
     if (uuid.isNull())
         return;
 
-    QString snapshotUuid = uuid.toString(QUuid::WithoutBraces);
-    int     relativeVersion = -1;
-
-    // Find relative version for the status message
+    int relativeVersion = -1;
     for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
         if (m_snapshots[i].uuid == uuid) {
             relativeVersion = i + 1;
@@ -286,44 +283,67 @@ void ImageSession::deleteSnapshot(const QUuid& uuid, bool silent) {
         }
     }
 
-    if (SnapshotManager::deleteSnapshot(m_filePath, uuid)) {
-        // Store current uuid to adjust it after the list is rebuilt
-        QString oldUuid = m_currentUuid;
+    QString path = m_filePath;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    auto    watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
+    connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
+    connect(watcher, &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished, [this, watcher, uuid, relativeVersion, silent]() {
+        auto result = watcher->result();
+        watcher->deleteLater();
 
-        m_clusterCache.remove(snapshotUuid);
-        rebuildSnapshotList();
+        applySnapshotDeletion(uuid, relativeVersion, silent, result);
+        emit deletionFinished();
+    });
+    watcher->setFuture(QtConcurrent::run([path, uuid]() { return SnapshotManager::deleteSnapshot(path, uuid); }));
+}
 
-        if (oldUuid == c_currentId) {
-            m_currentUuid = c_currentId;
-        } else {
-            // If we deleted the currently selected snapshot, fall back to disk image
-            bool stillExists = false;
-            for (const auto& s : m_snapshots) {
-                if (s.uuid.toString(QUuid::WithoutBraces) == oldUuid) {
-                    stillExists = true;
-                    break;
-                }
-            }
-            if (!stillExists) {
-                m_currentUuid = c_currentId;
-            }
-        }
-
-        // Update view state if dimensions change
-        QSize newDims = dimensions();
-        if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
-            m_viewState.updateImageSize(newDims.width(), newDims.height());
-        }
-
-        emit imageChanged();
-        if (!silent) {
-            emit statusMessage(QString("Snapshot %1 deleted successfully.").arg(relativeVersion));
-        }
-    } else {
-        if (!silent) {
-            emit statusMessage("Failed to delete snapshot!");
-        }
+void ImageSession::applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result) {
+    if (!result) {
+        if (!silent)
+            emit statusMessage(tr("Failed to delete snapshot!"));
+        return;
     }
+
+    m_clusterCache.remove(uuid.toString(QUuid::WithoutBraces));
+    applySnapshotList(*result);
+
+    // Update view state if dimensions change
+    QSize newDims = dimensions();
+    if (newDims != QSize(m_viewState.imageWidth(), m_viewState.imageHeight())) {
+        m_viewState.updateImageSize(newDims.width(), newDims.height());
+    }
+
+    emit imageChanged();
+    if (!silent) {
+        emit statusMessage(tr("Snapshot %1 deleted successfully.").arg(relativeVersion));
+    }
+}
+
+void ImageSession::deleteAllSnapshots() {
+    if (m_filePath.isEmpty())
+        return;
+
+    int     total = m_snapshots.size();
+    QString path = m_filePath;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    auto    watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
+    connect(watcher, &QFutureWatcher<bool>::finished, [this, watcher, total]() {
+        bool ok = watcher->result();
+        watcher->deleteLater();
+
+        if (ok) {
+            m_clusterCache.clear();
+            applySnapshotList(QVector<ImageSnapshot>());
+            emit imageChanged();
+            emit statusMessage(tr("Deleted all %1 snapshots.").arg(total));
+        }
+        emit deletionFinished();
+    });
+    watcher->setFuture(QtConcurrent::run([path]() {
+        SnapshotManager::deleteAllSnapshots(path);
+        return true;
+    }));
 }
 
 bool ImageSession::isCurrentImage(int index) const {
@@ -415,6 +435,9 @@ void ImageSession::performSave(const QImage& img, bool isAutosave) {
     QString path = m_filePath;
 
     auto watcher = new QFutureWatcher<std::optional<SnapshotManager::SaveResult>>(this);
+    if (!isAutosave) {
+        connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
+    }
     connect(watcher,
             &QFutureWatcher<std::optional<SnapshotManager::SaveResult>>::finished,
             [this, watcher, isAutosave]() { handleSaveFinished(watcher, isAutosave); });
@@ -425,10 +448,6 @@ void ImageSession::performSave(const QImage& img, bool isAutosave) {
 
 void ImageSession::handleSaveFinished(
     QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher, bool isAutosave) {
-    if (!isAutosave) {
-        QApplication::restoreOverrideCursor();
-    }
-
     auto res = watcher->result();
     if (res && res->status == SnapshotManager::SaveStatus::Created) {
         bool wasViewingCurrent = isCurrentImageSelected();
@@ -472,7 +491,11 @@ void ImageSession::setMirror(bool enabled) {
 }
 
 void ImageSession::rebuildSnapshotList() {
-    m_snapshots = SnapshotManager::loadSnapshots(m_filePath);
+    applySnapshotList(SnapshotManager::loadSnapshots(m_filePath));
+}
+
+void ImageSession::applySnapshotList(const QVector<ImageSnapshot>& list) {
+    m_snapshots = list;
     m_labels.clear();
     for (const auto& v : m_snapshots) {
         m_labels.append(v.timestamp.toString("MMMM d, yyyy h:mm:ss AP"));

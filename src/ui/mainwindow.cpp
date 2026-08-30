@@ -1280,15 +1280,17 @@ void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuid
                 .arg(uuids.size()),
             tr("Delete"),
             tr("Cancel"))) {
+        const int total = uuids.size();
+        auto      pending = QSharedPointer<int>::create(total);
+        connect(tab->session(), &ImageSession::deletionFinished, this, [this, tab, pending, total]() {
+            if (--*pending == 0) {
+                disconnect(tab->session(), &ImageSession::deletionFinished, this, nullptr);
+                notify(tr("Deleted %1 snapshots successfully.").arg(total));
+            }
+        });
+
         for (const auto& uuid : uuids) {
             tab->deleteSnapshot(uuid, true);
-        }
-        updateSnapshotTimeline();
-        updateViewer();
-        notify(tr("Deleted %1 snapshots successfully.").arg(uuids.size()));
-
-        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
-            onCloseCurrentTab();
         }
     }
 }
@@ -1306,13 +1308,6 @@ void MainWindow::onSnapshotDeletionRequested(const QUuid& uuid) {
                              tr("Delete"),
                              tr("Cancel"))) {
         tab->deleteSnapshot(uuid, false);
-        updateSnapshotTimeline();
-        updateViewer();
-
-        // If it's a snapshot-only session and the last snapshot was deleted, close the tab.
-        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
-            onCloseCurrentTab();
-        }
     }
 }
 
@@ -1334,13 +1329,6 @@ void MainWindow::onDeleteAllSnapshotsRequested() {
             tr("Delete All"),
             tr("Cancel"))) {
         tab->deleteAllSnapshots();
-        updateSnapshotTimeline();
-        updateViewer();
-
-        // If it's a snapshot-only session and all snapshots were deleted, close the tab.
-        if (tab->session()->isSnapshotOnly() && tab->session()->snapshots().isEmpty()) {
-            onCloseCurrentTab();
-        }
     }
 }
 

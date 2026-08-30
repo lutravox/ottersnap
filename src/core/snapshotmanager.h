@@ -102,7 +102,7 @@ class SnapshotManager {
     /// @param filePath Absolute path of the source image.
     /// @param uuid The unique identity of the snapshot to remove.
     /// @return True if the snapshot was successfully deleted, false otherwise.
-    static bool deleteSnapshot(const QString& filePath, const QUuid& uuid);
+    static std::optional<QVector<ImageSnapshot>> deleteSnapshot(const QString& filePath, const QUuid& uuid);
 
     /// @brief Save a new snapshot of an image, skipping duplicates.
     /// @param filePath Absolute path of the source image.
@@ -182,14 +182,22 @@ private:
     /// @param snapshots The snapshot list to sort in place.
     static void sortSnapshots(QVector<ImageSnapshot>& snapshots);
 
-    /// @brief Global recursive lock for snapshot store operations to ensure
-    /// thread safety. Recursive so loadSnapshots() can safely acquire it
-    /// both directly and from within saveSnapshot().
-    static QRecursiveMutex s_mutex;
+    /// @brief Serializes mutating snapshot store operations (save, delete,
+    /// import, export). Recursive so operations may call each other.
+    /// GUI-thread reads never take this lock.
+    static QRecursiveMutex s_opMutex;
+
+    /// @brief Protects the in-memory caches below. Held only briefly; never
+    /// while waiting on s_opMutex or doing I/O of any length.
+    static QMutex s_cacheMutex;
 
     /// @brief In-memory cache of all snapshot records, keyed by image key.
     static QHash<QString, QVector<ImageSnapshot>> s_snapshotsCache;
 
     /// @brief In-memory cache of registered file paths to image keys.
     static QHash<QString, QString> s_pathKeyCache;
+
+  private:
+    /// @brief keyForPath() without locking; caller must hold s_cacheMutex.
+    static std::optional<QString> keyForPathLocked(const QString& filePath);
 };

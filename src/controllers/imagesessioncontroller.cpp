@@ -82,11 +82,16 @@ void ImageSessionController::setActiveSession(ImageSession *session) {
                    &ImageSession::colorClustersChanged,
                    this,
                    &ImageSessionController::handleColorClustersChanged);
+        disconnect(m_activeSession, &ImageSession::deletionFinished, this, nullptr);
     }
 
     m_activeSession = session;
 
     if (m_activeSession) {
+        connect(m_activeSession, &ImageSession::deletionFinished, this, [this]() {
+            if (m_activeSession)
+                notifySnapshotChanged(m_activeSession->filePath(), true);
+        });
         connect(m_activeSession,
                 &ImageSession::effectsChanged,
                 this,
@@ -136,10 +141,7 @@ void ImageSessionController::deleteSnapshot(const QUuid& uuid, bool silent) {
 
 void ImageSessionController::deleteAllSnapshots() {
     if (m_activeSession) {
-        SnapshotManager::deleteAllSnapshots(m_activeSession->filePath());
-        m_activeSession->rebuildSnapshotList();
-
-        notifySnapshotChanged(m_activeSession->filePath());
+        m_activeSession->deleteAllSnapshots();
     }
 }
 
@@ -151,12 +153,13 @@ QStringList ImageSessionController::openPaths() const {
     return m_sessions.keys();
 }
 
-void ImageSessionController::notifySnapshotChanged(const QString& filePath) {
+void ImageSessionController::notifySnapshotChanged(const QString& filePath, bool sessionAlreadyUpdated) {
     ImageSession *session = sessionForPath(filePath);
     if (!session)
         return;
 
-    session->rebuildSnapshotList();
+    if (!sessionAlreadyUpdated)
+        session->rebuildSnapshotList();
 
     if (session->isSnapshotOnly() && session->snapshots().isEmpty()) {
         emit sessionInvalidated(filePath);

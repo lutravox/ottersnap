@@ -63,7 +63,7 @@ class ImageSessionController : public QObject {
     }
 
     /// @brief Notify the controller that snapshots have changed for a given image.
-    void notifySnapshotChanged(const QString& filePath);
+    void notifySnapshotChanged(const QString& filePath, bool sessionAlreadyUpdated = false);
 
   signals:
     /// @brief Emitted when the active session changes.

@@ -24,7 +24,7 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
     nameLabel->setFont(nameFont);
 
     auto *versionLabel = new QLabel(
-        tr("Version %1.%2.%3").arg(VERSION_MAJOR).arg(VERSION_MINOR).arg(VERSION_PATCH), this);
+        tr("Version %1%2").arg(VERSION_STRING).arg(VERSION_SUFFIX), this);
     versionLabel->setAlignment(Qt::AlignCenter);
     versionLabel->setStyleSheet("color: gray;");
 

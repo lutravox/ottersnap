@@ -1,6 +1,6 @@
 # ── Project & toolchain ──────────────────────────────────────────────────
 cmake_minimum_required(VERSION 3.17)
-project(ottersnap VERSION 0.1.0 LANGUAGES CXX)
+project(ottersnap VERSION 1.0.0 LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.5)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -15,6 +15,24 @@ pkg_check_modules(LIBZSTD REQUIRED IMPORTED_TARGET libzstd)
 qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 
+
+# ── App version ──────────────────────────────────────────────────────────
+# A build from a commit tagged exactly v<PROJECT_VERSION> carries no suffix;
+# any other build appends the short commit hash for identification.
+set(VERSION_SUFFIX "")
+execute_process(COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+execute_process(COMMAND git describe --tags --exact-match
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(GIT_COMMIT_HASH AND NOT GIT_TAG STREQUAL "v${PROJECT_VERSION}")
+    set(VERSION_SUFFIX "-g${GIT_COMMIT_HASH}")
+endif()
 
 configure_file(src/config/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/version.h)
 

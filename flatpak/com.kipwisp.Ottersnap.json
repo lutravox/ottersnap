@@ -1,5 +1,6 @@
 {
     "app-id": "com.kipwisp.Ottersnap",
+    "version": "1.0.0",
     "runtime": "org.kde.Platform",
     "runtime-version": "6.9",
     "sdk": "org.kde.Sdk",
@@ -18,6 +19,10 @@
         {
             "name": "ottersnap",
             "buildsystem": "cmake",
+            "build-command": [
+                "cmake --build build",
+                "install -D docs/metadata/com.kipwisp.Ottersnap.metainfo.xml $FLATPAK_DEST/share/metainfo/com.kipwisp.Ottersnap.metainfo.xml"
+            ],
             "sources": [
                 {
                     "type": "dir",

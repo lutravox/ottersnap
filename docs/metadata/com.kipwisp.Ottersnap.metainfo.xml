@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.kipwisp.Ottersnap</id>
+  <name>Ottersnap</name>
+  <summary>Snapshot image viewer with Vulkan rendering</summary>
+  <description>
+    <p>
+      Ottersnap is a desktop application for viewing images using
+      high-performance Vulkan rendering while automatically tracking and
+      preserving their history. Open an image file and it is watched for
+      changes; every update snapshots the previous state onto a browsable
+      timeline.
+    </p>
+    <p>
+      Browse the full history of an image, extract dominant color clusters, and adjust the view with
+      grayscale and mirroring effects.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.kipwisp.Ottersnap</launchable>
+  <project_license>GPL-3.0-or-later</project_license>
+  <url type="homepage">https://kipwisp.com</url>
+  <url type="vcs-browser">https://github.com/Kipwisp/ottersnap</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Viewer</category>
+  </categories>
+  <keywords>
+    <keyword>image</keyword>
+    <keyword>viewer</keyword>
+    <keyword>vulkan</keyword>
+    <keyword>history</keyword>
+    <keyword>snapshot</keyword>
+  </keywords>
+  <screenshots>
+    <screenshot type="default">
+      <image type="source">https://raw.githubusercontent.com/Kipwisp/ottersnap/main/docs/images/preview.png</image>
+      <caption>Ottersnap viewer and snapshot timeline</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.0.0" type="stable"/>
+  </releases>
+</component>

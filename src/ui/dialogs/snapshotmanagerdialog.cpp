@@ -45,16 +45,14 @@ SnapshotItem::SnapshotItem(int            index,
 
     auto *nameLabel = new QLabel();
     nameLabel->setObjectName("nameLabel");
-    nameLabel->setFixedWidth(120);
     nameLabel->setAlignment(Qt::AlignCenter);
 
     QFontMetrics fm(nameLabel->font());
-    int          availableWidth = 120;
+    int          availableWidth = 120 - 2 * 5;
     nameLabel->setText(fm.elidedText(filename, Qt::ElideRight, availableWidth));
 
     auto *countLabel = new QLabel(QString("(%1 snapshots)").arg(count));
     countLabel->setObjectName("countLabel");
-    countLabel->setFixedWidth(120);
     countLabel->setAlignment(Qt::AlignCenter);
 
     textLayout->addWidget(nameLabel);

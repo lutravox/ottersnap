@@ -218,6 +218,7 @@ class ImageSession : public QObject, public IEffectsModel {
     bool                   m_saveInFlight = false;
     bool                   m_saveCoalesced = false;
     bool                   m_saveCoalescedManual = false;
+    bool                   m_reloadMessagePending = false;
     QImage                 m_lastSavedImage;
     QUuid                  m_lastSavedUuid;
     QImage                 m_queuedSaveImage;

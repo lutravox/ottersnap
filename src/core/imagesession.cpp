@@ -418,15 +418,22 @@ void ImageSession::reloadImage() {
         ThumbnailCache::invalidate(SnapshotManager::cacheKeyForPath(m_filePath),
                                    ThumbnailConstants::CurrentVersion);
 
+        bool autosaveTriggered = false;
         if (!m_diskImage.isNull() && AppSettings::autosaveSnapshots()) {
             autosaveSnapshot(m_diskImage);
+            autosaveTriggered = true;
         }
 
         m_diskImage = newImage;
         m_lastModified = QFileInfo(m_filePath).lastModified();
         m_clusterCache.remove(c_currentId);
         updateColorClusters();
-        emit statusMessage(tr("Current image reloaded."));
+
+        if (autosaveTriggered) {
+            m_reloadMessagePending = true;
+        } else {
+            emit statusMessage(tr("Current image reloaded."));
+        }
         emit imageChanged();
     });
 
@@ -504,6 +511,16 @@ void ImageSession::performSave(const QImage& img, bool isAutosave) {
 void ImageSession::handleSaveFinished(
     QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher, bool isAutosave) {
     auto res = watcher->result();
+
+    QString reloadMsg;
+    if (m_reloadMessagePending) {
+        m_reloadMessagePending = false;
+        reloadMsg = tr("Current image reloaded.");
+    }
+    auto withReload = [reloadMsg](const QString& msg) {
+        return reloadMsg.isEmpty() ? msg : reloadMsg + QLatin1Char(' ') + msg;
+    };
+
     if (res && res->status == SnapshotManager::SaveStatus::Created) {
         bool wasViewingCurrent = isCurrentImageSelected();
         rebuildSnapshotList();
@@ -514,14 +531,17 @@ void ImageSession::handleSaveFinished(
         }
 
         QString msg = isAutosave ? "Autosave successful." : "New snapshot created successfully.";
-        emit    statusMessage(msg);
+        emit    statusMessage(withReload(msg));
         emit    snapshotCreated(res->uuid);
     } else if (res && res->status == SnapshotManager::SaveStatus::Existing && !isAutosave) {
         QString msg = QString("Current image already saved as latest snapshot.");
-        emit    statusMessage(msg);
+        emit    statusMessage(withReload(msg));
+    } else if (res && res->status == SnapshotManager::SaveStatus::Existing && isAutosave) {
+        if (!reloadMsg.isEmpty())
+            emit statusMessage(withReload(tr("Autosave skipped, no changes to save.")));
     } else if (!res || (res && res->status != SnapshotManager::SaveStatus::Existing &&
                         res->status != SnapshotManager::SaveStatus::Created)) {
-        emit statusMessage("Save failed!");
+        emit statusMessage(withReload("Save failed!"));
     }
 
     if (res && (res->status == SnapshotManager::SaveStatus::Created ||

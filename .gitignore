@@ -5,6 +5,7 @@ Testing/
 
 # ── Flatpak build artifacts ─────────────────────────────────────
 build-flatpak/
+repo/
 .flatpak-builder/
 
 # ── Qt / autogen artifacts ──────────────────────────────────────

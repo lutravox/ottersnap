@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ottersnap
+GenericName=Image Viewer
+Comment=View images and keep a timeline of their history
+Exec=ottersnap
+Icon=com.kipwisp.Ottersnap
+Terminal=false
+Categories=Graphics;Viewer;Qt;KDE;
+Keywords=image;vulkan;snapshot;history;viewer;
+StartupNotify=true

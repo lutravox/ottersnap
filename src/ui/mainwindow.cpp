@@ -147,7 +147,6 @@ void MainWindow::updateShortcut(const QString& actionId, const QKeySequence& seq
 }
 
 void MainWindow::setupUi() {
-    setWindowTitle(AppSettings::applicationName());
     resize(c_defaultWidth, c_defaultHeight);
     setAcceptDrops(true);
 
@@ -175,6 +174,7 @@ void MainWindow::setupUi() {
     connect(m_tabBar, &QTabWidget::tabCloseRequested, this, &MainWindow::onCloseTab);
     connect(m_tabBar, &QTabWidget::currentChanged, this, &MainWindow::onTabChanged);
     centralLayout->addWidget(m_tabBar, 0);
+    updateWindowTitle();
 
     centralLayout->addWidget(m_contentStack, 1);
 
@@ -846,6 +846,8 @@ void MainWindow::onUpdateImagePath() {
     if (index != -1) {
         m_tabBar->setTabText(index, QFileInfo(newPath).fileName());
         m_tabBar->setTabToolTip(index, newPath);
+        if (index == m_tabBar->currentIndex())
+            updateWindowTitle();
     }
 
     updateViewer(tab);
@@ -984,10 +986,14 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     // file wasn't found, open in snapshot only mode
     if (!session) {
         session = m_sessionController->openImage(path, true);
+        if (session)
+            notify(tr("Could not load image file, showing snapshot history: %1").arg(path));
     }
 
-    if (!session)
+    if (!session) {
+        notify(tr("Failed to load image: %1").arg(path));
         return nullptr;
+    }
 
     // Check if already open in a tab
     if (auto *existing = m_tabPaths.value(path)) {
@@ -1036,6 +1042,7 @@ void MainWindow::onCloseTab(int index) {
     m_tabBar->removeTab(index);
 
     updateState();
+    updateWindowTitle();
     auto *nextTab = currentTab();
     if (nextTab) {
         m_viewerController->requestSessionChange(nextTab->session(),
@@ -1072,6 +1079,7 @@ void MainWindow::onTabChanged(int index) {
     }
 
     setTabThumbnail(index);
+    updateWindowTitle();
 }
 
 void MainWindow::setTabThumbnail(int index) {
@@ -1091,6 +1099,22 @@ void MainWindow::setTabThumbnail(int index) {
         m_tabBar->setTabIcon(
             index, QIcon(thumb.scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
     }
+}
+
+void MainWindow::updateWindowTitle() {
+    const QString appName = AppSettings::applicationName();
+    if (!m_tabBar || m_tabBar->count() == 0) {
+        setWindowTitle(appName);
+        return;
+    }
+
+    const QString tabText = m_tabBar->tabText(m_tabBar->currentIndex());
+    if (tabText.isEmpty()) {
+        setWindowTitle(appName);
+        return;
+    }
+
+    setWindowTitle(tr("%1 - %2").arg(tabText, appName));
 }
 
 ImageTab *MainWindow::currentTab() {

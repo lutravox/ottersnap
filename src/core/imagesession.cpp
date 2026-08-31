@@ -45,10 +45,8 @@ bool ImageSession::openImage(const QString& filePath) {
         m_diskImage = QImage();
     } else {
         m_diskImage = DiskUtils::loadImage(m_filePath);
-        if (m_diskImage.isNull()) {
-            emit statusMessage(QString("Failed to load!: %1").arg(m_filePath));
+        if (m_diskImage.isNull())
             return false;
-        }
     }
 
     rebuildSnapshotList();

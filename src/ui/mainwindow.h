@@ -93,6 +93,7 @@ class MainWindow : public QMainWindow {
     void      setTabThumbnail(int index);
     void      notify(const QString& msg, int timeoutMs = -1);
     void      updateSnapshotTimeline();
+    void      updateWindowTitle();
     void      onSnapshotChanged(int index);
     void      syncTimelineSelection();
     void      updateShortcut(const QString& actionId, const QKeySequence& sequence);

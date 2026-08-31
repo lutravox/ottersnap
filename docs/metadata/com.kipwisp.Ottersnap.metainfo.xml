@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>com.kipwisp.Ottersnap</id>
   <name>Ottersnap</name>
-  <summary>Snapshot image viewer with Vulkan rendering</summary>
+  <summary>Snapshot image viewer</summary>
   <description>
     <p>
       Ottersnap is a desktop application for viewing images using
@@ -11,13 +11,11 @@
       changes; every update snapshots the previous state onto a browsable
       timeline.
     </p>
-    <p>
-      Browse the full history of an image, extract dominant color clusters, and adjust the view with
-      grayscale and mirroring effects.
-    </p>
   </description>
   <launchable type="desktop-id">com.kipwisp.Ottersnap</launchable>
-  <project_license>GPL-3.0-or-later</project_license>
+  <icon type="stock">com.kipwisp.Ottersnap</icon>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0+</project_license>
   <url type="homepage">https://kipwisp.com</url>
   <url type="vcs-browser">https://github.com/Kipwisp/ottersnap</url>
   <categories>
@@ -38,6 +36,6 @@
     </screenshot>
   </screenshots>
   <releases>
-    <release version="1.0.0" type="stable"/>
+    <release version="1.0.0" type="stable" date="2026-08-31"/>
   </releases>
 </component>

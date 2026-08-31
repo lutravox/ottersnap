@@ -1,28 +1,31 @@
-# Ottersnap
+# Ottersnap - Snapshot Image Viewer
 
-**Ottersnap** is a Qt6 application for viewing images rendered using Vulkan while automatically tracking and preserving their history. When you open an image file, it is watched for changes - make an update to the image, and the old state will get snapshotted onto a timeline that can be browsed inside of Ottersnap.
+**Ottersnap** is a Qt6 application for viewing images using high-performance Vulkan rendering while automatically tracking and preserving their history. When you open an image file, it is watched for changes — make an update to the image, and the old state is snapshotted onto a timeline allowing you to keep a complete collection of the image's history.
+
+![Ottersnap](docs/images/preview.png)
 
 ## Features
 
-- **Image Timeline** — Versions of an image are saved to a timeline allowing you to go back to any captured version.
-- **Automatic Version Capture** — Images can be automatically monitored for changes. On change, a new snapshot gets added to the timeline for the image.
-- **Vulkan-Accelerated Viewer** — GPU-rendered image display using Vulkan.
-- **Modifiers** — Adjust the view of the image using filters such as mirroring or grayscale.
-- **Session Persistence** — Open tabs can be saved on exit and restored on launch.
+- **Image Timeline** — Versions of an image are saved to a timeline, allowing you to go back to any captured version.
+- **Automatic Version Capture** — Images are monitored for live changes; on change, a new snapshot is added to the timeline.
+- **Effects** — Adjust the view of the image using modifiers such as grayscale and mirroring.
+- **Color Picking** — Extract dominant color clusters and pick colors from the image.
 
 ## Build & Run
 
 ### Prerequisites
 
+- **CMake ≥ 3.17**
 - **Qt 6.5+**
-- **CMake ≥3.17**
+- **libzip**
+- **libzstd**
 - **glslc**
 
 ### Build
 
 ```bash
-cmake --preset=release
-cmake --build --preset=release
+cmake -S . -B build
+cmake --build build
 ```
 
 ### Flatpak
@@ -33,10 +36,14 @@ flatpak-builder --force-clean build-flatpak com.kipwisp.Ottersnap.json
 flatpak install --user ../build-flatpak/repo/com.kipwisp.Ottersnap.flatpakref
 ```
 
+### Tests
+
+```bash
+cmake -S . -B build -DBUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build
+```
+
 ## License
 
 This project is licensed under the [GNU General Public License v3](LICENSE).
-
-## Acknowledgments
-
-Built with Qt6.

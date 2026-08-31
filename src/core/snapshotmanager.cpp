@@ -559,11 +559,13 @@ qint64 SnapshotManager::calculateStorageUsage(const QString& filePath) {
 }
 
 QString SnapshotManager::baseDir() {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + '/' + c_baseSubDir;
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) +
+           "/ottersnap/" + c_baseSubDir;
 }
 
 QString SnapshotManager::thumbnailDir() {
-    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+    return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+           "/ottersnap/thumbnails";
 }
 
 QString SnapshotManager::normalizePath(const QString& filePath) {

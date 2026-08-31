@@ -58,7 +58,8 @@ void ThumbnailCache::invalidate(const QString& imageKey, const QString& version)
     ThumbnailCache::remove(keyFor(imageKey, version));
 
     QString baseThumbDir =
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+        QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+        "/ottersnap/thumbnails";
     QString thumbPath = baseThumbDir + '/' + imageKey + '/' + version +
                         ThumbnailConstants::Extension;
 
@@ -90,7 +91,8 @@ QImage ThumbnailCache::loadThumbnail(const QString& imageKey, const QString& ver
     }
 
     QString baseThumbDir =
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+        QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+        "/ottersnap/thumbnails";
     QString cacheDir = baseThumbDir + '/' + imageKey;
 
     QDir().mkpath(cacheDir);

@@ -2,8 +2,9 @@
 #include "config/appsettings.h"
 
 constexpr char c_applicationName[] = "Ottersnap";
+constexpr char c_applicationId[] = "ottersnap";
 constexpr char c_repositoryUrl[] = "https://github.com/Kipwisp/ottersnap";
-constexpr char c_organizationName[] = "";
+constexpr char c_organizationName[] = "ottersnap";
 constexpr char c_organizationDomain[] = "kipwisp.com";
 
 QSettings& AppSettings::settings() {
@@ -115,6 +116,10 @@ void AppSettings::resetBackgroundColor() {
 
 const char *AppSettings::applicationName() {
     return c_applicationName;
+}
+
+const char *AppSettings::applicationId() {
+    return c_applicationId;
 }
 
 const char *AppSettings::repositoryUrl() {

@@ -9,14 +9,14 @@
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+    app.setApplicationName(AppSettings::applicationId());
+    app.setOrganizationName(AppSettings::organizationName());
+    app.setOrganizationDomain(AppSettings::organizationDomain());
+
     VulkanContext::instance().initializeInstance();
 
     // Initialize snapshot database at startup
     SnapshotDatabase::instance().init();
-
-    app.setApplicationName(AppSettings::applicationName());
-    app.setOrganizationName(AppSettings::organizationName());
-    app.setOrganizationDomain(AppSettings::organizationDomain());
 
     QTranslator translator;
     if (translator.load(QLocale::system(), "ottersnap", "_", ":/translations")) {

@@ -18,8 +18,8 @@ bool SnapshotDatabase::init(const QString& dbPath) {
     if (!dbPath.isEmpty()) {
         m_dbPath = dbPath;
     } else {
-        m_dbPath =
-            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/snapshots.db";
+        m_dbPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) +
+                   "/ottersnap/snapshots.db";
     }
     // Ensure the directory exists before trying to open the database file
     QFileInfo fileInfo(m_dbPath);

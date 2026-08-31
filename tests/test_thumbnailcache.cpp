@@ -2,6 +2,7 @@
 #include <QImage>
 #include <QString>
 #include <QtTest>
+#include "core/snapshotmanager.h"
 #include "core/thumbnailcache.h"
 #include "core/thumbnailmanager.h"
 
@@ -107,8 +108,7 @@ void TestThumbnailCache::testLoadThumbnailCacheHit() {
     QString version = "v1";
     QSize   size(32, 32);
 
-    QString baseThumbDir =
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbnails";
+    QString baseThumbDir = SnapshotManager::thumbnailDir();
     QString cacheDir = baseThumbDir + '/' + key;
     QDir().mkpath(cacheDir);
     QImage thumb(64, 64, QImage::Format_RGB32);

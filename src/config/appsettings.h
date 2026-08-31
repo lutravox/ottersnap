@@ -54,6 +54,8 @@ class AppSettings {
 
     /// @brief Return the application name.
     static const char *applicationName();
+    /// @brief Return the lowercase application id used for storage paths.
+    static const char *applicationId();
     /// @brief Return the repository URL.
     static const char *repositoryUrl();
     /// @brief Return the organization name.

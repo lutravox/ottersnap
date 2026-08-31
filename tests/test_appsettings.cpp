@@ -23,8 +23,6 @@ class TestAppSettings : public QObject {
 };
 
 void TestAppSettings::initTestCase() {
-    // Use a unique organization so test writes don't collide with
-    // the real application's QSettings.
     QCoreApplication::setOrganizationName("OttersnapTest");
     QCoreApplication::setApplicationName("test_appsettings");
 }

@@ -1,6 +1,6 @@
 # Continuous integration: configure, build and run the test suite on every
-# push and pull request. The Vulkan-dependent tests run under a virtual X
-# server (xcb platform) backed by Mesa's software (lavapipe) Vulkan driver.
+# push and pull request. Tests run headless on the Qt "offscreen" platform;
+# Vulkan tests use Mesa's software (lavapipe) driver, which needs no display.
 name: CI
 
 on:
@@ -31,22 +31,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xvfb \
             mesa-vulkan-drivers \
-            libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-            libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 \
-            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 \
-            libxcb-xkb1 libxcb-cursor0 libxkbcommon0 libxkbcommon-x11-0 libgssapi-krb5-2 \
-            libfontconfig1 libfreetype6 libdbus-1-3 \
+            libgl1 libegl1 libopengl0 \
+            libfontconfig1 libfreetype6 \
+            libxkbcommon0 libglib2.0-0t64 libdbus-1-3 libgssapi-krb5-2 \
             vulkan-tools
 
       - name: Verify Vulkan device is available
-        run: |
-          set -euo pipefail
-          xvfb-run -a vulkaninfo --summary
+        run: vulkaninfo --summary
 
       - name: Test
         working-directory: build
         env:
-          QT_QPA_PLATFORM: xcb
-        run: xvfb-run -a ctest --output-on-failure --parallel "$(nproc)"
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --output-on-failure --parallel "$(nproc)"

@@ -68,7 +68,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: qt
-        key: qt-${{ inputs.qt-version }}-${{ runner.arch }}
+        key: qt-${{ inputs.qt-version }}-qtimageformats-${{ runner.arch }}
 
     - name: Install Qt via aqtinstall
       if: steps.qt-cache.outputs.cache-hit != 'true'
@@ -77,7 +77,7 @@ runs:
         set -euo pipefail
         python3 -m venv .aqt
         ./.aqt/bin/pip install --upgrade pip aqtinstall
-        ./.aqt/bin/python -m aqt install-qt linux desktop "${{ inputs.qt-version }}" -m qtshadertools -O qt
+        ./.aqt/bin/python -m aqt install-qt linux desktop "${{ inputs.qt-version }}" -m qtshadertools -m qtimageformats -O qt
 
     - name: Export Qt prefix path
       shell: bash

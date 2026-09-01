@@ -215,6 +215,10 @@ add_executable(${PROJECT_NAME}
     src/resources/resources.qrc
 )
 
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
 # ── QT6 Shaders ──────────────────────────────────────────────────────────
 qt6_add_shaders(${PROJECT_NAME} "color_shaders"
     PREFIX "/shaders"

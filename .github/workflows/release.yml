@@ -15,8 +15,6 @@ permissions:
 
 jobs:
   appimage:
-    # linuxdeployqt refuses to run on hosts newer than glibc 2.35 (Jammy),
-    # so this job must stay on the 22.04 runner image.
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -52,6 +50,14 @@ jobs:
             https://github.com/probonopd/linuxdeployqt/releases/latest/download/linuxdeployqt-continuous-x86_64.AppImage
           chmod +x linuxdeployqt.AppImage
 
+      - name: Prepare AppDir
+        run: |
+          appdir="Ottersnap.AppDir"
+          mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications"
+          cp build/bin/ottersnap "$appdir/usr/bin/"
+          cp flatpak/io.github.lutravox.Ottersnap.desktop "$appdir/usr/share/applications/"
+          cp flatpak/io.github.lutravox.Ottersnap.png "$appdir/usr/share/applications/"
+
       - name: Build AppImage
         run: |
           export PATH="${CMAKE_PREFIX_PATH}/bin:${PATH}"
@@ -60,7 +66,7 @@ jobs:
           # Ubuntu, which makes the deployment abort.
           rm -f "${CMAKE_PREFIX_PATH}/plugins/sqldrivers/libqsqlmimer.so"
           ./linuxdeployqt.AppImage --appimage-extract-and-run \
-            flatpak/io.github.lutravox.Ottersnap.desktop \
+            Ottersnap.AppDir/usr/share/applications/io.github.lutravox.Ottersnap.desktop \
             -appimage -bundle-non-qt-libs -verbose=1
 
       - name: Name the AppImage after the release

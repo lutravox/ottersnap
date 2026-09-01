@@ -18,13 +18,30 @@
 
 ## Build & Run
 
-### Prerequisites
+### Build Dependencies
 
-- **CMake ≥ 3.17**
-- **Qt 6.5+**
-- **libzip**
-- **libzstd**
-- **glslc**
+
+Install build dependencies for your distribution:
+
+#### Arch Linux
+
+```bash
+sudo pacman -S cmake ninja pkgconf qt6-base qt6-shadertools shaderc libzip zstd vulkan-headers libglvnd
+```
+
+#### Debian (Trixie)
+
+```bash
+sudo apt-get install cmake ninja-build pkgconf qt6-base-dev qt6-shadertools-dev \
+  glslc libzip-dev libzstd-dev libvulkan-dev libgl-dev
+```
+
+#### Fedora 44
+
+```bash
+sudo dnf install cmake ninja-build pkgconf qt6-qtbase-devel qt6-qtshadertools-devel \
+  glslc libzip-devel libzstd-devel vulkan-headers mesa-libGL-devel
+```
 
 ### Build
 

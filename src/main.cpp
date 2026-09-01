@@ -11,7 +11,7 @@
 namespace {
 
 void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg) {
-    if (type <= QtInfoMsg && !qEnvironmentVariableIsSet("OTTERSNAP_DEBUG"))
+    if ((type == QtDebugMsg || type == QtInfoMsg) && !qEnvironmentVariableIsSet("OTTERSNAP_DEBUG"))
         return;
     fprintf(stderr, "%s\n", msg.toLocal8Bit().constData());
 }

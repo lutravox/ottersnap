@@ -140,6 +140,13 @@ add_custom_command(
 
 add_custom_target(shader_rcc ALL DEPENDS ${SHADER_RCC_SRC})
 
+# Object library so the resource initializer is always linked into the
+# executable; a plain static library would drop the object file.
+# PIC is required because the executable links as PIE and the rcc output
+# references the protected qt_resourceFeatureZstd symbol.
+add_library(shader_resources OBJECT ${SHADER_RCC_SRC})
+set_target_properties(shader_resources PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # ── Main executable ──────────────────────────────────────────────────────
 set(OTTERSNAP_CORE_SOURCES
     # UI
@@ -197,9 +204,6 @@ set(OTTERSNAP_CORE_SOURCES
 
     # Configuration
     src/config/appsettings.cpp
-
-    # Generated shader resource
-    ${SHADER_RCC_SRC}
 )
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
@@ -228,7 +232,7 @@ qt6_add_shaders(${PROJECT_NAME} "color_shaders"
 )
 
 # ── Link libraries ───────────────────────────────────────────────────────
-target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE ottersnap_core shader_resources Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets)
 
 qt_add_translations(${PROJECT_NAME}
     RESOURCE_PREFIX "/translations"

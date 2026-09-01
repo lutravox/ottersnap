@@ -1,5 +1,5 @@
 {
-    "app-id": "com.kipwisp.Ottersnap",
+    "app-id": "io.github.lutravox.Ottersnap",
     "runtime": "org.kde.Platform",
     "runtime-version": "6.9",
     "sdk": "org.kde.Sdk",
@@ -46,11 +46,11 @@
                 "cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$FLATPAK_DEST",
                 "cmake --build build",
                 "cmake --install build",
-                "install -D docs/metadata/com.kipwisp.Ottersnap.metainfo.xml $FLATPAK_DEST/share/metainfo/com.kipwisp.Ottersnap.metainfo.xml",
-                "install -D flatpak/com.kipwisp.Ottersnap.desktop $FLATPAK_DEST/share/applications/com.kipwisp.Ottersnap.desktop",
+                "install -D docs/metadata/io.github.lutravox.Ottersnap.metainfo.xml $FLATPAK_DEST/share/metainfo/io.github.lutravox.Ottersnap.metainfo.xml",
+                "install -D flatpak/io.github.lutravox.Ottersnap.desktop $FLATPAK_DEST/share/applications/io.github.lutravox.Ottersnap.desktop",
                 "mkdir -p $FLATPAK_DEST/share/icons/hicolor/scalable/apps",
-                "install -D src/resources/icons/ottersnap.svg $FLATPAK_DEST/share/icons/hicolor/scalable/apps/com.kipwisp.Ottersnap.svg",
-                "for pair in 48:48x48 64:64x64 128:128x128 256:256x256 512:512x512; do px=${pair%%:*}; dir=${pair##*:}; mkdir -p $FLATPAK_DEST/share/icons/hicolor/$dir/apps && rsvg-convert -w $px -h $px src/resources/icons/ottersnap.svg -o $FLATPAK_DEST/share/icons/hicolor/$dir/apps/com.kipwisp.Ottersnap.png; done"
+                "install -D src/resources/icons/ottersnap.svg $FLATPAK_DEST/share/icons/hicolor/scalable/apps/io.github.lutravox.Ottersnap.svg",
+                "for pair in 48:48x48 64:64x64 128:128x128 256:256x256 512:512x512; do px=${pair%%:*}; dir=${pair##*:}; mkdir -p $FLATPAK_DEST/share/icons/hicolor/$dir/apps && rsvg-convert -w $px -h $px src/resources/icons/ottersnap.svg -o $FLATPAK_DEST/share/icons/hicolor/$dir/apps/io.github.lutravox.Ottersnap.png; done"
             ],
             "sources": [
                 {

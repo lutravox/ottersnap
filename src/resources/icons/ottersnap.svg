@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b94bd"/>
+      <stop offset="1" stop-color="#3f7aa3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Photo frame -->
+  <rect x="16" y="16" width="480" height="480" rx="54" fill="#f7f5f1"/>
+
+  <!-- Photo area -->
+  <rect x="50" y="50" width="412" height="362" rx="20" fill="url(#bg)"/>
+  <rect x="50" y="50" width="412" height="362" rx="20" fill="none"
+        stroke="#2f608a" stroke-opacity="0.35" stroke-width="3"/>
+
+  <g transform="translate(-56.32 -61.1) scale(1.22)">
+    <!-- Body -->
+    <path d="M186 330
+             L174 389
+             L338 389
+             L326 330
+             Q256 352 186 330 Z"
+          fill="#241c16"/>
+
+    <!-- Ears -->
+    <ellipse cx="164" cy="158" rx="38" ry="33" fill="#241c16"/>
+    <ellipse cx="348" cy="158" rx="38" ry="33" fill="#241c16"/>
+
+    <!-- Head -->
+    <ellipse cx="256" cy="246" rx="122" ry="114" fill="#241c16"/>
+
+    <!-- Nose, bar, and 3-smile -->
+    <g transform="translate(256 288) scale(1.22) translate(-256 -288)" fill="#4782ab">
+      <path d="M230 270
+               Q256 263 282 270
+               Q289 273 286 281
+               Q273 299 256 299
+               Q239 299 226 281
+               Q223 273 230 270 Z"/>
+      <line x1="256" y1="299" x2="256" y2="314" stroke="#4782ab" stroke-width="9" stroke-linecap="round"/>
+      <path d="M256 309.5 Q243 322 229.5 311.5 L227.5 314.5 Q242 330 256 318.5 Z"/>
+      <path d="M256 309.5 Q269 322 282.5 311.5 L284.5 314.5 Q270 330 256 318.5 Z"/>
+    </g>
+
+    <!-- Whiskers -->
+    <g fill="#241c16">
+      <path d="M155.6 285.7 L94.5 275.1 L93.5 278.9 L152.4 298.3 Z"/>
+      <path d="M170.7 310 L113.3 335.1 L114.7 338.9 L173.3 322 Z"/>
+      <path d="M356.4 285.7 L417.5 275.1 L418.5 278.9 L359.6 298.3 Z"/>
+      <path d="M342.3 310 L398.7 335.1 L397.3 338.9 L337.7 322 Z"/>
+    </g>
+  </g>
+
+  <!-- Photo shine -->
+  <path d="M118 50 L278 50 L50 278 L50 118 Z" fill="#ffffff" opacity="0.22"/>
+  <path d="M303 50 L378 50 L50 378 L50 303 Z" fill="#ffffff" opacity="0.16"/>
+</svg>

@@ -37,14 +37,14 @@ cd flatpak
 
 # Build and run from the build sandbox
 flatpak-builder --user --install-deps-from=flathub --force-clean --run \
-  build-flatpak com.kipwisp.Ottersnap.json
+  build-flatpak io.github.lutravox.Ottersnap.json
 
 # Or export to a local repo and install into your user account
 flatpak-builder --user --install-deps-from=flathub --force-clean \
-  --repo=../repo build-flatpak com.kipwisp.Ottersnap.json
+  --repo=../repo build-flatpak io.github.lutravox.Ottersnap.json
 flatpak remote-add --if-not-exists --user --no-gpg-verify ottersnap-local \
   "file://$(pwd)/../repo"
-flatpak install --user ottersnap-local com.kipwisp.Ottersnap
+flatpak install --user ottersnap-local io.github.lutravox.Ottersnap
 ```
 
 ### Testing

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.kipwisp.Ottersnap</id>
+  <id>io.github.lutravox.Ottersnap</id>
   <name>Ottersnap</name>
   <summary>Snapshot image viewer</summary>
   <description>
@@ -12,12 +12,12 @@
       timeline.
     </p>
   </description>
-  <launchable type="desktop-id">com.kipwisp.Ottersnap</launchable>
-  <icon type="stock">com.kipwisp.Ottersnap</icon>
+  <launchable type="desktop-id">io.github.lutravox.Ottersnap</launchable>
+  <icon type="stock">io.github.lutravox.Ottersnap</icon>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
-  <url type="homepage">https://kipwisp.com</url>
-  <url type="vcs-browser">https://github.com/Kipwisp/ottersnap</url>
+  <url type="homepage">https://github.com/lutravox/ottersnap</url>
+  <url type="vcs-browser">https://github.com/lutravox/ottersnap</url>
   <categories>
     <category>Graphics</category>
     <category>Viewer</category>
@@ -31,7 +31,7 @@
   </keywords>
   <screenshots>
     <screenshot type="default">
-      <image type="source">https://raw.githubusercontent.com/Kipwisp/ottersnap/main/docs/images/preview.png</image>
+      <image type="source">https://raw.githubusercontent.com/lutravox/ottersnap/main/docs/images/preview.png</image>
       <caption>Ottersnap viewer and snapshot timeline</caption>
     </screenshot>
   </screenshots>

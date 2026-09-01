@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QFont>
+#include <QPixmap>
 #include <QPushButton>
 #include <QUrl>
 
@@ -15,6 +16,11 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
     layout->setContentsMargins(30, 30, 30, 30);
     layout->setSpacing(20);
     layout->setAlignment(Qt::AlignCenter);
+
+    auto *iconLabel = new QLabel(this);
+    QPixmap icon(":/icons/ottersnap.svg");
+    iconLabel->setPixmap(icon.scaled(128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    iconLabel->setAlignment(Qt::AlignCenter);
 
     auto *nameLabel = new QLabel(AppSettings::applicationName(), this);
     nameLabel->setAlignment(Qt::AlignCenter);
@@ -44,6 +50,7 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent) {
     closeButton->setFixedWidth(100);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
 
+    layout->addWidget(iconLabel, 0, Qt::AlignCenter);
     layout->addWidget(nameLabel);
     layout->addWidget(versionLabel);
     layout->addSpacing(10);

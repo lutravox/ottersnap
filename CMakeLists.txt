@@ -1,6 +1,33 @@
 # ── Project & toolchain ──────────────────────────────────────────────────
 cmake_minimum_required(VERSION 3.17)
-project(ottersnap VERSION 1.0.0 LANGUAGES CXX)
+
+# ── Version resolution ───────────────────────────────────────────────────
+set(OTTERSNAP_BASE_VERSION 1.0.0)
+set(OTTERSNAP_VERSION "${OTTERSNAP_BASE_VERSION}")
+set(OTTERSNAP_IS_RELEASE FALSE)
+find_package(Git QUIET)
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" OTTERSNAP_VERSION_FILE LIMIT_COUNT 1)
+    string(STRIP "${OTTERSNAP_VERSION_FILE}" OTTERSNAP_VERSION_FILE)
+    if(OTTERSNAP_VERSION_FILE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+        set(OTTERSNAP_VERSION "${OTTERSNAP_VERSION_FILE}")
+        set(OTTERSNAP_IS_RELEASE TRUE)
+    endif()
+elseif(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --tags --exact-match
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE OTTERSNAP_GIT_TAG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(OTTERSNAP_GIT_TAG MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)$")
+        set(OTTERSNAP_VERSION "${CMAKE_MATCH_1}")
+        set(OTTERSNAP_IS_RELEASE TRUE)
+    endif()
+endif()
+
+project(ottersnap VERSION "${OTTERSNAP_VERSION}" LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.5)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -16,22 +43,18 @@ qt_standard_project_setup(REQUIRES ${QT_MIN_VERSION})
 
 
 
-# ── App version ──────────────────────────────────────────────────────────
-# A build from a commit tagged exactly v<PROJECT_VERSION> carries no suffix;
-# any other build appends the short commit hash for identification.
+# ── App version suffix ───────────────────────────────────────────────────
 set(VERSION_SUFFIX "")
-execute_process(COMMAND git rev-parse --short HEAD
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_COMMIT_HASH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET)
-execute_process(COMMAND git describe --tags --exact-match
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_TAG
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET)
-if(GIT_COMMIT_HASH AND NOT GIT_TAG STREQUAL "v${PROJECT_VERSION}")
-    set(VERSION_SUFFIX "-g${GIT_COMMIT_HASH}")
+if(NOT OTTERSNAP_IS_RELEASE AND GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(GIT_COMMIT_HASH)
+        set(VERSION_SUFFIX "-g${GIT_COMMIT_HASH}")
+    endif()
 endif()
 
 configure_file(src/config/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/config/version.h)

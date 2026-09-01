@@ -1,0 +1,83 @@
+# Shared native build environment for ottersnap on ubuntu-24.04.
+#
+# Provides, in one call:
+#   * system build dependencies (libzip, zstd, GL, Vulkan, rsvg, python)
+#   * glslc
+#   * Qt >= 6.5, via aqtinstall
+name: 'Setup Native Build Environment'
+description: 'Installs apt deps, Vulkan SDK (glslc) and Qt for building ottersnap'
+
+inputs:
+  qt-version:
+    description: 'Qt version to install via aqtinstall'
+    required: false
+    default: '6.9.3'
+  vulkan-sdk-version:
+    description: 'LunarG Vulkan SDK version (source of glslc)'
+    required: false
+    default: '1.4.357.1'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install apt dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          ninja-build \
+          libzip-dev \
+          libzstd-dev \
+          libgl1-mesa-dev \
+          vulkan-headers \
+          libvulkan-dev \
+          librsvg2-bin \
+          python3-pip \
+          python3-venv
+
+    - name: Cache Vulkan SDK tarball
+      id: sdk-cache
+      uses: actions/cache@v4
+      with:
+        path: vulkan_sdk.tar.xz
+        key: vulkan-sdk-${{ inputs.vulkan-sdk-version }}-${{ runner.arch }}
+
+    - name: Download Vulkan SDK tarball
+      if: steps.sdk-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL "https://sdk.lunarg.com/sdk/download/${{ inputs.vulkan-sdk-version }}/linux/vulkan_sdk.tar.xz?Human=true" -o vulkan_sdk.tar.xz
+
+    - name: Extract Vulkan SDK and add glslc to PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        rm -rf sdk-extract && mkdir -p sdk-extract
+        tar -xJf vulkan_sdk.tar.xz -C sdk-extract
+        glslc_path="$(find sdk-extract -path '*/Bin/glslc' -print -quit)"
+        bin_dir="$(dirname "$glslc_path")"
+        sdk_root="$(dirname "$bin_dir")"
+        echo "${bin_dir}" >> "$GITHUB_PATH"
+        echo "LD_LIBRARY_PATH=${sdk_root}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+        glslc --version
+
+    - name: Cache Qt
+      id: qt-cache
+      uses: actions/cache@v4
+      with:
+        path: qt
+        key: qt-${{ inputs.qt-version }}-${{ runner.arch }}
+
+    - name: Install Qt via aqtinstall
+      if: steps.qt-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 -m venv .aqt
+        ./.aqt/bin/pip install --upgrade pip aqtinstall
+        ./.aqt/bin/python -m aqt install-qt linux desktop "${{ inputs.qt-version }}" -m qtshadertools -O qt
+
+    - name: Export Qt prefix path
+      shell: bash
+      run: echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/qt/${{ inputs.qt-version }}/gcc_64" >> "$GITHUB_ENV"

@@ -1,0 +1,102 @@
+# Release pipeline: pushing a tag of the form vX.Y.Z builds a Flatpak bundle
+# and an AppImage.
+#
+# The version is derived from the tag. Each build job writes a VERSION file so
+# CMake resolves the exact release version (see CMakeLists.txt version logic).
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pin version from tag
+        run: echo "${GITHUB_REF_NAME#v}" > VERSION
+
+      - name: Set up native build environment
+        uses: ./.github/actions/setup-native
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Generate application icon
+        run: rsvg-convert -w 512 -h 512 src/resources/icons/ottersnap.svg -o icon-512.png
+
+      - name: Download linuxdeployqt
+        run: |
+          curl -fsSL -o linuxdeployqt.AppImage \
+            https://github.com/probonopd/linuxdeployqt/releases/latest/download/linuxdeployqt-continuous-x86_64.AppImage
+          chmod +x linuxdeployqt.AppImage
+
+      - name: Build AppImage
+        run: ./linuxdeployqt.AppImage --appimage-extract-and-run \
+          build/bin/ottersnap \
+          -appimage -bundle-non-qt-libs -verbose=1 \
+          -desktop-file=flatpak/com.kipwisp.Ottersnap.desktop \
+          -icon-file=icon-512.png
+
+      - name: Name the AppImage after the release
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"
+          artifact="$(ls *.AppImage | grep -v '^linuxdeployqt')"
+          mv "$artifact" "Ottersnap-${ver}-linux-x86_64.AppImage"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ottersnap-AppImage
+          path: Ottersnap-*-linux-x86_64.AppImage
+
+  flatpak:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.9
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pin version from tag
+        run: echo "${GITHUB_REF_NAME#v}" > VERSION
+
+      - name: Build Flatpak bundle
+        uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+        with:
+          manifest-path: flatpak/com.kipwisp.Ottersnap.json
+          bundle: ottersnap.flatpak
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ottersnap-Flatpak
+          path: ottersnap.flatpak
+
+  release:
+    needs: [appimage, flatpak]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            artifacts/Ottersnap-AppImage/*
+            artifacts/Ottersnap-Flatpak/*
+          generate_release_notes: true

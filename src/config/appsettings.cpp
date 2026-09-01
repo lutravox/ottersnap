@@ -3,9 +3,9 @@
 
 constexpr char c_applicationName[] = "Ottersnap";
 constexpr char c_applicationId[] = "ottersnap";
-constexpr char c_repositoryUrl[] = "https://github.com/Kipwisp/ottersnap";
+constexpr char c_repositoryUrl[] = "https://github.com/lutravox/ottersnap";
 constexpr char c_organizationName[] = "ottersnap";
-constexpr char c_organizationDomain[] = "kipwisp.com";
+constexpr char c_organizationDomain[] = "io.github.lutravox";
 
 QSettings& AppSettings::settings() {
     static QSettings s;

@@ -3,6 +3,9 @@ build/
 compile_commands.json
 Testing/
 
+# ── Release versioning (written by CI from the git tag) ─────────
+/VERSION
+
 # ── Flatpak build artifacts ─────────────────────────────────────
 build-flatpak/
 repo/

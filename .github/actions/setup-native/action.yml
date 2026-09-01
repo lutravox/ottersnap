@@ -29,7 +29,6 @@ runs:
           libzip-dev \
           libzstd-dev \
           libgl1-mesa-dev \
-          vulkan-headers \
           libvulkan-dev \
           librsvg2-bin \
           python3-pip \

@@ -1,5 +1,8 @@
 # Ottersnap - Snapshot Image Viewer
 
+[![CI](https://github.com/Kipwisp/ottersnap/actions/workflows/ci.yml/badge.svg)](https://github.com/Kipwisp/ottersnap/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+
 **Ottersnap** is a Qt6 image viewer that uses high-performance Vulkan rendering while automatically tracking and preserving image history. When you open an image file, it is watched for changes — make an update to the image, and the old state is snapshotted onto a timeline allowing you to keep a complete collection of the image's history.
 
 ![Ottersnap](docs/images/preview.png)

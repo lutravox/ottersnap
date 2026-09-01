@@ -55,8 +55,10 @@ runs:
         rm -rf sdk-extract && mkdir -p sdk-extract
         tar -xJf vulkan_sdk.tar.xz -C sdk-extract
         glslc_path="$(find sdk-extract -path '*/Bin/glslc' -print -quit)"
+        [ -n "$glslc_path" ] || { echo "glslc not found in SDK tarball" >&2; find sdk-extract -maxdepth 3 | head -50 >&2; exit 1; }
         bin_dir="$(dirname "$glslc_path")"
         sdk_root="$(dirname "$bin_dir")"
+        export PATH="${bin_dir}:${PATH}"
         echo "${bin_dir}" >> "$GITHUB_PATH"
         echo "LD_LIBRARY_PATH=${sdk_root}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
         glslc --version

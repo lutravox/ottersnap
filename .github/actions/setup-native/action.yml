@@ -54,7 +54,7 @@ runs:
         set -euo pipefail
         rm -rf sdk-extract && mkdir -p sdk-extract
         tar -xJf vulkan_sdk.tar.xz -C sdk-extract
-        glslc_path="$(find sdk-extract -path '*/Bin/glslc' -print -quit)"
+        glslc_path="$(find sdk-extract -type f -name glslc -print -quit)"
         [ -n "$glslc_path" ] || { echo "glslc not found in SDK tarball" >&2; find sdk-extract -maxdepth 3 | head -50 >&2; exit 1; }
         bin_dir="$(dirname "$glslc_path")"
         sdk_root="$(dirname "$bin_dir")"

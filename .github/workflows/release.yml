@@ -32,7 +32,7 @@ jobs:
           cmake --build build --parallel "$(nproc)"
 
       - name: Generate application icon
-        run: rsvg-convert -w 512 -h 512 src/resources/icons/ottersnap.svg -o icon-512.png
+        run: rsvg-convert -w 512 -h 512 src/resources/icons/ottersnap.svg -o flatpak/io.github.lutravox.Ottersnap.png
 
       - name: Download linuxdeployqt
         run: |
@@ -43,10 +43,8 @@ jobs:
       - name: Build AppImage
         run: |
           ./linuxdeployqt.AppImage --appimage-extract-and-run \
-            build/bin/ottersnap \
-            -appimage -bundle-non-qt-libs -verbose=1 \
-            -desktop-file=flatpak/io.github.lutravox.Ottersnap.desktop \
-            -icon-file=icon-512.png
+            flatpak/io.github.lutravox.Ottersnap.desktop \
+            -appimage -bundle-non-qt-libs -verbose=1
 
       - name: Name the AppImage after the release
         run: |

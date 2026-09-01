@@ -197,6 +197,9 @@ set(OTTERSNAP_CORE_SOURCES
 
     # Configuration
     src/config/appsettings.cpp
+
+    # Generated shader resource
+    ${SHADER_RCC_SRC}
 )
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
@@ -208,16 +211,9 @@ add_executable(${PROJECT_NAME}
     # Entry point
     src/main.cpp
 
-    # Generated shader resource
-    ${SHADER_RCC_SRC}
-
     # Qt resource files
     src/resources/resources.qrc
 )
-
-# Ensure shaders are compiled and the .qrc is generated before the
-# executable links, since ${SHADER_RCC_SRC} is part of the source list.
-add_dependencies(${PROJECT_NAME} shader_rcc)
 
 # ── QT6 Shaders ──────────────────────────────────────────────────────────
 qt6_add_shaders(${PROJECT_NAME} "color_shaders"

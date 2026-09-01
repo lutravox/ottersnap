@@ -36,7 +36,7 @@ runs:
 
     - name: Cache Vulkan SDK tarball
       id: sdk-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: vulkan_sdk.tar.xz
         key: vulkan-sdk-${{ inputs.vulkan-sdk-version }}-${{ runner.arch }}
@@ -65,7 +65,7 @@ runs:
 
     - name: Cache Qt
       id: qt-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: qt
         key: qt-${{ inputs.qt-version }}-${{ runner.arch }}

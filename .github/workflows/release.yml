@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Pin version from tag
         run: echo "${GITHUB_REF_NAME#v}" > VERSION
@@ -55,7 +55,7 @@ jobs:
           mv "$artifact" "Ottersnap-${ver}-linux-x86_64.AppImage"
 
       - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Ottersnap-AppImage
           path: Ottersnap-*-linux-x86_64.AppImage
@@ -67,7 +67,7 @@ jobs:
       options: --privileged
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Pin version from tag
         run: echo "${GITHUB_REF_NAME#v}" > VERSION
@@ -79,7 +79,7 @@ jobs:
           bundle: ottersnap.flatpak
 
       - name: Upload Flatpak artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Ottersnap-Flatpak
           path: ottersnap.flatpak
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 

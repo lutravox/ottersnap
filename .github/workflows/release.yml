@@ -63,11 +63,20 @@ jobs:
           # detect its module imports; bundle the module trees it loads.
           cp -r "${CMAKE_PREFIX_PATH}/qml/QtQuick" "$appdir/usr/qml/"
           cp -r "${CMAKE_PREFIX_PATH}/qml/QtQml"   "$appdir/usr/qml/"
-          # Bundle the Wayland platform plugin and its runtime dependencies.
+          # Bundle the Wayland platform plugin plus all of its integration
+          # plugins.
           cp -r "${CMAKE_PREFIX_PATH}/plugins/platforms/libqwayland-generic.so" "$appdir/usr/plugins/platforms/"
           cp -r "${CMAKE_PREFIX_PATH}/plugins/platforms/libqwayland-egl.so"      "$appdir/usr/plugins/platforms/"
-          cp "${CMAKE_PREFIX_PATH}/lib/libQt6WaylandClient.so.6"*                "$appdir/usr/lib/"
-          cp "${CMAKE_PREFIX_PATH}/lib/libQt6WaylandEglClientHwIntegration.so.6"* "$appdir/usr/lib/"
+          for d in wayland-shell-integration wayland-graphics-integration-client wayland-decoration-client; do
+            if [ -d "${CMAKE_PREFIX_PATH}/plugins/$d" ]; then
+              cp -r "${CMAKE_PREFIX_PATH}/plugins/$d" "$appdir/usr/plugins/"
+            fi
+          done
+          for lib in libQt6WaylandClient libQt6WaylandEglClientHwIntegration libQt6WlShellIntegration libQt6OpenGL libQt6Svg; do
+            for f in "${CMAKE_PREFIX_PATH}/lib/$lib".so.6*; do
+              if [ -e "$f" ]; then cp "$f" "$appdir/usr/lib/"; fi
+            done
+          done
           for lib in libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1; do
             cp -L "/usr/lib/x86_64-linux-gnu/$lib" "$appdir/usr/lib/"
           done

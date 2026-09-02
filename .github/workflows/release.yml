@@ -41,7 +41,7 @@ jobs:
             libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
             libxcb-render0 libxcb-render-util0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-shape0 libxcb-util1 libxcb-xkb1 libxcb-cursor0 \
-            libwayland-cursor0 libwayland-egl1 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 \
             libgtk-3-0 unixodbc libpq5 libmysqlclient21 libsqlite3-0
 
       - name: Download linuxdeployqt
@@ -54,7 +54,8 @@ jobs:
         run: |
           set -euo pipefail
           appdir="Ottersnap.AppDir"
-          mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications" "$appdir/usr/qml"
+          mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/share/applications" \
+                   "$appdir/usr/qml" "$appdir/usr/plugins/platforms"
           cp build/bin/ottersnap "$appdir/usr/bin/"
           cp flatpak/io.github.lutravox.Ottersnap.desktop "$appdir/usr/share/applications/"
           cp flatpak/io.github.lutravox.Ottersnap.png "$appdir/usr/share/applications/"
@@ -62,6 +63,14 @@ jobs:
           # detect its module imports; bundle the module trees it loads.
           cp -r "${CMAKE_PREFIX_PATH}/qml/QtQuick" "$appdir/usr/qml/"
           cp -r "${CMAKE_PREFIX_PATH}/qml/QtQml"   "$appdir/usr/qml/"
+          # Bundle the Wayland platform plugin and its runtime dependencies.
+          cp -r "${CMAKE_PREFIX_PATH}/plugins/platforms/libqwayland-generic.so" "$appdir/usr/plugins/platforms/"
+          cp -r "${CMAKE_PREFIX_PATH}/plugins/platforms/libqwayland-egl.so"      "$appdir/usr/plugins/platforms/"
+          cp "${CMAKE_PREFIX_PATH}/lib/libQt6WaylandClient.so.6"*                "$appdir/usr/lib/"
+          cp "${CMAKE_PREFIX_PATH}/lib/libQt6WaylandEglClientHwIntegration.so.6"* "$appdir/usr/lib/"
+          for lib in libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1; do
+            cp -L "/usr/lib/x86_64-linux-gnu/$lib" "$appdir/usr/lib/"
+          done
 
       - name: Build AppImage
         run: |

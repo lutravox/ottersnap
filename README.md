@@ -20,7 +20,7 @@
 
 Ottersnap is currently only available for **Linux** only.
 
-Prebuilt releases — an **AppImage** and a **Flatpak** — are published on the [releases page](https://github.com/lutravox/ottersnap/releases).
+Prebuilt releases are published on the [releases page](https://github.com/lutravox/ottersnap/releases).
 
 ## Build & Run
 

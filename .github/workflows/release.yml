@@ -52,11 +52,16 @@ jobs:
 
       - name: Prepare AppDir
         run: |
+          set -euo pipefail
           appdir="Ottersnap.AppDir"
-          mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications"
+          mkdir -p "$appdir/usr/bin" "$appdir/usr/share/applications" "$appdir/usr/qml"
           cp build/bin/ottersnap "$appdir/usr/bin/"
           cp flatpak/io.github.lutravox.Ottersnap.desktop "$appdir/usr/share/applications/"
           cp flatpak/io.github.lutravox.Ottersnap.png "$appdir/usr/share/applications/"
+          # The app's QML is compiled into resources, so linuxdeployqt cannot
+          # detect its module imports; bundle the module trees it loads.
+          cp -r "${CMAKE_PREFIX_PATH}/qml/QtQuick" "$appdir/usr/qml/"
+          cp -r "${CMAKE_PREFIX_PATH}/qml/QtQml"   "$appdir/usr/qml/"
 
       - name: Build AppImage
         run: |

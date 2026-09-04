@@ -63,8 +63,11 @@ class AppSettings {
     /// @brief Return the organization domain.
     static const char *organizationDomain();
 
-    /// @brief Return the QFileDialog filter string for supported image types.
-    static QString fileFilter();
+    /// @brief Return the QFileDialog filter string for image types that can be opened.
+    static QString openFilter();
+
+    /// @brief Return the QFileDialog filter string for image types that can be exported.
+    static QString saveFilter();
 
     /// @brief Return whether snapshots should be automatically saved when the file changes.
     static bool autosaveSnapshots();

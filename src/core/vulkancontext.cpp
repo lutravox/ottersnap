@@ -21,104 +21,19 @@ bool VulkanContext::initializeInstance() {
         return false;
     }
 
-    // Headless Device Initialization
     auto vf = m_instance->functions();
 
-    // Pick a physical device
     uint32_t deviceCount = 0;
     vf->vkEnumeratePhysicalDevices(m_instance->vkInstance(), &deviceCount, nullptr);
     if (deviceCount == 0) {
         qCritical() << "[VulkanContext] No Vulkan physical devices found";
+        delete m_instance;
+        m_instance = nullptr;
         return false;
     }
 
-    std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-    vf->vkEnumeratePhysicalDevices(m_instance->vkInstance(), &deviceCount, physicalDevices.data());
-
-    // Pick the first available device.
-    m_physicalDevice = physicalDevices[0];
-
-    // Find a queue family that supports compute/graphics
-    uint32_t queueFamilyCount = 0;
-    vf->vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vf->vkGetPhysicalDeviceQueueFamilyProperties(
-        m_physicalDevice, &queueFamilyCount, queueFamilies.data());
-
-    int foundFamily = -1;
-    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT ||
-            queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-            foundFamily = i;
-            break;
-        }
-    }
-
-    if (foundFamily == -1) {
-        qCritical() << "[VulkanContext] No suitable queue family found";
-        return false;
-    }
-    m_utilityQueueFamilyIndex = foundFamily;
-    m_utilityQueueFamilyIndex = foundFamily;
-
-    // Create the utility logical device
-    float                   queuePriority = 1.0f;
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = m_utilityQueueFamilyIndex;
-    queueCreateInfo.queueCount = 1;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
-
-    VkDeviceCreateInfo deviceCreateInfo{};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = 1;
-    deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-
-    if (vf->vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_utilityDevice) !=
-        VK_SUCCESS) {
-        qCritical() << "[VulkanContext] Failed to create utility logical device";
-        return false;
-    }
-
-    // Get the utility queue and device functions
-    m_utilityDeviceFunctions = m_instance->deviceFunctions(m_utilityDevice);
-    m_utilityDeviceFunctions->vkGetDeviceQueue(
-        m_utilityDevice, m_utilityQueueFamilyIndex, 0, &m_utilityQueue);
-
-    // Create a dedicated command pool for the utility device
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = m_utilityQueueFamilyIndex;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    if (m_utilityDeviceFunctions->vkCreateCommandPool(
-            m_utilityDevice, &poolInfo, nullptr, &m_utilityCommandPool) != VK_SUCCESS) {
-        qCritical() << "[VulkanContext] Failed to create utility command pool";
-        return false;
-    }
-
-    // Prime internal resources (on the utility device)
-    initializeInternalResources();
-
-    m_utilityReconstructor = createReconstructor();
-
-    qDebug() << "[VulkanContext] Utility device initialized successfully";
+    qDebug() << "[VulkanContext] Vulkan instance initialized";
     return true;
-}
-
-void VulkanContext::initializeInternalResources() {
-    initializeComputeResources(m_utilityDevice, m_utilityDeviceFunctions, m_utilityResources);
-}
-
-std::shared_ptr<VkSnapshotReconstructor> VulkanContext::createReconstructor() {
-    VulkanHandles handles;
-    handles.physicalDevice = getPhysicalDevice();
-    handles.device = getUtilityDevice();
-    handles.queue = getUtilityQueue();
-    handles.queueFamilyIndex = getUtilityQueueFamilyIndex();
-    handles.deviceFunctions = getUtilityDeviceFunctions();
-    handles.commandPool = getUtilityCommandPool();
-
-    return std::make_shared<VkSnapshotReconstructor>(handles, this);
 }
 
 void VulkanContext::initializeComputeResources(VkDevice                dev,
@@ -373,49 +288,6 @@ void VulkanContext::createGraphicsPipeline(VkDevice                dev,
 
 void VulkanContext::cleanupInstance() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
-
-    if (m_utilityReconstructor) {
-        m_utilityReconstructor->cleanup();
-        m_utilityReconstructor.reset();
-    }
-
-    // Cleanup Utility device resources
-    if (m_utilityDevice && m_utilityDeviceFunctions) {
-        auto df = m_utilityDeviceFunctions;
-        auto dev = m_utilityDevice;
-
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.computePipeline,
-                                     &QVulkanDeviceFunctions::vkDestroyPipeline);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.computePipelineLayout,
-                                     &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.computeDescriptorSetLayout,
-                                     &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.downsamplePipeline,
-                                     &QVulkanDeviceFunctions::vkDestroyPipeline);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.downsamplePipelineLayout,
-                                     &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.downsampleDescriptorSetLayout,
-                                     &QVulkanDeviceFunctions::vkDestroyDescriptorSetLayout);
-        VulkanUtils::destroyResource(df,
-                                     dev,
-                                     m_utilityResources.descriptorPool,
-                                     &QVulkanDeviceFunctions::vkDestroyDescriptorPool);
-        VulkanUtils::destroyResource(
-            df, dev, m_utilityCommandPool, &QVulkanDeviceFunctions::vkDestroyCommandPool);
-        df->vkDestroyDevice(dev, nullptr);
-    }
 
     if (m_instance) {
         delete m_instance;

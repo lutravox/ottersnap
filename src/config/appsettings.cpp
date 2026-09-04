@@ -36,8 +36,12 @@ void AppSettings::setRestoreSession(bool value) {
     settings().setValue(c_keyRestoreSession, value);
 }
 
-QString AppSettings::fileFilter() {
-    return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tiff *.webp)");
+QString AppSettings::openFilter() {
+    return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tif *.tiff *.webp)");
+}
+
+QString AppSettings::saveFilter() {
+    return QStringLiteral("PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp);;TIFF (*.tif *.tiff);;GIF (*.gif)");
 }
 
 int AppSettings::maxThumbnailCacheSizeMB() {

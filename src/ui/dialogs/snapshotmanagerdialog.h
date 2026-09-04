@@ -6,7 +6,6 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <memory>
-#include "core/vksnapshotreconstructor.h"
 
 class SnapshotItem : public QWidget {
     Q_OBJECT
@@ -135,5 +134,4 @@ class SnapshotManagerDialog : public QDialog {
 
     int                                      m_selectedImageIndex = -1;
     SnapshotItem                            *m_selectedItem = nullptr;
-    std::shared_ptr<VkSnapshotReconstructor> m_reconstructor;
 };

@@ -16,7 +16,6 @@
 #include "core/snapshotdb.h"
 #include "core/snapshotmanager.h"
 #include "core/thumbnailmanager.h"
-#include "core/vulkancontext.h"
 #include "ui/dialogutils.h"
 
 SnapshotItem::SnapshotItem(int            index,
@@ -86,8 +85,6 @@ void SnapshotItem::mousePressEvent(QMouseEvent *event) {
 SnapshotManagerDialog::SnapshotManagerDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(tr("Manage Snapshots"));
     setMinimumSize(600, 500);
-
-    m_reconstructor = VulkanContext::instance().createReconstructor();
 
     QFile   qssFile(":/qss/snapshotmanagerdialog.qss");
     QString qssContent;

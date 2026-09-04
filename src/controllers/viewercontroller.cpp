@@ -116,7 +116,7 @@ void ViewerController::updateViewerState() {
             qDebug() << "[ViewerController] CPU reconstruction forced by setting";
         } else if (gpuSupported) {
             qInfo() << "[ViewerController] GPU reconstruction failed, falling back to CPU";
-        } else if (VulkanContext::instance().getUtilityDevice() != VK_NULL_HANDLE) {
+        } else if (VulkanContext::instance().getInstance() != nullptr) {
             qInfo() << "[ViewerController] GPU UI context not yet initialized, using CPU temporary "
                        "reconstruction";
         } else {

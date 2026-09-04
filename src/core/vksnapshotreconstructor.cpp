@@ -95,13 +95,13 @@ void VkSnapshotReconstructor::cleanup() {
     }
 
     if (m_descriptorSet != VK_NULL_HANDLE) {
-        df->vkFreeDescriptorSets(dev, m_context->getDescriptorPool(dev), 1, &m_descriptorSet);
+        df->vkFreeDescriptorSets(dev, m_context->getDescriptorPool(), 1, &m_descriptorSet);
         m_descriptorSet = VK_NULL_HANDLE;
     }
 
     if (m_downsampleDescriptorSet != VK_NULL_HANDLE) {
         df->vkFreeDescriptorSets(
-            dev, m_context->getDescriptorPool(dev), 1, &m_downsampleDescriptorSet);
+            dev, m_context->getDescriptorPool(), 1, &m_downsampleDescriptorSet);
         m_downsampleDescriptorSet = VK_NULL_HANDLE;
     }
 
@@ -169,10 +169,10 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
     if (m_descriptorSet == VK_NULL_HANDLE) {
         auto&                       ctx = m_context;
         VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        allocInfo.descriptorPool = ctx->getDescriptorPool(dev);
+        allocInfo.descriptorPool = ctx->getDescriptorPool();
         allocInfo.descriptorSetCount = 1;
 
-        VkDescriptorSetLayout layouts[] = {ctx->getComputeDescriptorSetLayout(dev)};
+        VkDescriptorSetLayout layouts[] = {ctx->getComputeDescriptorSetLayout()};
         allocInfo.pSetLayouts = layouts;
 
         VkDescriptorSet pSet = nullptr;
@@ -386,10 +386,10 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
                              nullptr);
 
     df->vkCmdBindPipeline(
-        m_deltaCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_context->getComputePipeline(dev));
+        m_deltaCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_context->getComputePipeline());
     df->vkCmdBindDescriptorSets(m_deltaCmdBuffer,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
-                                m_context->getComputePipelineLayout(dev),
+                                m_context->getComputePipelineLayout(),
                                 0,
                                 1,
                                 &m_descriptorSet,
@@ -403,7 +403,7 @@ bool VkSnapshotReconstructor::recordDeltaCommands(uint32_t tileW,
     pcs.imageH = m_height;
     pcs.numTiles = numTiles;
     df->vkCmdPushConstants(m_deltaCmdBuffer,
-                           m_context->getComputePipelineLayout(dev),
+                           m_context->getComputePipelineLayout(),
                            VK_SHADER_STAGE_COMPUTE_BIT,
                            0,
                            sizeof(pcs),
@@ -441,7 +441,7 @@ bool VkSnapshotReconstructor::applyDelta(const DeltaEntry& delta) {
         return false;
     }
 
-    if (!m_context->getComputePipeline(dev)) {
+    if (!m_context->getComputePipeline()) {
         qWarning()
             << "[VkSnapshotReconstructor] Cannot apply delta: Compute pipeline not initialized";
         return false;
@@ -995,9 +995,9 @@ VkSnapshotReconstructor::DownsampledBuffer VkSnapshotReconstructor::performDowns
     // Manage Descriptor Set
     if (m_downsampleDescriptorSet == VK_NULL_HANDLE) {
         VkDescriptorSetAllocateInfo dsai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        dsai.descriptorPool = ctx->getDescriptorPool(dev);
+        dsai.descriptorPool = ctx->getDescriptorPool();
         dsai.descriptorSetCount = 1;
-        VkDescriptorSetLayout layout = ctx->getDownsampleDescriptorSetLayout(dev);
+        VkDescriptorSetLayout layout = ctx->getDownsampleDescriptorSetLayout();
         dsai.pSetLayouts = &layout;
         if (df->vkAllocateDescriptorSets(dev, &dsai, &m_downsampleDescriptorSet) != VK_SUCCESS) {
             qCritical() << "[VkSnapshotReconstructor] Failed to allocate downsample descriptor set";
@@ -1048,17 +1048,17 @@ VkSnapshotReconstructor::DownsampledBuffer VkSnapshotReconstructor::performDowns
         uint32_t w, h, tw, th;
     } pcs = {srcW, srcH, result.width, result.height};
     df->vkCmdBindPipeline(
-        m_downsampleCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->getDownsamplePipeline(dev));
+        m_downsampleCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->getDownsamplePipeline());
     df->vkCmdBindDescriptorSets(m_downsampleCmdBuffer,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
-                                ctx->getDownsamplePipelineLayout(dev),
+                                ctx->getDownsamplePipelineLayout(),
                                 0,
                                 1,
                                 &m_downsampleDescriptorSet,
                                 0,
                                 nullptr);
     df->vkCmdPushConstants(m_downsampleCmdBuffer,
-                           ctx->getDownsamplePipelineLayout(dev),
+                           ctx->getDownsamplePipelineLayout(),
                            VK_SHADER_STAGE_COMPUTE_BIT,
                            0,
                            sizeof(pcs),

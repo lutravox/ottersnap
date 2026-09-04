@@ -100,7 +100,8 @@ void TestAppSettings::testIdentity() {
     QVERIFY(QString(AppSettings::applicationName()).contains("Ottersnap"));
     QVERIFY(AppSettings::organizationName() != nullptr);
     QVERIFY(!QString(AppSettings::organizationDomain()).isEmpty());
-    QVERIFY(!AppSettings::fileFilter().isEmpty());
+    QVERIFY(!AppSettings::openFilter().isEmpty());
+    QVERIFY(!AppSettings::saveFilter().isEmpty());
 }
 
 void TestAppSettings::testRepositoryUrl() {

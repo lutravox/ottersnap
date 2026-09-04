@@ -30,7 +30,7 @@
 
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
-#include "core/vulkancontext.h"
+#include "core/cpusnapshotreconstructor.h"
 #include "ui/dialogs/aboutdialog.h"
 #include "ui/dialogs/settingsdialog.h"
 #include "ui/dialogs/snapshotmanagerdialog.h"
@@ -542,52 +542,63 @@ void MainWindow::setupMenu() {
 }
 
 void MainWindow::updateMenuBar() {
-    // Common actions always enabled and visible
+    // Always available (File: Open/Exit, Edit: Settings)
     m_actionOpen->setEnabled(true);
     m_actionSettings->setEnabled(true);
     m_actionExit->setEnabled(true);
     m_fileMenu->menuAction()->setVisible(true);
     m_editMenu->menuAction()->setVisible(true);
 
+    // View: toolbar visibility state
     m_actionToggleToolbar->setChecked(m_viewerController->isToolbarVisible());
 
     switch (m_currentState) {
         case ContentState::Empty:
-            m_actionSaveSnapshot->setVisible(false);
+            // File:
+            m_actionExportSnapshot->setVisible(false);
             m_actionExportHistory->setVisible(false);
             m_actionImportHistory->setVisible(false);
+            m_actionCloseTab->setVisible(false);
+            m_actionCloseAllTabs->setVisible(false);
+            m_actionUpdatePath->setVisible(false);
+            // Edit:
+            m_actionSaveSnapshot->setVisible(false);
             m_actionDeleteSnapshot->setVisible(false);
             m_actionDeleteSelectedSnapshots->setVisible(false);
             m_actionDeleteAllSnapshots->setVisible(false);
-            m_actionCloseTab->setVisible(false);
-            m_actionCloseAllTabs->setVisible(false);
+            // View:
             m_actionScaleWithWindow->setVisible(false);
             m_actionResetView->setVisible(false);
-            m_actionUpdatePath->setVisible(false);
+            m_actionSwap->setVisible(false);
+            // Effects:
             m_actionGrayscale->setVisible(false);
             m_actionMirror->setVisible(false);
-            m_actionSwap->setVisible(false);
 
             m_viewMenu->menuAction()->setVisible(false);
             m_effectsMenu->menuAction()->setVisible(false);
             break;
 
         case ContentState::Viewer:
-            m_actionSaveSnapshot->setVisible(true);
+            // File:
+            m_actionExportSnapshot->setVisible(true);
             m_actionExportHistory->setVisible(true);
             m_actionImportHistory->setVisible(true);
+            m_actionCloseTab->setVisible(true);
+            m_actionCloseAllTabs->setVisible(true);
+            m_actionUpdatePath->setVisible(true);
+            // Edit:
+            m_actionSaveSnapshot->setVisible(true);
             m_actionDeleteSnapshot->setVisible(true);
             m_actionDeleteSelectedSnapshots->setVisible(true);
             m_actionDeleteAllSnapshots->setVisible(true);
-            m_actionCloseTab->setVisible(true);
-            m_actionCloseAllTabs->setVisible(true);
+            // View:
             m_actionScaleWithWindow->setVisible(true);
             m_actionScaleWithWindow->setChecked(m_viewerController->isScaleWithWindowEnabled());
             m_actionResetView->setVisible(true);
-            m_actionUpdatePath->setVisible(true);
+            m_actionSwap->setVisible(true);
+            // Effects:
             m_actionGrayscale->setVisible(true);
             m_actionMirror->setVisible(true);
-            m_actionSwap->setVisible(true);
 
             m_viewMenu->menuAction()->setVisible(true);
             m_effectsMenu->menuAction()->setVisible(true);
@@ -599,15 +610,18 @@ void MainWindow::updateMenuBar() {
     if (tab) {
         int         index = tab->session()->currentSnapshotIndex();
         const auto& snapshots = tab->session()->snapshots();
+        // File:
+        m_actionExportSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
+        m_actionExportHistory->setEnabled(!snapshots.isEmpty());
+        m_actionImportHistory->setEnabled(true);
+        m_actionUpdatePath->setEnabled(true);
+        // Edit:
         // Disable if no snapshot is selected or if it's the current image ('C')
         m_actionDeleteSnapshot->setEnabled(index >= 0 && !tab->session()->isCurrentImage(index));
 
         // Disable "Save Snapshot of Current" if in Snapshot Only mode
         m_actionSaveSnapshot->setEnabled(!tab->session()->isSnapshotOnly());
         m_actionDeleteAllSnapshots->setEnabled(!snapshots.isEmpty());
-        m_actionExportHistory->setEnabled(!snapshots.isEmpty());
-        m_actionImportHistory->setEnabled(true);
-        m_actionUpdatePath->setEnabled(true);
         m_actionManageSnapshots->setEnabled(true);
 
         // Handle multi-selection action
@@ -620,16 +634,20 @@ void MainWindow::updateMenuBar() {
             m_actionDeleteSelectedSnapshots->setText(text);
         }
     } else {
-        m_actionDeleteSnapshot->setEnabled(false);
-        m_actionSaveSnapshot->setEnabled(false);
-        m_actionDeleteAllSnapshots->setEnabled(false);
+        // File:
+        m_actionExportSnapshot->setEnabled(false);
         m_actionExportHistory->setEnabled(false);
         m_actionImportHistory->setEnabled(false);
         m_actionUpdatePath->setEnabled(false);
+        // Edit:
+        m_actionDeleteSnapshot->setEnabled(false);
+        m_actionSaveSnapshot->setEnabled(false);
+        m_actionDeleteAllSnapshots->setEnabled(false);
         m_actionManageSnapshots->setEnabled(true);
         m_actionDeleteSelectedSnapshots->setVisible(false);
     }
 
+    // View:
     if (m_viewerController) {
         m_actionSwap->setEnabled(m_viewerController->canSwap());
     } else {
@@ -692,7 +710,7 @@ void MainWindow::onResetView() {
 
 void MainWindow::onFileOpen() {
     QString path =
-        QFileDialog::getOpenFileName(this, tr("Open Image"), "", AppSettings::fileFilter());
+        QFileDialog::getOpenFileName(this, tr("Open Image"), "", AppSettings::openFilter());
     if (path.isEmpty())
         return;
     openImageFile(path);
@@ -827,7 +845,7 @@ void MainWindow::onUpdateImagePath() {
     QString       path = QFileDialog::getOpenFileName(this,
                                                       tr("Update Image Path"),
                                                       QFileInfo(currentPath).absoluteFilePath(),
-                                                      AppSettings::fileFilter());
+                                                      AppSettings::openFilter());
     if (path.isEmpty())
         return;
 
@@ -865,44 +883,38 @@ void MainWindow::onExportSnapshot() {
     if (!tab)
         return;
 
+    int snapshotIdx = tab->session()->currentSnapshotIndex();
+    if (snapshotIdx < 0)
+        return;
+
     QString baseName = QFileInfo(tab->filePath()).baseName();
-    int     snapshotIdx = tab->session()->currentSnapshotIndex();
-    QString suggestedName;
-    if (snapshotIdx >= 0) {
-        suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(snapshotIdx + 1);
-    } else {
-        suggestedName = baseName;
-    }
+    QString suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(snapshotIdx + 1);
 
     QString path = QFileDialog::getSaveFileName(
-        this, tr("Export Snapshot"), suggestedName, AppSettings::fileFilter());
+        this, tr("Export Snapshot"), suggestedName, AppSettings::saveFilter());
     if (path.isEmpty())
         return;
+
+    auto session = tab->session();
+    auto seq = session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;
+    if (!seq) {
+        notify(tr("Failed to export snapshot."));
+        qDebug() << "[MainWindow] Failed to retrieve reconstruction sequence for export.";
+        return;
+    }
 
     struct ExportParams {
         QString                               path;
         std::optional<ReconstructionSequence> seq;
-        QImage                                diskImage;
-        bool                                  isSnapshot;
     };
 
     ExportParams params;
     params.path = path;
-    if (snapshotIdx >= 0) {
-        params.isSnapshot = true;
-        auto session = tab->session();
-        params.seq = session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;
-        if (!params.seq) {
-            notify(tr("Failed to export snapshot."));
-            qDebug() << "[MainWindow] Failed to retrieve reconstruction sequence for export.";
-            return;
-        }
-    } else {
-        params.isSnapshot = false;
-        params.diskImage = tab->diskImage();
-    }
+    params.seq = seq;
 
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     auto watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
     connect(watcher, &QFutureWatcher<bool>::finished, [this, watcher]() {
         if (watcher->result()) {
             notify(tr("Snapshot exported successfully."));
@@ -913,14 +925,8 @@ void MainWindow::onExportSnapshot() {
     });
 
     watcher->setFuture(QtConcurrent::run([params]() {
-        QImage img;
-        if (params.isSnapshot) {
-            img = VulkanContext::instance().getUtilityReconstructor()->reconstructToImage(
-                *params.seq);
-        } else {
-            img = params.diskImage;
-        }
-
+        CPUSnapshotReconstructor cpu;
+        QImage img = cpu.reconstructToImage(*params.seq);
         if (img.isNull())
             return false;
 

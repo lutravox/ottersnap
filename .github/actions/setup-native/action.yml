@@ -28,6 +28,7 @@ runs:
           ninja-build \
           libzip-dev \
           libzstd-dev \
+          libxkbcommon-dev \
           libgl1-mesa-dev \
           libvulkan-dev \
           librsvg2-bin \

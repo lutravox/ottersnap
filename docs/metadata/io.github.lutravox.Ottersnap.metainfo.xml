@@ -3,6 +3,7 @@
   <id>io.github.lutravox.Ottersnap</id>
   <name>Ottersnap</name>
   <summary>Snapshot image viewer</summary>
+  <developer_name>lutravox</developer_name>
   <description>
     <p>
       Ottersnap is a Vulkan-accelerated image viewer that automatically snapshots and tracks version history for images as they change.

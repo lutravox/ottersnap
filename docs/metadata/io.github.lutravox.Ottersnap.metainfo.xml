@@ -32,7 +32,4 @@
       <caption>Ottersnap image viewer and snapshot timeline</caption>
     </screenshot>
   </screenshots>
-  <releases>
-    <release version="1.0.0" type="stable" date="2026-08-31"/>
-  </releases>
 </component>

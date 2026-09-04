@@ -109,7 +109,7 @@ class ViewerController : public QObject {
     void onActiveSessionChanged(ImageSession *session);
     void onSessionImageChanged();
     void onDeviceChanged();
-    bool performCpuReconstruction(const ReconstructionSequence& seq);
+    bool performCpuReconstruction(ImageSession *session, const ReconstructionSequence& seq);
 
   signals:
     void grayscaleToggled(bool enabled);

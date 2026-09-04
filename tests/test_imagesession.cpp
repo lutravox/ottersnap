@@ -338,12 +338,12 @@ void TestImageSession::testUIReconstructorInitialization() {
     VulkanHandles handles = VulkanContext::instance().getUIHandles();
 
     // First initialization
-    session.setUIReconstructorHandles(handles);
+    session.setVkReconstructorHandles(handles);
     auto recon1 = session.uiReconstructor();
     QVERIFY(recon1 != nullptr);
 
     // Second initialization with same handles should not change the pointer
-    session.setUIReconstructorHandles(handles);
+    session.setVkReconstructorHandles(handles);
     auto recon2 = session.uiReconstructor();
     QCOMPARE(recon1, recon2);
 }

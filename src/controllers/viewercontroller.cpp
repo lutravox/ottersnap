@@ -2,7 +2,6 @@
 #include "controllers/viewercontroller.h"
 #include "config/appsettings.h"
 #include "controllers/appsettingscontroller.h"
-#include "core/cpusnapshotreconstructor.h"
 #include "core/vulkancontext.h"
 #include "ui/vkimageviewer.h"
 
@@ -92,8 +91,8 @@ void ViewerController::updateViewerState() {
         (handles.device != VK_NULL_HANDLE) && !AppSettings::forceCpuReconstruction();
 
     if (gpuSupported) {
-        session->setUIReconstructorHandles(handles);
-        m_viewer->setReconstructor(session->uiReconstructor());
+        session->setVkReconstructorHandles(handles);
+        m_viewer->setReconstructor(session->vulkanUiReconstructor());
     }
 
     if (session->isCurrentImageSelected()) {
@@ -125,14 +124,14 @@ void ViewerController::updateViewerState() {
         }
     }
 
-    if (!performCpuReconstruction(*seq)) {
+    if (!performCpuReconstruction(session, *seq)) {
         qCritical() << "[ViewerController] CPU reconstruction failed!";
     }
 }
 
-bool ViewerController::performCpuReconstruction(const ReconstructionSequence& seq) {
-    CPUSnapshotReconstructor cpuReconstructor;
-    QImage                   cpuImage = cpuReconstructor.reconstructToImage(seq);
+bool ViewerController::performCpuReconstruction(ImageSession *session,
+                                                const ReconstructionSequence& seq) {
+    QImage cpuImage = session->cpuReconstructor()->reconstructToImage(seq);
     if (!cpuImage.isNull()) {
         m_viewer->setImage(cpuImage);
         return true;
@@ -363,8 +362,8 @@ void ViewerController::handleColorPickRequested(QPointF screenPos) {
         if (!img.isNull()) {
             color = img.pixel(pixelPos.x(), pixelPos.y());
         }
-    } else if (session->uiReconstructor()) {
-        color = session->uiReconstructor()->samplePixel(pixelPos.x(), pixelPos.y());
+    } else if (ISnapshotReconstructor *recon = session->uiReconstructor()) {
+        color = recon->samplePixel(pixelPos.x(), pixelPos.y());
     }
 
     if (color != 0) {

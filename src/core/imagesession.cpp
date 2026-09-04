@@ -11,6 +11,7 @@
 #include "core/imagesession.h"
 #include "config/appsettings.h"
 #include "core/coloranalyzer.h"
+#include "core/cpusnapshotreconstructor.h"
 #include "core/diskutils.h"
 #include "core/thumbnailcache.h"
 #include "core/thumbnailmanager.h"
@@ -720,7 +721,7 @@ void ImageSession::onDeviceChanged() {
     if (m_uiReconstructor) {
         m_uiReconstructor->cleanup();
     }
-    // UI reconstructor will be re-initialized by the renderer via setUIReconstructorHandles.
+    // The Vk backend will be re-initialized by the renderer via setVkReconstructorHandles.
     emit imageChanged();
 }
 
@@ -748,13 +749,19 @@ QString ImageSession::currentImageTimestamp() const {
     return tr("Current");
 }
 
-void ImageSession::setUIReconstructorHandles(const VulkanHandles& handles) {
-    if (m_uiReconstructor) {
-        if (m_uiReconstructor->getHandles().device == handles.device &&
-            m_uiReconstructor->getHandles().physicalDevice == handles.physicalDevice) {
-            return;
-        }
+void ImageSession::setVkReconstructorHandles(const VulkanHandles& handles) {
+    auto vk = std::dynamic_pointer_cast<VkSnapshotReconstructor>(m_uiReconstructor);
+    if (vk && vk->getHandles().device == handles.device &&
+        vk->getHandles().physicalDevice == handles.physicalDevice) {
+        return;
     }
     m_uiReconstructor =
         std::make_shared<VkSnapshotReconstructor>(handles, &VulkanContext::instance());
+}
+
+ISnapshotReconstructor *ImageSession::cpuReconstructor() {
+    if (!std::dynamic_pointer_cast<CPUSnapshotReconstructor>(m_uiReconstructor)) {
+        m_uiReconstructor = std::make_shared<CPUSnapshotReconstructor>();
+    }
+    return m_uiReconstructor.get();
 }

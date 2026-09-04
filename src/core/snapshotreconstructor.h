@@ -25,4 +25,7 @@ class ISnapshotReconstructor {
 
     /// @brief Samples a single pixel from the current reconstructed state.
     virtual QRgb samplePixel(int x, int y) = 0;
+
+    /// @brief Releases any backend resources held by the reconstructor.
+    virtual void cleanup() {}
 };

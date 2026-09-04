@@ -7,6 +7,7 @@
 #include <QString>
 #include <QVector>
 #include "core/coloranalyzer.h"
+#include "core/snapshotreconstructor.h"
 #include "core/vksnapshotreconstructor.h"
 #include "core/vulkan_types.h"
 
@@ -161,16 +162,27 @@ class ImageSession : public QObject, public IEffectsModel {
     /// @brief Return the relative version of a snapshot on the timeline (1-based).
     int getRelativeVersion(const QUuid& uuid) const;
 
-    /// @brief Returns the UI-bound reconstructor for the current session.
-    std::shared_ptr<VkSnapshotReconstructor> uiReconstructor() const {
-        return m_uiReconstructor;
+    /// @brief Returns the active UI-bound reconstructor (GPU or CPU backend).
+    ISnapshotReconstructor *uiReconstructor() const { return m_uiReconstructor.get(); }
+
+    /// @brief Returns the UI reconstructor as the Vulkan backend.
+    /// @note Only valid while the session is in GPU reconstruction mode; the
+    ///       controller guarantees this by calling it right after
+    ///       setVkReconstructorHandles().
+    std::shared_ptr<VkSnapshotReconstructor> vulkanUiReconstructor() const {
+        return std::static_pointer_cast<VkSnapshotReconstructor>(m_uiReconstructor);
     }
+
+    /// @brief Returns the UI-bound CPU reconstructor, creating it on first use
+    ///       and making it the active backend.
+    ISnapshotReconstructor *cpuReconstructor();
 
     /// @brief Returns a formatted timestamp string for the currently selected image.
     QString currentImageTimestamp() const;
 
-    /// @brief Initializes the UI reconstructor with the provided device handles.
-    void setUIReconstructorHandles(const VulkanHandles& handles);
+    /// @brief Initializes the Vulkan reconstructor backend with the provided
+    ///        device handles.
+    void setVkReconstructorHandles(const VulkanHandles& handles);
     /// @brief Set whether the session is in snapshot-only mode (original file missing).
     void setSnapshotOnly(bool snapshotOnly) {
         m_isSnapshotOnly = snapshotOnly;
@@ -240,7 +252,7 @@ class ImageSession : public QObject, public IEffectsModel {
     ViewModel    m_viewState;
 
     ImageMonitor                                   *m_monitor;
-    std::shared_ptr<VkSnapshotReconstructor>        m_uiReconstructor;
+    std::shared_ptr<ISnapshotReconstructor>         m_uiReconstructor;
     QList<ColorAnalyzer::ColorCluster>              m_colorClusters;
     QCache<QString, QList<ColorAnalyzer::ColorCluster>> m_clusterCache;
 };

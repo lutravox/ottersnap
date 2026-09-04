@@ -32,27 +32,27 @@ Install build dependencies for your distribution:
 #### Arch Linux
 
 ```bash
-sudo pacman -S cmake ninja pkgconf qt6-base qt6-shadertools shaderc libzip zstd vulkan-headers libglvnd
+sudo pacman -S cmake ninja pkgconf qt6-base qt6-shadertools shaderc libzip zstd vulkan-headers libglvnd libxkbcommon
 ```
 
 #### Debian (Trixie)
 
 ```bash
 sudo apt-get install cmake ninja-build pkgconf qt6-base-dev qt6-shadertools-dev \
-  glslc libzip-dev libzstd-dev libvulkan-dev libgl-dev
+  glslc libzip-dev libzstd-dev libvulkan-dev libgl-dev libxkbcommon-dev
 ```
 
 #### Fedora 44
 
 ```bash
 sudo dnf install cmake ninja-build pkgconf qt6-qtbase-devel qt6-qtshadertools-devel \
-  glslc libzip-devel libzstd-devel vulkan-headers mesa-libGL-devel
+  glslc libzip-devel libzstd-devel vulkan-headers mesa-libGL-devel libxkbcommon-devel
 ```
 
 ### Build
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -G Ninja
 cmake --build build
 ```
 
@@ -76,7 +76,7 @@ flatpak install --user ottersnap-local io.github.lutravox.Ottersnap
 ### Testing
 
 ```bash
-cmake -S . -B build -DBUILD_TESTS=ON
+cmake -S . -B build -DBUILD_TESTS=ON -G Ninja
 cmake --build build
 ctest --test-dir build
 ```

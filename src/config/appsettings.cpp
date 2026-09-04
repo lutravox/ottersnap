@@ -36,6 +36,22 @@ void AppSettings::setRestoreSession(bool value) {
     settings().setValue(c_keyRestoreSession, value);
 }
 
+QString AppSettings::lastOpenDir() {
+    return settings().value(c_keyLastOpenDir).toString();
+}
+
+void AppSettings::setLastOpenDir(const QString& dir) {
+    settings().setValue(c_keyLastOpenDir, dir);
+}
+
+QString AppSettings::lastSnapshotDir() {
+    return settings().value(c_keyLastSnapshotDir).toString();
+}
+
+void AppSettings::setLastSnapshotDir(const QString& dir) {
+    settings().setValue(c_keyLastSnapshotDir, dir);
+}
+
 QString AppSettings::openFilter() {
     return QStringLiteral("Images (*.png *.jpg *.jpeg *.gif *.bmp *.tif *.tiff *.webp)");
 }

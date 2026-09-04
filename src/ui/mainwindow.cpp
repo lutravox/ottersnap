@@ -709,10 +709,11 @@ void MainWindow::onResetView() {
 }
 
 void MainWindow::onFileOpen() {
-    QString path =
-        QFileDialog::getOpenFileName(this, tr("Open Image"), "", AppSettings::openFilter());
+    QString path = QFileDialog::getOpenFileName(
+        this, tr("Open Image"), AppSettings::lastOpenDir(), AppSettings::openFilter());
     if (path.isEmpty())
         return;
+    AppSettings::setLastOpenDir(QFileInfo(path).absolutePath());
     openImageFile(path);
 
     // Track recent files
@@ -792,10 +793,14 @@ void MainWindow::onExportHistory() {
     QString baseName = QFileInfo(tab->filePath()).baseName();
     QString suggestedName = QString("%1_history.zip").arg(baseName);
 
+    QString startPath = AppSettings::lastSnapshotDir();
+    startPath = startPath.isEmpty() ? suggestedName : startPath + "/" + suggestedName;
+
     QString path = QFileDialog::getSaveFileName(
-        this, tr("Export Snapshot History"), suggestedName, tr("Snapshot History (*.zip)"));
+        this, tr("Export Snapshot History"), startPath, tr("Snapshot History (*.zip)"));
     if (path.isEmpty())
         return;
+    AppSettings::setLastSnapshotDir(QFileInfo(path).absolutePath());
 
     if (SnapshotManager::exportHistory(tab->filePath(), path)) {
         notify(tr("Snapshot history exported successfully."));
@@ -812,9 +817,10 @@ void MainWindow::onImportHistory() {
     }
 
     QString path = QFileDialog::getOpenFileName(
-        this, tr("Import Snapshot History"), "", tr("Snapshot History (*.zip)"));
+        this, tr("Import Snapshot History"), AppSettings::lastSnapshotDir(), tr("Snapshot History (*.zip)"));
     if (path.isEmpty())
         return;
+    AppSettings::setLastSnapshotDir(QFileInfo(path).absolutePath());
 
     int duplicates = 0;
     if (SnapshotManager::importHistory(tab->filePath(), path, &duplicates)) {
@@ -890,10 +896,14 @@ void MainWindow::onExportSnapshot() {
     QString baseName = QFileInfo(tab->filePath()).baseName();
     QString suggestedName = QString("%1_snapshot_%2").arg(baseName).arg(snapshotIdx + 1);
 
+    QString startPath = AppSettings::lastSnapshotDir();
+    startPath = startPath.isEmpty() ? suggestedName : startPath + "/" + suggestedName;
+
     QString path = QFileDialog::getSaveFileName(
-        this, tr("Export Snapshot"), suggestedName, AppSettings::saveFilter());
+        this, tr("Export Snapshot"), startPath, AppSettings::saveFilter());
     if (path.isEmpty())
         return;
+    AppSettings::setLastSnapshotDir(QFileInfo(path).absolutePath());
 
     auto session = tab->session();
     auto seq = session ? session->getReconstructionSequence(snapshotIdx) : std::nullopt;

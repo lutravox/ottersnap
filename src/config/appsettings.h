@@ -27,6 +27,8 @@ constexpr std::string_view c_keyBaseInterval = "General/baseInterval";
 constexpr std::string_view c_keyThumbnailCacheSizeMB = "General/maxThumbnailCacheSizeMB";
 constexpr std::string_view c_keyDeltaCacheSizeMB = "General/maxDeltaCacheSizeMB";
 constexpr std::string_view c_keyBackgroundColor = "General/backgroundColor";
+constexpr std::string_view c_keyLastOpenDir = "General/lastOpenDir";
+constexpr std::string_view c_keyLastSnapshotDir = "General/lastSnapshotDir";
 constexpr const char      *c_defaultBackgroundColor = "#1f1f1f";
 
 /// @brief Global application settings persisted via QSettings.
@@ -68,6 +70,20 @@ class AppSettings {
 
     /// @brief Return the QFileDialog filter string for image types that can be exported.
     static QString saveFilter();
+
+    /// @brief Return the directory the open-file dialog should start in.
+    /// @return The last directory an image was opened from, or an empty string.
+    static QString lastOpenDir();
+    /// @brief Set the directory the open-file dialog should start in.
+    /// @param dir The directory path to remember.
+    static void setLastOpenDir(const QString& dir);
+
+    /// @brief Return the directory the snapshot import/export dialogs should start in.
+    /// @return The last directory a snapshot file was picked in, or an empty string.
+    static QString lastSnapshotDir();
+    /// @brief Set the directory the snapshot import/export dialogs should start in.
+    /// @param dir The directory path to remember.
+    static void setLastSnapshotDir(const QString& dir);
 
     /// @brief Return whether snapshots should be automatically saved when the file changes.
     static bool autosaveSnapshots();

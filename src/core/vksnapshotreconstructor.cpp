@@ -195,6 +195,7 @@ bool VkSnapshotReconstructor::resetToBase(const QImage& base, const QString& che
 
 bool VkSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_hasValidState = false;
 
     if (!resetToBase(seq.base, seq.baseChecksum))
         return false;
@@ -232,6 +233,7 @@ bool VkSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
         }
     }
 
+    m_hasValidState = true;
     return true;
 }
 
@@ -1092,7 +1094,7 @@ VkSnapshotReconstructor::DownsampledBuffer VkSnapshotReconstructor::performDowns
 QImage VkSnapshotReconstructor::copyToQImage(VkBuffer     buffer,
                                              VkDeviceSize size,
                                              uint32_t     width,
-                                             uint32_t     height) {
+                                             uint32_t     height) const {
     auto df = m_handles.deviceFunctions;
     auto dev = m_handles.device;
     auto pool = m_handles.commandPool;
@@ -1309,4 +1311,11 @@ QRgb VkSnapshotReconstructor::samplePixel(int x, int y) {
     }
 
     return color;
+}
+
+QImage VkSnapshotReconstructor::currentState() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    if (!m_hasValidState || m_stateBuffer == VK_NULL_HANDLE)
+        return QImage();
+    return copyToQImage(m_stateBuffer, m_stateBufferSize, m_width, m_height);
 }

@@ -4,6 +4,7 @@
 
 bool CPUSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_hasValidState = false;
 
     if (!resetToBase(seq.base, seq.baseChecksum))
         return false;
@@ -12,6 +13,7 @@ bool CPUSnapshotReconstructor::reconstruct(const ReconstructionSequence& seq) {
         if (!applyDelta(delta))
             return false;
     }
+    m_hasValidState = true;
     return true;
 }
 
@@ -79,7 +81,7 @@ QImage CPUSnapshotReconstructor::reconstructToImage(const ReconstructionSequence
     }
     
     if (targetSize.isEmpty() || (m_currentState.width() <= targetSize.width() && m_currentState.height() <= targetSize.height())) {
-        return m_currentState.copy();
+        return m_currentState;
     }
     
     return m_currentState.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -91,4 +93,9 @@ QRgb CPUSnapshotReconstructor::samplePixel(int x, int y) {
         return 0;
     }
     return m_currentState.pixel(x, y);
+}
+
+QImage CPUSnapshotReconstructor::currentState() const {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    return m_hasValidState ? m_currentState : QImage();
 }

@@ -924,9 +924,18 @@ void MainWindow::onExportSnapshot() {
         watcher->deleteLater();
     });
 
-    watcher->setFuture(QtConcurrent::run([params]() {
-        CPUSnapshotReconstructor cpu;
-        QImage img = cpu.reconstructToImage(*params.seq);
+    // The selected snapshot is the one on screen, so the session's active
+    // backend already holds its full-resolution state (zero-copy for the CPU
+    // backend, one GPU readback for the Vulkan backend).
+    QImage img;
+    if (auto backend = session->uiReconstructor())
+        img = backend->currentState();
+
+    watcher->setFuture(QtConcurrent::run([img, params]() mutable {
+        if (img.isNull()) {
+            CPUSnapshotReconstructor cpu;
+            img = cpu.reconstructToImage(*params.seq);
+        }
         if (img.isNull())
             return false;
 

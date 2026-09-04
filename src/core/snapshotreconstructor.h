@@ -26,6 +26,12 @@ class ISnapshotReconstructor {
     /// @brief Samples a single pixel from the current reconstructed state.
     virtual QRgb samplePixel(int x, int y) = 0;
 
+    /// @brief Returns the full-resolution image currently held by this backend.
+    /// @return The reconstructed image, or a null image if no complete
+    ///         reconstruction is available.
+    virtual QImage currentState() const = 0;
+
     /// @brief Releases any backend resources held by the reconstructor.
-    virtual void cleanup() {}
+    virtual void cleanup() {
+    }
 };

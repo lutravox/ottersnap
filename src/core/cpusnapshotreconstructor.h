@@ -16,9 +16,11 @@ class CPUSnapshotReconstructor : public ISnapshotReconstructor {
     QImage reconstructToImage(const ReconstructionSequence& seq,
                               QSize                         targetSize = QSize()) override;
     QRgb samplePixel(int x, int y) override;
+    QImage currentState() const override;
 
   private:
     mutable std::recursive_mutex m_mutex;
     QImage m_currentState;
+    bool   m_hasValidState = false;
     QString m_lastChecksum;
 };

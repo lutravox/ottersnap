@@ -17,6 +17,7 @@ class VkSnapshotReconstructor : public ISnapshotReconstructor {
     bool applyDelta(const DeltaEntry& delta) override;
     QImage reconstructToImage(const ReconstructionSequence& seq, QSize targetSize = QSize()) override;
     QRgb samplePixel(int x, int y) override;
+    QImage currentState() const override;
 
     /// @brief Performs cleanup of all GPU resources managed by the reconstructor.
     void cleanup();
@@ -111,11 +112,12 @@ class VkSnapshotReconstructor : public ISnapshotReconstructor {
     bool recordDeltaCommands(uint32_t tileW, uint32_t tileH, uint32_t numTiles);
     DownsampledBuffer performDownsample(
         VkBuffer srcBuffer, VkDeviceSize srcSize, uint32_t srcW, uint32_t srcH, QSize targetSize);
-    QImage copyToQImage(VkBuffer buffer, VkDeviceSize size, uint32_t width, uint32_t height);
+    QImage copyToQImage(VkBuffer buffer, VkDeviceSize size, uint32_t width, uint32_t height) const;
 
     VulkanHandles                m_handles;
     VulkanContext               *m_context = nullptr;
     mutable std::recursive_mutex m_mutex;
+    bool                         m_hasValidState = false;
 
     // Descriptor Set (Session-specific)
     VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;

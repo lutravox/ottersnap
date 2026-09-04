@@ -30,3 +30,6 @@ add_unit_test(snapshottimelinecontroller controllers/snapshottimelinecontroller.
 add_unit_test(shortcutmanager controllers/shortcutmanager.cpp Qt6::Core Qt6::Gui)
 add_unit_test(cpusnapshotreconstructor core/cpusnapshotreconstructor.cpp Qt6::Gui)
 add_unit_test(snapshotdecompressor core/snapshotdecompressor.cpp Qt6::Core)
+add_unit_test(notificationmodel core/notificationmodel.cpp Qt6::Core)
+add_unit_test(colorinfomodel core/colorinfomodel.cpp Qt6::Gui Qt6::Widgets)
+add_unit_test(clusterindicatormodel core/clusterindicatormodel.cpp Qt6::Gui)

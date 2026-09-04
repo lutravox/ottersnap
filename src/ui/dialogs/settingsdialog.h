@@ -6,7 +6,7 @@
 #include <QSpinBox>
 #include <QTabWidget>
 #include "controllers/appsettingscontroller.h"
-#include "ui/notificationmanager.h"
+#include "core/notificationmodel.h"
 
 class QCheckBox;
 class QSpinBox;
@@ -18,9 +18,9 @@ class SettingsDialog : public QDialog {
   public:
     /// @brief Construct the settings dialog.
     /// @param settings The settings controller.
-    /// @param notificationManager The notification manager for feedback.
+    /// @param notificationModel The notification model for feedback.
     /// @param parent Parent widget.
-    explicit SettingsDialog(AppSettingsController *settings, NotificationManager *notificationManager, QWidget *parent = nullptr);
+    explicit SettingsDialog(AppSettingsController *settings, NotificationModel *notificationModel, QWidget *parent = nullptr);
 
   private:
     void resetAllSettings();
@@ -35,6 +35,6 @@ class SettingsDialog : public QDialog {
     QPushButton          *m_btnBackgroundColor;
     QColor                m_bgColor;
     AppSettingsController *m_settings;
-    NotificationManager   *m_notificationManager;
+    NotificationModel     *m_notificationModel;
     QTabWidget             *m_tabs;
 };

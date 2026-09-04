@@ -1,0 +1,3 @@
+ColorInfo colorinfo.qml
+Notification notification.qml
+NotificationLayer notificationlayer.qml

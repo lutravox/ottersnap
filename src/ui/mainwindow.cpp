@@ -158,11 +158,19 @@ void MainWindow::setupUi() {
     // Stacked widget
     m_contentStack = new QStackedWidget(central);
 
+    // Notifications (model shared by the viewer and empty-state QML layers)
+    m_notificationModel = new NotificationModel(this);
+
     // Viewer state: thumbnail strip + viewer + nav bar
-    m_viewerState = new ViewerModel(m_contentStack);
+    m_viewerState = new ViewerModel(m_contentStack,
+                                    m_colorInfoController->indicatorModel(),
+                                    m_colorInfoController->colorInfoModel(),
+                                    m_notificationModel);
 
     // Empty state
-    m_emptyState = new EmptyState(m_contentStack);
+    m_emptyState = new EmptyState(m_contentStack, m_notificationModel);
+
+    m_colorInfoController->setViewerModel(m_viewerState);
 
     // Stack states
     m_contentStack->addWidget(m_emptyState);
@@ -247,9 +255,6 @@ void MainWindow::setupUi() {
 
     // Connect empty state actions
     connect(m_emptyState, &EmptyState::openRequested, this, &MainWindow::onFileOpen);
-
-    // Notifications
-    m_notificationManager = new NotificationManager(this);
 
     // Connections
     connect(m_sessionController,
@@ -1124,7 +1129,7 @@ ImageTab *MainWindow::currentTab() {
 }
 
 void MainWindow::notify(const QString& msg, int timeoutMs) {
-    m_notificationManager->notify(msg, timeoutMs);
+    m_notificationModel->addMessage(msg, timeoutMs);
 }
 
 void MainWindow::syncTimelineSelection() {
@@ -1202,7 +1207,7 @@ void MainWindow::dropEvent(QDropEvent *event) {
 }
 
 void MainWindow::onSettings() {
-    SettingsDialog dialog(m_settingsController, m_notificationManager, this);
+    SettingsDialog dialog(m_settingsController, m_notificationModel, this);
     dialog.exec();
 }
 
@@ -1270,8 +1275,6 @@ void MainWindow::updateViewer(ImageTab *tab) {
     QSize dims = tab->session()->dimensions();
     m_viewerState->statusBar()->setDimensions(dims.width(), dims.height());
 
-    m_colorInfoController->setSessionController(m_sessionController);
-    m_colorInfoController->setViewerModel(m_viewerState);
     m_colorInfoController->setClusters(tab->session()->colorClusters());
 
     m_viewerState->statusBar()->setTimestamp(tab->session()->currentImageTimestamp());
@@ -1306,11 +1309,12 @@ void MainWindow::onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuid
             tr("Delete"),
             tr("Cancel"))) {
         const int total = uuids.size();
-        connect(tab->session(),
-                &ImageSession::deletionFinished,
-                this,
-                [this, total]() { notify(tr("Deleted %1 snapshots successfully.").arg(total)); },
-                Qt::SingleShotConnection);
+        connect(
+            tab->session(),
+            &ImageSession::deletionFinished,
+            this,
+            [this, total]() { notify(tr("Deleted %1 snapshots successfully.").arg(total)); },
+            Qt::SingleShotConnection);
 
         tab->deleteSnapshots(uuids, true);
     }

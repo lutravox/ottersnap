@@ -5,6 +5,9 @@
 #include <QToolBar>
 #include <QWidget>
 
+#include "core/clusterindicatormodel.h"
+#include "core/colorinfomodel.h"
+#include "core/notificationmodel.h"
 #include "ui/snapshottimeline.h"
 #include "ui/statusbar.h"
 #include "ui/viewertoolbar.h"
@@ -19,7 +22,16 @@ class ViewerModel : public QWidget {
   public:
     /// @brief Constructs the model
     /// @param parent Optional parent widget.
-    explicit ViewerModel(QWidget *parent = nullptr);
+    /// @param indicatorModel The cluster indicator model (owned by the
+    ///        ColorInfoController) exposed to the viewer's QML overlay.
+    /// @param colorInfoModel The color info model (owned by the
+    ///        ColorInfoController) exposed to the viewer's QML overlay.
+    /// @param notificationModel The notification model (owned by the
+    ///        MainWindow) exposed to the viewer's QML overlay.
+    explicit ViewerModel(QWidget *parent = nullptr,
+                         ClusterIndicatorModel *indicatorModel = nullptr,
+                         ColorInfoModel *colorInfoModel = nullptr,
+                         NotificationModel *notificationModel = nullptr);
 
     /// @brief Returns the snapshot timeline for version history.
     SnapshotTimeline *snapshotTimeline() {

@@ -12,7 +12,10 @@
         <file alias="icons/colorpicker.svg">icons/colorpicker.svg</file>
         <file alias="icons/ottersnap.svg">icons/ottersnap.svg</file>
         <file>../ui/qml/notification.qml</file>
+        <file>../ui/qml/notificationlayer.qml</file>
         <file>../ui/qml/colorinfo.qml</file>
+        <file>../ui/qml/viewer.qml</file>
+        <file>../ui/qml/qmldir</file>
         <file>shaders/snapshot_reconstruct.comp</file>
         <file>shaders/snapshot_downsample.comp</file>
     </qresource>

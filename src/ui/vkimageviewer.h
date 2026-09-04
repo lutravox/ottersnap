@@ -2,15 +2,20 @@
 
 #include <QImage>
 #include <QMouseEvent>
+#include <QQuickItem>
 #include <QWidget>
 
-#include <QVulkanInstance>
-#include <QVulkanWindow>
+#include <QQuickRhiItem>
+#include <QQuickView>
+#include <QQuickWindow>
 
 #include "core/effects_interfaces.h"
 #include "core/viewer_interfaces.h"
 
 class VkImageViewerRenderer;
+class ClusterIndicatorModel;
+class ColorInfoModel;
+class NotificationModel;
 
 /// @brief Vulkan-accelerated image viewer with GPU mipmapping.
 class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
@@ -19,29 +24,23 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
   public:
     /// @brief Construct the Vulkan image viewer.
     /// @param parent Optional parent widget.
-    explicit VkImageViewer(QWidget *parent = nullptr);
+    /// @param indicatorModel The cluster indicator model (owned by the
+    ///        ColorInfoController) exposed to the QML overlay.
+    /// @param colorInfoModel The color info model (owned by the
+    ///        ColorInfoController) exposed to the QML overlay.
+    /// @param notificationModel The notification model (owned by the
+    ///        MainWindow) exposed to the QML overlay.
+    explicit VkImageViewer(QWidget *parent,
+                           ClusterIndicatorModel *indicatorModel,
+                           ColorInfoModel *colorInfoModel = nullptr,
+                           NotificationModel *notificationModel = nullptr);
 
     /// @brief Destructor. Cleans up Vulkan resources.
     ~VkImageViewer() override;
 
-    /// @brief Set the position of the cluster indicator.
-    /// @param pos The normalized position (0.0 to 1.0).
-    void setIndicatorPos(const QPointF& pos) {
-        m_indicatorPos = pos;
-        // updateIndicatorPosition() is removed as it's now handled by ViewerState/ClusterIndicator
-    }
-
-    /// @brief Get the current indicator position.
-    /// @return The normalized position.
-    QPointF indicatorPos() const {
-        return m_indicatorPos;
-    }
-
-    /// @brief Set the indicator rendering state.
-    /// @param pos The screen position.
-    /// @param color The color to render.
-    /// @param visible Whether the indicator should be visible.
-    void setIndicator(QPoint pos, QColor color, bool visible);
+    /// @brief Destroy the QML scene (root object) of the embedded view.
+    ///        Safe to call multiple times; the view itself outlives the scene.
+    void destroyQmlScene();
 
     /// @brief Update the rendering parameters (zoom, pan, etc.).
     void setRenderParams(const RenderParams& params) override;
@@ -93,8 +92,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Trigger a redraw of the viewer.
     void update() override {
         QWidget::update();
-        if (m_vulkanWindow) {
-            m_vulkanWindow->requestUpdate();
+        if (m_imageItem) {
+            m_imageItem->update();
         }
     }
 
@@ -175,7 +174,8 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     void onEffectsChanged();
 
   private:
-    QVulkanWindow         *m_vulkanWindow = nullptr;
+    QQuickView            *m_quickView = nullptr;
+    QQuickRhiItem         *m_imageItem = nullptr;
     VkImageViewerRenderer *m_renderer = nullptr;
     QWidget               *m_container = nullptr;
 
@@ -184,9 +184,13 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     QPoint       m_lastMousePos;
     bool         m_scaleWithWindow = false;
     bool         m_pickingEnabled = false;
-    RenderParams m_params;
-    QPointF      m_indicatorPos;
-    uint32_t     m_generation = 0;
+    bool         m_clickPassedToQml = false;
+
+    /// @brief True if the given window position falls over the ColorInfo
+    ///        QML overlay, i.e. the click should be handled by QML.
+    bool isOverColorInfoOverlay(const QPointF &windowPos) const;
+    RenderParams          m_params;
+    uint32_t              m_generation = 0;
 };
 
 using ImageViewer = VkImageViewer;

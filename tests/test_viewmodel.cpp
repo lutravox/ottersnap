@@ -36,6 +36,7 @@ class TestViewModel : public QObject {
     void testScreenToPixelZoomed();
     void testScreenToPixelPanned();
     void testScreenToPixelOutOfBounds();
+    void testScreenToPixelSubPixel();
     void testPixelToScreenBasic();
     void testPixelToScreenZoomed();
     void testPixelToScreenPanned();
@@ -275,6 +276,19 @@ void TestViewModel::testScreenToPixelOutOfBounds() {
     QCOMPARE(zs.screenToPixel(QPointF(101, 101)), QPoint(-1, -1));
 }
 
+void TestViewModel::testScreenToPixelSubPixel() {
+    ViewModel zs;
+    zs.resetState(100, 100);
+    zs.setViewportSize(100, 100);
+
+    // The sampled pixel is the one containing the click point, not the
+    // nearest pixel center: (0.75, 0.75) and (50.75, 50.75) are inside
+    // pixels 0 and 50 respectively.
+    QCOMPARE(zs.screenToPixel(QPointF(0.75, 0.75)), QPoint(0, 0));
+    QCOMPARE(zs.screenToPixel(QPointF(50.75, 50.75)), QPoint(50, 50));
+    QCOMPARE(zs.screenToPixel(QPointF(99.9, 99.9)), QPoint(99, 99));
+}
+
 void TestViewModel::testPixelToScreenBasic() {
     ViewModel zs;
     zs.resetState(100, 100);
@@ -325,7 +339,11 @@ void TestViewModel::testCoordinateRoundTrip() {
 
         QPoint  p(px, py);
         QPointF s = zs.pixelToScreen(p);
-        QPoint  p2 = zs.screenToPixel(s);
+
+        const double halfPixel = 0.5 * (zoom / 100.0);
+        s += QPointF(halfPixel, halfPixel);
+
+        QPoint p2 = zs.screenToPixel(s);
 
         QCOMPARE(p, p2);
     };

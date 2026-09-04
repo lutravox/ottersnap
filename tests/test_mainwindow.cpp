@@ -7,8 +7,8 @@
 #include <QtTest>
 #include "config/appsettings.h"
 #include "controllers/effectscontroller.h"
-#include "core/snapshotmanager.h"
 #include "core/snapshotdb.h"
+#include "core/snapshotmanager.h"
 #include "core/vulkancontext.h"
 #include "ui/imagetab.h"
 #include "ui/mainwindow.h"
@@ -139,14 +139,14 @@ class TestMainWindow : public QObject {
 
         // Verify that a snapshot was created OR already existed
         bool snapFired = snapshotSpy.wait(2000);
-        
+
         // Ensure the save operation is fully complete before proceeding
         QTest::qWait(100);
 
         if (!snapFired) {
             // If it didn't fire, verify that it was because it already existed
             // (In this specific test case, State B should have been snapshotted)
-            // We don't have an easy way to check initial count here, but we can 
+            // We don't have an easy way to check initial count here, but we can
             // verify that the total count is at least 1.
             QVector<ImageSnapshot> snaps = SnapshotManager::loadSnapshots(path);
             QVERIFY(!snaps.isEmpty());

@@ -11,7 +11,11 @@
 #include "ui/viewertoolbar.h"
 #include "ui/vkimageviewer.h"
 
-ViewerModel::ViewerModel(QWidget *parent) : QWidget(parent) {
+ViewerModel::ViewerModel(QWidget               *parent,
+                         ClusterIndicatorModel *indicatorModel,
+                         ColorInfoModel        *colorInfoModel,
+                         NotificationModel     *notificationModel)
+    : QWidget(parent) {
     {
         QFile qss(":/qss/vkimageviewer.qss");
         if (qss.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -23,15 +27,15 @@ ViewerModel::ViewerModel(QWidget *parent) : QWidget(parent) {
     layout->setSpacing(0);
 
     m_snapshotTimeline = new SnapshotTimeline(this);
-    m_viewer = new ImageViewer(this);
+    m_viewer = new ImageViewer(this, indicatorModel, colorInfoModel, notificationModel);
     m_statusBar = new StatusBar(this);
     m_viewerToolbar = new ViewerToolbar(this);
 
     layout->addWidget(m_snapshotTimeline, 0);
 
-    m_snapshotOnlyLabel = new QLabel(
-        tr("Original image not found. Viewing only snapshots. Use File > Update Image Path to re-attach the file."),
-        this);
+    m_snapshotOnlyLabel = new QLabel(tr("Original image not found. Viewing only snapshots. Use "
+                                        "File > Update Image Path to re-attach the file."),
+                                     this);
     m_snapshotOnlyLabel->setObjectName("snapshotOnlyLabel");
     m_snapshotOnlyLabel->setAlignment(Qt::AlignCenter);
     m_snapshotOnlyLabel->setVisible(false);

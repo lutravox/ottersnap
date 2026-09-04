@@ -11,17 +11,15 @@
 #include "controllers/snapshottimelinecontroller.h"
 #include "controllers/viewercontroller.h"
 #include "controllers/colorinfocontroller.h"
+#include "core/notificationmodel.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
-#include "ui/notificationmanager.h"
 #include "ui/tabbar.h"
 #include "ui/viewermodel.h"
 
 class QAction;
 
 class ImageTab;
-class Notification;
-class NotificationManager;
 
 /// @brief Main application window. Manages tabs, shared viewer, zoom
 /// navigation, modifiers, and session persistence.
@@ -112,7 +110,7 @@ class MainWindow : public QMainWindow {
 
     TabBar                *m_tabBar;
     QStackedWidget        *m_contentStack;
-    NotificationManager   *m_notificationManager;
+    NotificationModel     *m_notificationModel;
     ViewerModel           *m_viewerState;
     EmptyState            *m_emptyState;
     QSettings              m_settings;

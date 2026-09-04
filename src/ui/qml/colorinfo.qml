@@ -2,17 +2,14 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Shapes 2.15
 
+// Color info overlay
 Item {
     id: root
+    objectName: "colorInfoOverlay"
     width: overlayWidth
     height: overlayHeight
 
-    property string hexColor: "#FFFFFF"
-    property real alphaValue: 1.0
-    property bool visibleState: false
-    property var colorClusters: []
-    property int selectedClusterId: -1
-    signal fadeOutFinished()
+    readonly property bool interactive: colorInfo.visible
 
     // Layout constants
     readonly property int overlayWidth: 310
@@ -97,38 +94,15 @@ Item {
         return { h: h, s: s, v: v };
     }
 
-    property var currentHSVIndicator: getHSVForIndicator(hexColor)
-    property var rgbValues: getRGB(hexColor, alphaValue)
-    property var hsvValues: getHSV(hexColor)
-    property string luminosityValue: getLuminosity(hexColor)
-
-    onHexColorChanged: {
-        currentHSVIndicator = getHSVForIndicator(hexColor);
-        rgbValues = getRGB(hexColor, alphaValue);
-        hsvValues = getHSV(hexColor);
-        luminosityValue = getLuminosity(hexColor);
-    }
-
-    onAlphaValueChanged: {
-        rgbValues = getRGB(hexColor, alphaValue);
-    }
+    property var currentHSVIndicator: getHSVForIndicator(colorInfo.hexColor)
+    property var rgbValues: getRGB(colorInfo.hexColor, colorInfo.alphaValue)
+    property var hsvValues: getHSV(colorInfo.hexColor)
+    property string luminosityValue: getLuminosity(colorInfo.hexColor)
 
     SystemPalette {
         id: sysPalette
         colorGroup: SystemPalette.Active
     }
-
-    Menu {
-        id: copyMenu
-        MenuItem {
-            text: "Copy"
-            onTriggered: {
-                colorInfo.copyToClipboard(currentSelectedText);
-            }
-        }
-    }
-
-    property string currentSelectedText: ""
 
     Component {
         id: valueFieldComponent
@@ -141,7 +115,7 @@ Item {
                 id: te; text: modelData.value; color: "white"; font.pixelSize: fontSizeSmall; font.family: "monospace"; readOnly: true; selectByMouse: true; cursorVisible: false
                 MouseArea {
                     anchors.fill: parent; acceptedButtons: Qt.RightButton;
-                    onClicked: { root.currentSelectedText = te.text; copyMenu.popup(); }
+                    onClicked: colorInfo.showCopyMenu(te.text)
                 }
             }
         }
@@ -154,18 +128,13 @@ Item {
         anchors.centerIn: parent
         width: containerWidth
         height: containerHeight
-        opacity: 0
+        opacity: colorInfo.visible ? 1 : 0
+        enabled: colorInfo.visible
 
         Behavior on opacity {
             NumberAnimation {
                 duration: 200
                 easing.type: Easing.OutCubic
-            }
-        }
-
-        onOpacityChanged: {
-            if (opacity <= 0 && !root.visibleState) {
-                root.fadeOutFinished();
             }
         }
 
@@ -188,12 +157,11 @@ Item {
             anchors.leftMargin: wheelMarginLeft
             radius: wheelSize / 2
             color: "transparent"
-            layer.enabled: true
-            opacity: container.opacity
 
             ShaderEffect {
                 id: wheelEffect
                 anchors.fill: parent
+                opacity: container.opacity
                 fragmentShader: "qrc:/shaders/colorwheel.frag.qsb"
             }
         }
@@ -215,7 +183,7 @@ Item {
         }
 
         Repeater {
-            model: root.colorClusters
+            model: colorInfo.clusters
             delegate: Rectangle {
                 id: clusterDot
                 property bool isHovered: false
@@ -230,7 +198,7 @@ Item {
                 color: modelData.color
                 border.color: "white"
                 border.width: 1
-                scale: (clusterDot.isHovered || root.selectedClusterId === clusterDot.clusterId) ? 1.5 : 1.0
+                scale: (clusterDot.isHovered || colorInfo.selectedClusterId === clusterDot.clusterId) ? 1.5 : 1.0
 
                 Behavior on scale {
                     NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
@@ -242,10 +210,7 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onEntered: clusterDot.isHovered = true
                     onExited: clusterDot.isHovered = false
-                    onClicked: {
-                        root.selectedClusterId = clusterDot.clusterId;
-                        colorInfo.handleClusterSelected(modelData);
-                    }
+                    onClicked: colorInfo.handleClusterSelected(modelData)
                 }
 
                 x: wheelMarginLeft + (wheelSize / 2) + modelData.center.x * (wheelSize / 2) - (width / 2)
@@ -303,7 +268,7 @@ Item {
                     width: teHex.width; height: teHex.height
                     TextEdit {
                         id: teHex
-                        text: root.hexColor
+                        text: colorInfo.hexColor
                         color: "white"
                         font.pixelSize: fontSizeBold
                         font.weight: Font.Bold
@@ -311,20 +276,13 @@ Item {
                         readOnly: true
                         selectByMouse: true
                         cursorVisible: false
-                        MouseArea { anchors.fill: parent; acceptedButtons: Qt.RightButton; onClicked: { root.currentSelectedText = teHex.text; copyMenu.popup(); } }
+                        MouseArea {
+                        anchors.fill: parent; acceptedButtons: Qt.RightButton;
+                        onClicked: colorInfo.showCopyMenu(teHex.text)
+                    }
                     }
                 }
             }
-        }
-    }
-
-    onVisibleStateChanged: {
-        container.opacity = visibleState ? 1 : 0;
-    }
-
-    Component.onCompleted: {
-        if (visibleState) {
-            container.opacity = 1;
         }
     }
 }

@@ -25,9 +25,9 @@
 #include "ui/dialogs/shortcutsettingspage.h"
 
 SettingsDialog::SettingsDialog(AppSettingsController *settings,
-                               NotificationManager   *notificationManager,
+                               NotificationModel     *notificationModel,
                                QWidget               *parent)
-    : QDialog(parent), m_settings(settings), m_notificationManager(notificationManager) {
+    : QDialog(parent), m_settings(settings), m_notificationModel(notificationModel) {
     setWindowTitle(tr("Settings"));
     setMinimumWidth(600);
 
@@ -219,20 +219,20 @@ SettingsDialog::SettingsDialog(AppSettingsController *settings,
         ThumbnailCache::updateMaxCost(m_sbThumbCacheSize->value());
         m_settings->setMaxDeltaCacheSizeMB(m_sbDeltaCacheSize->value());
         DeltaCache::updateMaxCost(m_sbDeltaCacheSize->value());
-        
+
         // Commit pending shortcuts
         for (int i = 0; i < m_tabs->count(); ++i) {
             auto *sp = qobject_cast<ShortcutSettingsPage *>(m_tabs->widget(i));
             if (sp)
                 sp->commitChanges();
         }
-        
+
         m_settings->shortcutManager()->save();
-        
-        if (m_notificationManager) {
-            m_notificationManager->notify(tr("Settings updated successfully."));
+
+        if (m_notificationModel) {
+            m_notificationModel->addMessage(tr("Settings updated successfully."));
         }
-        
+
         accept();
     });
     connect(buttonBox, &QDialogButtonBox::rejected, this, [this]() {
@@ -272,7 +272,8 @@ void SettingsDialog::resetAllSettings() {
 
         case 3: // Appearance
             m_bgColor = QColor(c_defaultBackgroundColor);
-            m_btnBackgroundColor->setStyleSheet(QString("background-color: %1;").arg(m_bgColor.name()));
+            m_btnBackgroundColor->setStyleSheet(
+                QString("background-color: %1;").arg(m_bgColor.name()));
             break;
 
         case 4: { // Shortcuts

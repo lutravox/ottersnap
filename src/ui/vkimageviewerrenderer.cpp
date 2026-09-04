@@ -8,13 +8,8 @@
 #include <QFile>
 #include <algorithm>
 #include <cstring>
-
-// Push constant structure for the indicator
-struct IndicatorConstants {
-    float offset[2];
-    float size[2];
-    float color[4];
-};
+#include <rhi/qrhi.h>
+#include <rhi/qrhi_platform.h>
 
 void VkImageViewerRenderer::setReconstructor(
     const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
@@ -39,181 +34,74 @@ void VkImageViewerRenderer::clear() {
     m_uboDirty = true;
 }
 
-void VkImageViewerRenderer::setIndicator(QPoint pos, QColor color, bool visible) {
-    m_indicatorPos = pos;
-    m_indicatorColor = color;
-    m_indicatorVisible = visible;
+VkImageViewerRenderer::~VkImageViewerRenderer() {
+    releaseResources();
 }
 
-void VkImageViewerRenderer::initResources() {
-    VulkanContext::instance().setUIDevice(
-        m_vkWindow->device(), m_vkWindow->physicalDevice(), m_vkWindow->vulkanInstance());
+VkRenderPass VkImageViewerRenderer::itemRenderPass() const {
+    auto *rpd = renderTarget()->renderPassDescriptor();
+    auto *rpn = static_cast<const QRhiVulkanRenderPassNativeHandles *>(rpd->nativeHandles());
+    return rpn->renderPass;
+}
 
-    m_devFuncs = m_vkWindow->vulkanInstance()->deviceFunctions(m_vkWindow->device());
+void VkImageViewerRenderer::initialize(QRhiCommandBuffer *cb) {
+    Q_UNUSED(cb);
+    m_rhi = rhi();
+    if (!m_rhi || m_rhi->backend() != QRhi::Vulkan)
+        return;
+    const auto *hn = static_cast<const QRhiVulkanNativeHandles *>(m_rhi->nativeHandles());
+    m_device = hn->dev;
+    m_physDev = hn->physDev;
+    m_instance = hn->inst;
+    if (m_device == VK_NULL_HANDLE)
+        return;
+    ensureResources();
+}
 
-    if (!createSamplers())
-        return;
-    VulkanContext::instance().createGraphicsPipeline(
-        m_vkWindow->device(), m_devFuncs, m_vkWindow->defaultRenderPass());
-    if (!createDescriptorPoolAndSet())
-        return;
-    if (!createUniformBuffer())
-        return;
-    if (!createVertexBuffer())
-        return;
+void VkImageViewerRenderer::synchronize(QQuickRhiItem *item) {
+    Q_UNUSED(item);
+}
 
-    // Create indicator pipeline
-    createIndicatorPipeline();
+bool VkImageViewerRenderer::ensureResources() {
+    if (m_resourcesReady)
+        return true;
+    if (m_device == VK_NULL_HANDLE || m_instance == nullptr)
+        return false;
+
+    VulkanContext::instance().setUIDevice(m_device, m_physDev, m_instance);
+    m_devFuncs = m_instance->deviceFunctions(m_device);
+
+    VkRenderPass rp = itemRenderPass();
+    if (rp == VK_NULL_HANDLE)
+        return false;
+
+    if (!createSamplers()) {
+        releaseResources();
+        return false;
+    }
+    VulkanContext::instance().createGraphicsPipeline(m_device, m_devFuncs, rp);
+    const bool ok = createDescriptorPoolAndSet() && createUniformBuffer() && createVertexBuffer() &&
+                    VulkanContext::instance().getGraphicsPipeline() != VK_NULL_HANDLE;
+    if (!ok) {
+        releaseResources();
+        return false;
+    }
 
     m_activeSampler = m_samplerLinear;
-
-    // Update descriptor set now if a texture view already exists
     if (m_textureView != VK_NULL_HANDLE)
         updateDescriptors(m_descriptorSet, m_uniformBuffer, m_samplerLinear, m_textureView);
-
-    // Mark UBO dirty so the first frame writes the current state into the
-    // freshly mapped buffer
     m_uboDirty = true;
+    m_resourcesReady = true;
 
-    // Execute any reconstruction that was deferred because m_vkWindow was null
     if (m_pendingReconstruction) {
         reconstruct(*m_pendingReconstruction, m_pendingGeneration);
         m_pendingReconstruction.reset();
     }
-}
-
-void VkImageViewerRenderer::createIndicatorPipeline() {
-    VkDevice                dev = m_vkWindow->device();
-    QVulkanDeviceFunctions *df = m_devFuncs;
-
-    auto loadShader = [](const QString& path) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly)) {
-            qCritical() << "[VkImageViewer] Failed to open shader file:" << path;
-            return QByteArray();
-        }
-        return file.readAll();
-    };
-
-    QByteArray vertCode = loadShader(":/shaders/cluster_indicator.vert.spv");
-    QByteArray fragCode = loadShader(":/shaders/cluster_indicator.frag.spv");
-
-    if (vertCode.isEmpty() || fragCode.isEmpty()) {
-        qCritical() << "[VkImageViewer] Failed to load indicator shaders";
-        return;
-    }
-
-    VkShaderModuleCreateInfo vci{};
-    vci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    vci.codeSize = vertCode.size();
-    vci.pCode = reinterpret_cast<const uint32_t *>(vertCode.data());
-    VkShaderModule vertMod;
-    df->vkCreateShaderModule(dev, &vci, nullptr, &vertMod);
-
-    vci.codeSize = fragCode.size();
-    vci.pCode = reinterpret_cast<const uint32_t *>(fragCode.data());
-    VkShaderModule fragMod;
-    df->vkCreateShaderModule(dev, &vci, nullptr, &fragMod);
-
-    VkPipelineShaderStageCreateInfo stages[2]{};
-    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = vertMod;
-    stages[0].pName = "main";
-
-    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stages[1].module = fragMod;
-    stages[1].pName = "main";
-
-    VkPipelineVertexInputStateCreateInfo vi{};
-    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    VkVertexInputBindingDescription binding{};
-    binding.binding = 0;
-    binding.stride = sizeof(float) * 4;
-    VkVertexInputAttributeDescription attr[2]{};
-    attr[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, 0};
-    attr[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 2};
-    vi.vertexBindingDescriptionCount = 1;
-    vi.pVertexBindingDescriptions = &binding;
-    vi.vertexAttributeDescriptionCount = 2;
-    vi.pVertexAttributeDescriptions = attr;
-
-    VkPipelineInputAssemblyStateCreateInfo ia{};
-    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-    VkPipelineViewportStateCreateInfo vs{};
-    vs.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    vs.viewportCount = 1;
-    vs.scissorCount = 1;
-
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo ds{};
-    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    ds.dynamicStateCount = 2;
-    ds.pDynamicStates = dynamicStates;
-
-    VkPipelineRasterizationStateCreateInfo rs{};
-    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rs.lineWidth = 1.0f;
-    rs.cullMode = VK_CULL_MODE_NONE;
-    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-
-    VkPipelineMultisampleStateCreateInfo ms{};
-    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkPipelineColorBlendAttachmentState cb[1]{};
-    cb[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    cb[0].blendEnable = VK_TRUE;
-    cb[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    cb[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    cb[0].colorBlendOp = VK_BLEND_OP_ADD;
-    cb[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    cb[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    cb[0].alphaBlendOp = VK_BLEND_OP_ADD;
-
-    VkPipelineColorBlendStateCreateInfo cbs{};
-    cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    cbs.logicOpEnable = VK_FALSE;
-    cbs.attachmentCount = 1;
-    cbs.pAttachments = cb;
-
-    VkPipelineLayoutCreateInfo pli{};
-    pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pli.pushConstantRangeCount = 1;
-    VkPushConstantRange pcr{};
-    pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    pcr.offset = 0;
-    pcr.size = sizeof(IndicatorConstants);
-    pli.pPushConstantRanges = &pcr;
-    df->vkCreatePipelineLayout(dev, &pli, nullptr, &m_indicatorPipelineLayout);
-
-    VkGraphicsPipelineCreateInfo gp{};
-    gp.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gp.stageCount = 2;
-    gp.pStages = stages;
-    gp.pVertexInputState = &vi;
-    gp.pInputAssemblyState = &ia;
-    gp.pViewportState = &vs;
-    gp.pRasterizationState = &rs;
-    gp.pMultisampleState = &ms;
-    gp.pColorBlendState = &cbs;
-    gp.pDynamicState = &ds;
-    gp.layout = m_indicatorPipelineLayout;
-    gp.renderPass = m_vkWindow->defaultRenderPass();
-    gp.subpass = 0;
-
-    df->vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gp, nullptr, &m_indicatorPipeline);
-
-    df->vkDestroyShaderModule(dev, vertMod, nullptr);
-    df->vkDestroyShaderModule(dev, fragMod, nullptr);
+    return true;
 }
 
 bool VkImageViewerRenderer::createSamplers() {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     VkSamplerCreateInfo si{};
@@ -253,7 +141,7 @@ bool VkImageViewerRenderer::createSamplers() {
 // createPipeline as they are now managed by VulkanContext.
 
 bool VkImageViewerRenderer::createDescriptorPoolAndSet() {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     VkDescriptorPoolSize poolSizes[2]{};
@@ -265,7 +153,10 @@ bool VkImageViewerRenderer::createDescriptorPoolAndSet() {
     dpci.poolSizeCount = 2;
     dpci.pPoolSizes = poolSizes;
     dpci.maxSets = 1;
-    df->vkCreateDescriptorPool(dev, &dpci, nullptr, &m_descriptorPool);
+    if (df->vkCreateDescriptorPool(dev, &dpci, nullptr, &m_descriptorPool) != VK_SUCCESS) {
+        qCritical() << "[VkImageViewer] vkCreateDescriptorPool failed";
+        return false;
+    }
 
     VkDescriptorSetAllocateInfo dsa{};
     dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -284,7 +175,7 @@ bool VkImageViewerRenderer::createDescriptorPoolAndSet() {
 }
 
 bool VkImageViewerRenderer::createUniformBuffer() {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     VkDeviceSize bufSize = sizeof(UniformBufferObject);
@@ -299,10 +190,10 @@ bool VkImageViewerRenderer::createUniformBuffer() {
             df, dev, m_uniformBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
     };
 
-    auto alloc = VulkanUtils::createBuffer(m_vkWindow->vulkanInstance(),
+    auto alloc = VulkanUtils::createBuffer(m_instance,
                                            df,
                                            dev,
-                                           m_vkWindow->physicalDevice(),
+                                           m_physDev,
                                            bufSize,
                                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -324,7 +215,7 @@ bool VkImageViewerRenderer::createUniformBuffer() {
 }
 
 bool VkImageViewerRenderer::createVertexBuffer() {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     static const float quadVertices[] = {
@@ -361,8 +252,8 @@ bool VkImageViewerRenderer::createVertexBuffer() {
     VkMemoryAllocateInfo vbMai{};
     vbMai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     vbMai.allocationSize = vbMemReq.size;
-    vbMai.memoryTypeIndex = VulkanUtils::findMemoryType(m_vkWindow->vulkanInstance(),
-                                                        m_vkWindow->physicalDevice(),
+    vbMai.memoryTypeIndex = VulkanUtils::findMemoryType(m_instance,
+                                                        m_physDev,
                                                         vbMemReq.memoryTypeBits,
                                                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -391,18 +282,8 @@ bool VkImageViewerRenderer::createVertexBuffer() {
     return true;
 }
 
-void VkImageViewerRenderer::initSwapChainResources() {
-    if (m_textureView == VK_NULL_HANDLE && !m_sourceImage.isNull()) {
-        setRenderState(RenderState::Loading, m_currentGeneration);
-    }
-}
-
-void VkImageViewerRenderer::releaseSwapChainResources() {
-    // Nothing to do here.
-}
-
 void VkImageViewerRenderer::cleanupOldTexture() {
-    VkDevice dev = m_vkWindow->device();
+    VkDevice dev = m_device;
     VulkanUtils::destroyResource(
         m_devFuncs, dev, m_textureView, &QVulkanDeviceFunctions::vkDestroyImageView);
     VulkanUtils::destroyResource(
@@ -419,6 +300,37 @@ void VkImageViewerRenderer::cleanupOldTexture() {
     m_stagingMemory = VK_NULL_HANDLE;
     m_currentTextureWidth = 0;
     m_currentTextureHeight = 0;
+}
+
+void VkImageViewerRenderer::retireOldTexture() {
+    if (m_textureImage == VK_NULL_HANDLE)
+        return;
+
+    // A previously-retired texture that was not yet destroyed must have been
+    // superseded by at least one full frame; flush it before retiring the next.
+    destroyRetiredTexture();
+
+    m_retiredImage = m_textureImage;
+    m_retiredMemory = m_textureMemory;
+    m_retiredView = m_textureView;
+    m_textureImage = VK_NULL_HANDLE;
+    m_textureMemory = VK_NULL_HANDLE;
+    m_textureView = VK_NULL_HANDLE;
+    m_currentTextureWidth = 0;
+    m_currentTextureHeight = 0;
+}
+
+void VkImageViewerRenderer::destroyRetiredTexture() {
+    if (!m_devFuncs)
+        return;
+    VulkanUtils::destroyResource(
+        m_devFuncs, m_device, m_retiredView, &QVulkanDeviceFunctions::vkDestroyImageView);
+    VulkanUtils::destroyResource(
+        m_devFuncs, m_device, m_retiredImage, &QVulkanDeviceFunctions::vkDestroyImage);
+    VulkanUtils::freeMemory(m_devFuncs, m_device, m_retiredMemory);
+    m_retiredView = VK_NULL_HANDLE;
+    m_retiredImage = VK_NULL_HANDLE;
+    m_retiredMemory = VK_NULL_HANDLE;
 }
 
 void VkImageViewerRenderer::recordMipChainGeneration(VkCommandBuffer cmd,
@@ -473,7 +385,7 @@ void VkImageViewerRenderer::recordMipChainGeneration(VkCommandBuffer cmd,
 }
 
 void VkImageViewerRenderer::createViewAndUpdateDescriptors(int mipLevels) {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     VkImageViewCreateInfo vii{};
@@ -497,9 +409,10 @@ void VkImageViewerRenderer::createViewAndUpdateDescriptors(int mipLevels) {
 }
 
 void VkImageViewerRenderer::releaseResources() {
-    VkDevice dev = m_vkWindow->device();
+    VkDevice dev = m_device;
 
     // Texture
+    destroyRetiredTexture();
     cleanupOldTexture();
 
     // Uniform buffer
@@ -516,6 +429,20 @@ void VkImageViewerRenderer::releaseResources() {
         m_devFuncs, dev, m_vertexBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
     VulkanUtils::freeMemory(m_devFuncs, dev, m_vertexMemory);
 
+    // Upload/prepare command buffer + fence
+    if (m_prepareFence) {
+        m_devFuncs->vkWaitForFences(
+            dev, 1, &m_prepareFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS);
+    }
+    const auto uiHandles = VulkanContext::instance().getUIHandles();
+    if (m_prepareCmd && uiHandles.commandPool) {
+        m_devFuncs->vkFreeCommandBuffers(dev, uiHandles.commandPool, 1, &m_prepareCmd);
+        m_prepareCmd = VK_NULL_HANDLE;
+    }
+    VulkanUtils::destroyResource(
+        m_devFuncs, dev, m_prepareFence, &QVulkanDeviceFunctions::vkDestroyFence);
+    m_prepareFence = VK_NULL_HANDLE;
+
     // Descriptors
     VulkanUtils::destroyResource(
         m_devFuncs, dev, m_descriptorPool, &QVulkanDeviceFunctions::vkDestroyDescriptorPool);
@@ -526,13 +453,7 @@ void VkImageViewerRenderer::releaseResources() {
     VulkanUtils::destroyResource(
         m_devFuncs, dev, m_samplerNearest, &QVulkanDeviceFunctions::vkDestroySampler);
 
-    // Indicator resources
-    VulkanUtils::destroyResource(
-        m_devFuncs, dev, m_indicatorPipeline, &QVulkanDeviceFunctions::vkDestroyPipeline);
-    VulkanUtils::destroyResource(m_devFuncs,
-                                 dev,
-                                 m_indicatorPipelineLayout,
-                                 &QVulkanDeviceFunctions::vkDestroyPipelineLayout);
+    m_resourcesReady = false;
 
     // Cleanup reconstructor resources
     std::lock_guard<std::mutex> lock(m_reconstructorMutex);
@@ -610,14 +531,21 @@ void VkImageViewerRenderer::updateDescriptors(VkDescriptorSet dstSet,
     writes[1].descriptorCount = 1;
     writes[1].pImageInfo = &imgInfo;
 
-    m_devFuncs->vkUpdateDescriptorSets(m_vkWindow->device(), 2, writes, 0, nullptr);
+    m_devFuncs->vkUpdateDescriptorSets(m_device, 2, writes, 0, nullptr);
 }
 
 int VkImageViewerRenderer::createTexture(int width, int height) {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
-    cleanupOldTexture();
+    // Delay destruction of the old texture (a prior frame's draw may still sample
+    // it), but its upload staging buffer is no longer needed.
+    retireOldTexture();
+    VulkanUtils::destroyResource(
+        df, dev, m_stagingBuffer, &QVulkanDeviceFunctions::vkDestroyBuffer);
+    VulkanUtils::freeMemory(df, dev, m_stagingMemory);
+    m_stagingBuffer = VK_NULL_HANDLE;
+    m_stagingMemory = VK_NULL_HANDLE;
 
     int maxDim = std::max(width, height);
     int mipLevels = 0;
@@ -652,10 +580,8 @@ int VkImageViewerRenderer::createTexture(int width, int height) {
     VkMemoryAllocateInfo mai{};
     mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mai.allocationSize = memReq.size;
-    mai.memoryTypeIndex = VulkanUtils::findMemoryType(m_vkWindow->vulkanInstance(),
-                                                      m_vkWindow->physicalDevice(),
-                                                      memReq.memoryTypeBits,
-                                                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    mai.memoryTypeIndex = VulkanUtils::findMemoryType(
+        m_instance, m_physDev, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     result = df->vkAllocateMemory(dev, &mai, nullptr, &m_textureMemory);
     if (result != VK_SUCCESS) {
         qCritical() << "[VkImageViewer] vkAllocateMemory (texture) failed:" << result;
@@ -674,7 +600,7 @@ int VkImageViewerRenderer::createTexture(int width, int height) {
 }
 
 bool VkImageViewerRenderer::createAndUploadTexture(VkCommandBuffer cmd, const QImage& image) {
-    VkDevice                dev = m_vkWindow->device();
+    VkDevice                dev = m_device;
     QVulkanDeviceFunctions *df = m_devFuncs;
 
     int mipLevels = createTexture(image.width(), image.height());
@@ -714,8 +640,8 @@ bool VkImageViewerRenderer::createAndUploadTexture(VkCommandBuffer cmd, const QI
     VkMemoryAllocateInfo bufMai{};
     bufMai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     bufMai.allocationSize = bufMemReq.size;
-    bufMai.memoryTypeIndex = VulkanUtils::findMemoryType(m_vkWindow->vulkanInstance(),
-                                                         m_vkWindow->physicalDevice(),
+    bufMai.memoryTypeIndex = VulkanUtils::findMemoryType(m_instance,
+                                                         m_physDev,
                                                          bufMemReq.memoryTypeBits,
                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -863,8 +789,8 @@ void VkImageViewerRenderer::setImage(const QImage& img, uint32_t generation) {
 }
 
 bool VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint32_t generation) {
-    // Defer reconstruction until the Vulkan window is ready (e.g. during session restore)
-    if (!m_vkWindow) {
+    // Defer reconstruction until the device is ready (e.g. during session restore)
+    if (!m_device) {
         m_pendingReconstruction = seq;
         m_pendingGeneration = generation;
         return true; // We've deferred it, so it's "successful" in terms of request handling
@@ -891,17 +817,17 @@ bool VkImageViewerRenderer::reconstruct(const ReconstructionSequence& seq, uint3
     return reconstructor->reconstruct(seq);
 }
 
-void VkImageViewerRenderer::performUploads(
+bool VkImageViewerRenderer::performUploads(
     VkCommandBuffer cmd, const std::shared_ptr<VkSnapshotReconstructor>& reconstructor) {
     if (m_state == RenderState::Empty || m_state == RenderState::Ready)
-        return;
+        return false;
 
     if (m_state == RenderState::Reconstructing) {
         if (!reconstructor) {
             qCritical() << "[VkImageViewerRenderer] Reconstruction pending but no "
                            "reconstructor active!";
             setRenderState(RenderState::Empty, m_currentGeneration);
-            return;
+            return false;
         }
 
         // Try to promote pending base buffer to active state buffer
@@ -909,13 +835,13 @@ void VkImageViewerRenderer::performUploads(
 
         if (reconstructor->isUploadingBase()) {
             qDebug() << "[VkImageViewerRenderer] performUploads: Base image uploading, deferring";
-            return;
+            return false;
         }
 
         if (reconstructor->stateBuffer() == VK_NULL_HANDLE) {
             qDebug() << "[VkImageViewerRenderer] performUploads: State buffer not yet allocated, "
                         "deferring";
-            return;
+            return false;
         }
 
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -926,11 +852,10 @@ void VkImageViewerRenderer::performUploads(
                 qCritical()
                     << "[VkImageViewerRenderer] Failed to create texture for reconstruction";
                 setRenderState(RenderState::Empty, m_currentGeneration);
-                return;
+                return false;
             }
             oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         }
-
 
         // Global memory barrier to ensure compute writes are visible
         VkMemoryBarrier memBarrier{};
@@ -941,7 +866,7 @@ void VkImageViewerRenderer::performUploads(
         if (!reconstructor->waitForDeltas()) {
             qWarning() << "[VkImageViewerRenderer] Timeout waiting for deltas during upload";
             setRenderState(RenderState::Empty, m_currentGeneration);
-            return;
+            return false;
         }
 
         // Transition image to TRANSFER_DST_OPTIMAL for the copy
@@ -1033,21 +958,89 @@ void VkImageViewerRenderer::performUploads(
         if (!createAndUploadTexture(cmd, m_sourceImage)) {
             qCritical() << "[VkImageViewerRenderer] Regular upload failed (OOM?)";
             setRenderState(RenderState::Empty, m_currentGeneration);
-            return;
+            return false;
         }
     }
 
     if (m_textureView != VK_NULL_HANDLE) {
+        qDebug() << "[VkImageViewerRender] Snapshot reconstructed";
         setRenderState(RenderState::Ready, m_currentGeneration);
-    } else {
+        return true;
+    }
+    setRenderState(RenderState::Empty, m_currentGeneration);
+    return false;
+}
+
+void VkImageViewerRenderer::ensurePrepareCmd() {
+    if (m_prepareCmd != VK_NULL_HANDLE && m_prepareFence != VK_NULL_HANDLE)
+        return;
+
+    const auto ui = VulkanContext::instance().getUIHandles();
+    if (!m_devFuncs || m_device == VK_NULL_HANDLE || ui.commandPool == VK_NULL_HANDLE) {
+        qCritical() << "[VkImageViewerRenderer] No device or UI command pool for prepare CB";
+        return;
+    }
+
+    if (m_prepareCmd == VK_NULL_HANDLE) {
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = ui.commandPool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        if (m_devFuncs->vkAllocateCommandBuffers(m_device, &ai, &m_prepareCmd) != VK_SUCCESS ||
+            m_prepareCmd == VK_NULL_HANDLE) {
+            qCritical() << "[VkImageViewerRenderer] Failed to allocate prepare command buffer";
+            m_prepareCmd = VK_NULL_HANDLE;
+            return;
+        }
+    }
+
+    if (m_prepareFence == VK_NULL_HANDLE) {
+        VkFenceCreateInfo fi{};
+        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        if (m_devFuncs->vkCreateFence(m_device, &fi, nullptr, &m_prepareFence) != VK_SUCCESS ||
+            m_prepareFence == VK_NULL_HANDLE) {
+            qCritical() << "[VkImageViewerRenderer] Failed to create prepare fence";
+            m_prepareFence = VK_NULL_HANDLE;
+        }
+    }
+}
+
+void VkImageViewerRenderer::submitAndWaitPrepare() {
+    if (m_prepareCmd == VK_NULL_HANDLE || m_prepareFence == VK_NULL_HANDLE || !m_devFuncs)
+        return;
+
+    const auto ui = VulkanContext::instance().getUIHandles();
+    if (ui.queue == VK_NULL_HANDLE) {
+        qCritical() << "[VkImageViewerRenderer] No UI queue to submit prepare CB";
+        setRenderState(RenderState::Empty, m_currentGeneration);
+        return;
+    }
+
+    m_devFuncs->vkResetFences(m_device, 1, &m_prepareFence);
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &m_prepareCmd;
+    if (m_devFuncs->vkQueueSubmit(ui.queue, 1, &si, m_prepareFence) != VK_SUCCESS) {
+        qCritical() << "[VkImageViewerRenderer] Failed to submit prepare command buffer";
+        setRenderState(RenderState::Empty, m_currentGeneration);
+        return;
+    }
+
+    if (m_devFuncs->vkWaitForFences(
+            m_device, 1, &m_prepareFence, VK_TRUE, VulkanContext::FENCE_TIMEOUT_NS) != VK_SUCCESS) {
+        qCritical() << "[VkImageViewerRenderer] Timeout waiting for prepare fence";
         setRenderState(RenderState::Empty, m_currentGeneration);
     }
 }
 
-void VkImageViewerRenderer::startNextFrame() {
-    if (!m_vkWindow || VulkanContext::instance().getGraphicsPipeline() == VK_NULL_HANDLE) {
+void VkImageViewerRenderer::render(QRhiCommandBuffer *cb) {
+    if (!ensureResources())
         return;
-    }
+    if (VulkanContext::instance().getGraphicsPipeline() == VK_NULL_HANDLE)
+        return;
 
     std::shared_ptr<VkSnapshotReconstructor> reconstructor;
     {
@@ -1055,34 +1048,50 @@ void VkImageViewerRenderer::startNextFrame() {
         reconstructor = m_activeReconstructor;
     }
 
-    if (reconstructor) {
-        if (reconstructor->checkAndSwapBase() || reconstructor->isDirty()) {
-            setRenderState(RenderState::Reconstructing, m_currentGeneration);
+    if (reconstructor && (reconstructor->checkAndSwapBase() || reconstructor->isDirty())) {
+        setRenderState(RenderState::Reconstructing, m_currentGeneration);
+    }
+
+    const QSize sz = colorTexture()->pixelSize();
+
+    if (m_state == RenderState::Reconstructing || m_state == RenderState::Loading) {
+        ensurePrepareCmd();
+        if (m_prepareCmd != VK_NULL_HANDLE && m_devFuncs) {
+            m_devFuncs->vkResetCommandBuffer(m_prepareCmd, 0);
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            m_devFuncs->vkBeginCommandBuffer(m_prepareCmd, &beginInfo);
+            const bool uploaded = performUploads(m_prepareCmd, reconstructor);
+            m_devFuncs->vkEndCommandBuffer(m_prepareCmd);
+            if (uploaded) {
+                submitAndWaitPrepare();
+                // The prepare fence signals only after the previous frame's draw
+                // (which sampled the retired texture) has finished on the queue.
+                destroyRetiredTexture();
+            }
         }
     }
 
-    VkCommandBuffer cmd = m_vkWindow->currentCommandBuffer();
-
-    performUploads(cmd, reconstructor);
+    cb->beginPass(renderTarget(),
+                  AppSettings::backgroundColor(),
+                  QRhiDepthStencilClearValue(1.0f, 0),
+                  nullptr,
+                  QRhiCommandBuffer::ExternalContent);
+    cb->beginExternal();
+    const auto *chn =
+        static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    VkCommandBuffer cmd = chn->commandBuffer;
 
     updateUniformBuffer();
 
-    if (m_state != RenderState::Ready) {
-        m_vkWindow->frameReady();
-        m_vkWindow->requestUpdate();
+    if (m_state != RenderState::Ready || m_textureView == VK_NULL_HANDLE) {
+        cb->endExternal();
+        cb->endPass();
         return;
     }
 
-    if (m_textureView == VK_NULL_HANDLE) {
-        m_vkWindow->frameReady();
-        m_vkWindow->requestUpdate();
-        return;
-    }
-
-    QSize     sz = m_vkWindow->swapChainImageSize();
-    float     currentZoom = m_params.zoom;
-    VkSampler activeSampler = (currentZoom >= 1.0f) ? m_samplerNearest : m_samplerLinear;
-
+    const float     currentZoom = m_params.zoom;
+    const VkSampler activeSampler = (currentZoom >= 1.0f) ? m_samplerNearest : m_samplerLinear;
     if (activeSampler != m_activeSampler) {
         updateDescriptors(m_descriptorSet, m_uniformBuffer, activeSampler, m_textureView);
         m_activeSampler = activeSampler;
@@ -1099,24 +1108,6 @@ void VkImageViewerRenderer::startNextFrame() {
     sc.extent = {static_cast<uint32_t>(sz.width()), static_cast<uint32_t>(sz.height())};
     m_devFuncs->vkCmdSetScissor(cmd, 0, 1, &sc);
 
-    VkClearValue cv[2]{};
-    QColor       bgColor = AppSettings::backgroundColor();
-    cv[0].color.float32[0] = bgColor.redF();
-    cv[0].color.float32[1] = bgColor.greenF();
-    cv[0].color.float32[2] = bgColor.blueF();
-    cv[0].color.float32[3] = 1.0f;
-    cv[1].depthStencil.depth = 1.0f;
-
-    VkRenderPassBeginInfo rpi{};
-    rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpi.renderPass = m_vkWindow->defaultRenderPass();
-    rpi.framebuffer = m_vkWindow->currentFramebuffer();
-    rpi.renderArea = sc;
-    rpi.clearValueCount = 2;
-    rpi.pClearValues = cv;
-
-    m_devFuncs->vkCmdBeginRenderPass(cmd, &rpi, VK_SUBPASS_CONTENTS_INLINE);
-
     m_devFuncs->vkCmdBindPipeline(
         cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, VulkanContext::instance().getGraphicsPipeline());
     m_devFuncs->vkCmdBindDescriptorSets(cmd,
@@ -1132,30 +1123,6 @@ void VkImageViewerRenderer::startNextFrame() {
     m_devFuncs->vkCmdBindVertexBuffers(cmd, 0, 1, &m_vertexBuffer, &vbOffset);
     m_devFuncs->vkCmdDraw(cmd, 6, 1, 0, 0);
 
-    if (m_indicatorVisible && m_indicatorPipeline != VK_NULL_HANDLE) {
-        m_devFuncs->vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_indicatorPipeline);
-        float              ndcX = (2.0f * m_indicatorPos.x() / sz.width()) - 1.0f;
-        float              ndcy = (2.0f * m_indicatorPos.y() / sz.height()) - 1.0f;
-        IndicatorConstants constants{};
-        constants.offset[0] = ndcX;
-        constants.offset[1] = ndcy;
-        constants.size[0] = m_indicatorSize / (2.0f * sz.width());
-        constants.size[1] = m_indicatorSize / (2.0f * sz.height());
-        constants.color[0] = m_indicatorColor.redF();
-        constants.color[1] = m_indicatorColor.greenF();
-        constants.color[2] = m_indicatorColor.blueF();
-        constants.color[3] = m_indicatorColor.alphaF();
-        m_devFuncs->vkCmdPushConstants(cmd,
-                                       m_indicatorPipelineLayout,
-                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0,
-                                       sizeof(IndicatorConstants),
-                                       &constants);
-        m_devFuncs->vkCmdBindVertexBuffers(cmd, 0, 1, &m_vertexBuffer, &vbOffset);
-        m_devFuncs->vkCmdDraw(cmd, 6, 1, 0, 0);
-    }
-
-    m_devFuncs->vkCmdEndRenderPass(cmd);
-    m_vkWindow->frameReady();
-    m_vkWindow->requestUpdate();
+    cb->endExternal();
+    cb->endPass();
 }

@@ -1,10 +1,10 @@
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 
+// A single toast pill (a delegate in the notification stack).
 Item {
     id: root
-    width: 400
-    height: pill.height + 4
+    width: 380
+    height: messageText.implicitHeight + 20
 
     property string message: ""
     property bool fadeOut: false
@@ -17,15 +17,8 @@ Item {
 
     Rectangle {
         id: pill
-        width: 380
-        height: messageText.implicitHeight + 20
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 2
-
-        // Initial opacity for fade-in
+        anchors.fill: parent
         opacity: 0
-
         color: sysPalette.window
         radius: 8
         border.color: sysPalette.midlight
@@ -34,16 +27,15 @@ Item {
         Text {
             id: messageText
             anchors.centerIn: parent
-            text: "Notification"
+            text: message
             color: sysPalette.windowText
             font.pixelSize: 14
-            wrapMode: Text.WordWrap
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             width: parent.width - 16
             horizontalAlignment: Text.AlignHCenter
         }
     }
 
-    // Fade-in animation
     NumberAnimation {
         id: fadeInAnim
         target: pill
@@ -54,7 +46,6 @@ Item {
         easing.type: Easing.OutCubic
     }
 
-    // Fade-out animation
     NumberAnimation {
         id: fadeOutAnim
         target: pill
@@ -66,18 +57,12 @@ Item {
         onStopped: root.fadeOutFinished()
     }
 
-    // Trigger animations based on fadeOut property
     onFadeOutChanged: {
-        if (fadeOut) {
+        if (fadeOut)
             fadeOutAnim.start();
-        } else {
+        else
             fadeInAnim.start();
-        }
     }
 
-    Component.onCompleted: {
-        fadeInAnim.start();
-    }
-
-    onMessageChanged: messageText.text = message
+    Component.onCompleted: fadeInAnim.start()
 }

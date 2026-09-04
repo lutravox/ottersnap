@@ -1,10 +1,17 @@
 #include <QDebug>
 #include <QTimer>
 #include "controllers/colorinfocontroller.h"
+#include "core/clusterindicatormodel.h"
 #include "core/viewmodel.h"
 #include "ui/vkimageviewer.h"
 
 ColorInfoController::ColorInfoController(QObject *parent) : QObject(parent) {
+    m_indicatorModel = new ClusterIndicatorModel(this);
+    m_colorInfoModel = new ColorInfoModel(this);
+    connect(m_colorInfoModel,
+            &ColorInfoModel::clusterSelected,
+            this,
+            &ColorInfoController::onClusterSelected);
 }
 
 void ColorInfoController::setSessionController(ImageSessionController *controller) {
@@ -48,21 +55,24 @@ void ColorInfoController::onActiveSessionChanged(ImageSession *session) {
     QObject::disconnect(m_sessionImageConnection);
     resetClusterSelection();
     if (session) {
-        m_sessionImageConnection = QObject::connect(
-            session, &ImageSession::imageChanged, this, &ColorInfoController::resetClusterSelection);
+        m_sessionImageConnection = QObject::connect(session,
+                                                    &ImageSession::imageChanged,
+                                                    this,
+                                                    &ColorInfoController::resetClusterSelection);
         onSessionColorClustersChanged();
     }
 }
 
 void ColorInfoController::resetClusterSelection() {
     m_clusterSelected = false;
-    if (m_colorInfo) {
-        m_colorInfo->resetSelection();
-    }
+    m_colorInfoModel->resetSelection();
     updateIndicatorPosition();
 }
 
 void ColorInfoController::setViewerModel(ViewerModel *state) {
+    if (m_viewerState == state)
+        return;
+
     m_viewerState = state;
 
     if (m_viewerState && m_viewerState->viewer()) {
@@ -86,45 +96,36 @@ void ColorInfoController::updateIndicatorPosition() {
 }
 
 void ColorInfoController::setVisible(bool visible) {
-    if (!m_viewerState)
+    if (!m_viewerState) {
         return;
+    }
 
     m_visible = visible;
+    m_colorInfoModel->setVisible(visible);
 
-    if (!m_colorInfo) {
-        m_colorInfo = new ColorInfo(m_viewerState->viewer());
-        connect(m_colorInfo,
-                &ColorInfo::clusterSelected,
-                this,
-                &ColorInfoController::onClusterSelected);
-
-        // Synchronize clusters immediately upon creation
+    if (visible) {
+        // Synchronize the current cluster distribution when the overlay shows.
         onSessionColorClustersChanged();
     }
 
-    m_colorInfo->setVisibleState(visible);
     updateIndicatorPosition();
 }
 
 void ColorInfoController::setPickedColor(const QColor& color) {
-    if (m_colorInfo) {
-        m_colorInfo->setPickedColor(color);
-        m_colorInfo->resetSelection();
-    }
+    m_colorInfoModel->setPickedColor(color);
+    m_colorInfoModel->resetSelection();
     m_clusterSelected = false;
     updateIndicatorPos();
 }
 
 void ColorInfoController::setClusters(const QList<ColorAnalyzer::ColorCluster>& clusters) {
-    if (m_colorInfo) {
-        m_colorInfo->setClusters(clusters);
-    }
+    m_colorInfoModel->setClusters(clusters);
 }
 
 void ColorInfoController::onSessionColorClustersChanged() {
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
-    if (session && m_colorInfo) {
-        m_colorInfo->setClusters(session->colorClusters());
+    if (session) {
+        m_colorInfoModel->setClusters(session->colorClusters());
     }
 }
 
@@ -146,9 +147,7 @@ void ColorInfoController::onClusterSelected(const QVariantMap& data) {
 
     m_currentClusterColor = color;
 
-    if (m_colorInfo) {
-        m_colorInfo->setPickedColor(m_currentClusterColor);
-    }
+    m_colorInfoModel->setPickedColor(m_currentClusterColor);
 
     emit colorSelected(m_currentClusterColor);
 
@@ -165,12 +164,16 @@ void ColorInfoController::updateIndicatorPos() {
     if (!viewer)
         return;
 
+    ClusterIndicatorModel *indicator = m_indicatorModel;
+    if (!indicator)
+        return;
+
     if (!m_visible || !m_clusterSelected) {
-        viewer->setIndicator(QPoint(), Qt::transparent, false);
+        indicator->setVisible(false);
         return;
     }
 
-    QPointF pos = m_currentIndicatorPos;
+    QPointF       pos = m_currentIndicatorPos;
     ImageSession *session = m_sessionController ? m_sessionController->activeSession() : nullptr;
     if (session && session->mirrorEnabled()) {
         pos.setX(1.0f - pos.x());
@@ -182,10 +185,19 @@ void ColorInfoController::updateIndicatorPos() {
     QPointF screenPos = session->viewModel().normalizedToScreen(pos);
 
     if (screenPos.x() < 0 || screenPos.y() < 0) {
-        viewer->setIndicator(QPoint(), Qt::transparent, false);
+        indicator->setVisible(false);
     } else {
-        QPoint roundedScreenPos(qRound(screenPos.x()), qRound(screenPos.y()));
+        indicator->setPosition(screenPos);
+        indicator->setColor(m_currentClusterColor);
+        indicator->setVisible(true);
+    }
+}
 
-        viewer->setIndicator(roundedScreenPos, m_currentClusterColor, true);
+ColorInfoController::~ColorInfoController() {
+    // The viewer's QML scene binds to the models owned by this controller.
+    // Destroy the scene before the base destructor destroys the models, so
+    // no binding re-evaluates against a destroyed model during teardown.
+    if (m_viewerState) {
+        m_viewerState->viewer()->destroyQmlScene();
     }
 }

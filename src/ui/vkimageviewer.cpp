@@ -1,5 +1,7 @@
 #include "ui/vkimageviewer.h"
-#include "core/vulkancontext.h"
+#include "core/clusterindicatormodel.h"
+#include "core/colorinfomodel.h"
+#include "core/notificationmodel.h"
 #include "ui/vkimageviewerrenderer.h"
 
 #include <QAction>
@@ -11,71 +13,89 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQuickItem>
+#include <QSGRendererInterface>
 #include <QShowEvent>
 #include <QStyleOption>
 #include <QUrl>
 #include <QVBoxLayout>
-#include <QVulkanFunctions>
 #include <QWheelEvent>
 
 #include <QFile>
 
-class VkImageViewerWindow : public QVulkanWindow {
+class RhiImageItem : public QQuickRhiItem {
   public:
-    explicit VkImageViewerWindow(QWindow *parent = nullptr) : QVulkanWindow(parent) {
-        QSurfaceFormat format;
-        format.setAlphaBufferSize(8);
-        setFormat(format);
-    }
-
-    void setViewerRenderer(VkImageViewerRenderer *r) {
-        m_viewerRenderer = r;
+    explicit RhiImageItem(QQuickRhiItemRenderer *renderer, QQuickItem *parent = nullptr)
+        : QQuickRhiItem(parent), m_renderer(renderer) {
     }
 
   protected:
-    QVulkanWindowRenderer *createRenderer() override {
-        if (m_viewerRenderer) {
-            m_viewerRenderer->m_vkWindow = this;
-            qDebug() << "[VkImageViewer] createRenderer() called, m_vkWindow set";
-        }
-        return m_viewerRenderer;
+    QQuickRhiItemRenderer *createRenderer() override {
+        return m_renderer;
     }
 
   private:
-    VkImageViewerRenderer *m_viewerRenderer = nullptr;
+    QQuickRhiItemRenderer *m_renderer = nullptr;
 };
 
-VkImageViewer::VkImageViewer(QWidget *parent) : QWidget(parent) {
+VkImageViewer::VkImageViewer(QWidget               *parent,
+                             ClusterIndicatorModel *indicatorModel,
+                             ColorInfoModel        *colorInfoModel,
+                             NotificationModel     *notificationModel)
+    : QWidget(parent) {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 
     m_renderer = new VkImageViewerRenderer();
-    auto *vkWindow = new VkImageViewerWindow();
-    vkWindow->setViewerRenderer(m_renderer);
-    vkWindow->setVulkanInstance(VulkanContext::instance().getInstance());
-    vkWindow->setFlags(QVulkanWindow::PersistentResources);
-    m_vulkanWindow = vkWindow;
 
-    m_container = QWidget::createWindowContainer(m_vulkanWindow, this);
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+    m_quickView = new QQuickView();
+
+    m_quickView->engine()->rootContext()->setContextProperty("indicator", indicatorModel);
+    m_quickView->engine()->rootContext()->setContextProperty("colorInfo", colorInfoModel);
+    m_quickView->engine()->rootContext()->setContextProperty("notificationModel",
+                                                             notificationModel);
+
+    m_quickView->setResizeMode(QQuickView::SizeRootObjectToView);
+    m_quickView->setSource(QUrl("qrc:/ui/qml/viewer.qml"));
+    if (QQuickItem *root = m_quickView->contentItem()) {
+        root->setSize(QSizeF(size()));
+        m_imageItem = new RhiImageItem(m_renderer, root);
+        m_imageItem->setZ(-1);
+    }
+
+    m_container = QWidget::createWindowContainer(m_quickView, this);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(1, 1, 1, 1);
     layout->addWidget(m_container);
 
-    // Intercept events on the embedded QVulkanWindow
-    m_vulkanWindow->installEventFilter(this);
+    m_quickView->installEventFilter(this);
 }
 
 VkImageViewer::~VkImageViewer() {
+    destroyQmlScene();
+    if (m_quickView) {
+        delete m_quickView;
+        m_quickView = nullptr;
+    }
+}
+
+void VkImageViewer::destroyQmlScene() {
+    if (m_quickView && m_quickView->rootObject()) {
+        delete m_quickView->rootObject();
+    }
 }
 
 bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
-    if (obj != m_vulkanWindow && obj != m_container)
+    if (obj != m_quickView && obj != m_container)
         return QObject::eventFilter(obj, event);
 
     switch (event->type()) {
         // Offer Image Drop
         case QEvent::DragEnter: {
-            if (obj == m_vulkanWindow) {
+            if (obj == m_quickView) {
                 auto *de = static_cast<QDragEnterEvent *>(event);
                 if (de->mimeData()->hasUrls()) {
                     de->acceptProposedAction();
@@ -86,7 +106,7 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         }
         // Open Image on Drop
         case QEvent::Drop: {
-            if (obj == m_vulkanWindow) {
+            if (obj == m_quickView) {
                 auto            *dp = static_cast<QDropEvent *>(event);
                 const QMimeData *mimeData = dp->mimeData();
                 if (mimeData && mimeData->hasUrls()) {
@@ -103,9 +123,14 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
             break;
         }
         case QEvent::MouseButtonPress: {
-            if (obj == m_vulkanWindow) {
+            if (obj == m_quickView) {
                 auto *me = static_cast<QMouseEvent *>(event);
                 if (me->button() == Qt::LeftButton) {
+                    if (isOverColorInfoOverlay(me->position())) {
+                        m_clickPassedToQml = true;
+                        return false;
+                    }
+
                     if (m_pickingEnabled) {
                         emit colorPickRequested(me->position());
                         return true;
@@ -121,6 +146,10 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
                     setFocus();
                     return true;
                 } else if (me->button() == Qt::RightButton) {
+                    if (isOverColorInfoOverlay(me->position())) {
+                        return false;
+                    }
+
                     //  Context Menu
                     QMenu menu(this);
 
@@ -186,6 +215,10 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         case QEvent::MouseButtonRelease: {
             auto *me = static_cast<QMouseEvent *>(event);
             if (me->button() == Qt::LeftButton || me->button() == Qt::MiddleButton) {
+                if (m_clickPassedToQml) {
+                    m_clickPassedToQml = false;
+                    return false;
+                }
                 if (m_isDragging) {
                     m_isDragging = false;
                 } else {
@@ -221,14 +254,21 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
     return QObject::eventFilter(obj, event);
 }
 
-RenderState VkImageViewer::renderState() const {
-    return m_renderer ? m_renderer->renderState() : RenderState::Empty;
+bool VkImageViewer::isOverColorInfoOverlay(const QPointF& windowPos) const {
+    QQuickItem *root = m_quickView ? m_quickView->contentItem() : nullptr;
+    QQuickItem *overlay = root ? root->findChild<QQuickItem *>("colorInfoOverlay") : nullptr;
+    if (!overlay || overlay->width() <= 0 || overlay->height() <= 0)
+        return false;
+    if (!overlay->property("interactive").toBool())
+        return false;
+
+    QPointF topLeft = overlay->mapToScene(QPointF(0, 0));
+    QRectF  sceneRect = QRectF(topLeft, overlay->size());
+    return sceneRect.contains(windowPos);
 }
 
-void VkImageViewer::setIndicator(QPoint pos, QColor color, bool visible) {
-    if (m_renderer) {
-        m_renderer->setIndicator(pos, color, visible);
-    }
+RenderState VkImageViewer::renderState() const {
+    return m_renderer ? m_renderer->renderState() : RenderState::Empty;
 }
 
 void VkImageViewer::setRenderParams(const RenderParams& params) {
@@ -251,7 +291,9 @@ void VkImageViewer::showEvent(QShowEvent *event) {
         emit viewportResized(sz.width(), sz.height());
     }
 
-    m_vulkanWindow->requestUpdate();
+    if (m_imageItem) {
+        m_imageItem->update();
+    }
 }
 
 void VkImageViewer::setImage(const QImage& image) {
@@ -278,14 +320,23 @@ void VkImageViewer::resizeEvent(QResizeEvent *event) {
     QSize sz = m_container->size();
     if (sz.isEmpty())
         return;
+
+    if (auto *root = m_quickView->contentItem()) {
+        root->setSize(sz);
+    }
+
+    if (m_imageItem) {
+        m_imageItem->setPosition(QPointF(0, 0));
+        m_imageItem->setSize(QSizeF(sz));
+    }
     m_renderer->setViewportSize(sz);
     emit viewportResized(sz.width(), sz.height());
 }
 
 void VkImageViewer::setPickingEnabled(bool enabled) {
     m_pickingEnabled = enabled;
-    if (m_vulkanWindow) {
-        m_vulkanWindow->setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    if (m_quickView) {
+        m_quickView->setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
     }
 }
 
@@ -303,8 +354,8 @@ void VkImageViewer::setReconstructor(std::shared_ptr<VkSnapshotReconstructor> re
     if (m_renderer) {
         m_renderer->setReconstructor(reconstructor);
     }
-    if (m_vulkanWindow) {
-        m_vulkanWindow->requestUpdate();
+    if (m_quickView) {
+        m_quickView->requestUpdate();
     }
 }
 

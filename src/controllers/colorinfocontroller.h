@@ -3,8 +3,9 @@
 #include <QObject>
 #include <QPointF>
 #include "controllers/imagesessioncontroller.h"
+#include "core/clusterindicatormodel.h"
+#include "core/colorinfomodel.h"
 #include "core/imagesession.h"
-#include "ui/colorinfo.h"
 #include "ui/viewermodel.h"
 
 /// @brief Controller for managing the color analysis overlay and cluster indicator.
@@ -12,6 +13,7 @@ class ColorInfoController : public QObject {
     Q_OBJECT
 
   public:
+    ~ColorInfoController() override;
     explicit ColorInfoController(QObject *parent = nullptr);
 
     /// @brief Set whether the color info overlay is visible.
@@ -32,6 +34,14 @@ class ColorInfoController : public QObject {
 
     /// @brief Update the color clusters in the overlay.
     void setClusters(const QList<ColorAnalyzer::ColorCluster>& clusters);
+
+    /// @brief Returns the cluster indicator model owned by this controller and
+    ///        exposed to the viewer's QML overlay.
+    ClusterIndicatorModel *indicatorModel() const { return m_indicatorModel; }
+
+    /// @brief Returns the color info model owned by this controller and exposed
+    ///        to the viewer's QML overlay.
+    ColorInfoModel *colorInfoModel() const { return m_colorInfoModel; }
 
   signals:
     /// @brief Signal emitted when a cluster color is selected.
@@ -58,7 +68,8 @@ class ColorInfoController : public QObject {
 
     ImageSessionController *m_sessionController = nullptr;
     ViewerModel            *m_viewerState = nullptr;
-    ColorInfo              *m_colorInfo = nullptr;
+    ColorInfoModel         *m_colorInfoModel = nullptr;
+    ClusterIndicatorModel  *m_indicatorModel = nullptr;
 
     QMetaObject::Connection m_sessionImageConnection;
     QPointF m_currentIndicatorPos;

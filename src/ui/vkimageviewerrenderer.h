@@ -3,11 +3,14 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QPointF>
+#include <QQuickRhiItem>
+#include <QQuickRhiItemRenderer>
 #include <QSize>
 #include <QVulkanDeviceFunctions>
-#include <QVulkanWindowRenderer>
+#include <QVulkanInstance>
 #include <mutex>
 #include <optional>
+#include <rhi/qrhi.h>
 #include <vulkan/vulkan.h>
 #include "core/viewer_interfaces.h"
 #include "core/vksnapshotreconstructor.h"
@@ -27,12 +30,10 @@ struct alignas(4) UniformBufferObject {
 
 /// @class VkImageViewerRenderer
 /// @brief Handles the Vulkan rendering pipeline for displaying image snapshots.
-class VkImageViewerRenderer : public QVulkanWindowRenderer {
+class VkImageViewerRenderer : public QQuickRhiItemRenderer {
   public:
     VkImageViewerRenderer() = default;
-
-    /// @brief The window associated with this renderer.
-    QVulkanWindow *m_vkWindow = nullptr;
+    ~VkImageViewerRenderer() override;
 
     /// @brief Updates the render state.
     /// @param state The new state.
@@ -65,12 +66,6 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
         return m_params.grayscale;
     }
 
-    /// @brief Sets the indicator's state.
-    /// @param pos Position in pixels relative to the viewer.
-    /// @param color Color of the indicator.
-    /// @param visible Whether it should be rendered.
-    void setIndicator(QPoint pos, QColor color, bool visible);
-
     /// @brief Returns whether horizontal mirroring is enabled.
     bool mirrorEnabled() const {
         return m_params.mirror;
@@ -97,21 +92,32 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     RenderParams m_params;
 
   protected:
-    /// @brief Initializes Vulkan resources (samplers, buffers, etc.).
-    void initResources() override;
-    /// @brief Prepares resources specifically tied to the swapchain.
-    void initSwapChainResources() override;
-    /// @brief Releases swapchain-specific resources.
-    void releaseSwapChainResources() override;
-    /// @brief Releases all allocated Vulkan resources.
-    void releaseResources() override;
-    /// @brief Renders the next frame to the swapchain.
-    void startNextFrame() override;
+    /// @brief Initializes resources (called before each on-demand render).
+    void initialize(QRhiCommandBuffer *cb) override;
+    /// @brief Synchronizes per-render state with the item.
+    void synchronize(QQuickRhiItem *item) override;
+    /// @brief Renders the frame (raw-Vulkan draw into the item's render target).
+    void render(QRhiCommandBuffer *cb) override;
 
   private:
-    /// @brief Handles uploading image data to the GPU.
-    void performUploads(VkCommandBuffer                                 cmd,
+    /// @brief One-time resource creation (guarded by m_resourcesReady).
+    bool ensureResources();
+    /// @brief Releases all allocated Vulkan resources.
+    void releaseResources();
+    /// @brief Returns the item's render pass (for pipeline creation).
+    VkRenderPass itemRenderPass() const;
+
+  private:
+    /// @brief Records image-upload commands (copy + mip generation) into a primary
+    /// command buffer that runs outside the render pass.
+    /// @return True if commands were recorded and must be submitted, false if the
+    /// upload was deferred or failed.
+    bool performUploads(VkCommandBuffer                                 cmd,
                         const std::shared_ptr<VkSnapshotReconstructor>& reconstructor);
+    /// @brief Allocates the dedicated primary command buffer and fence used for uploads.
+    void ensurePrepareCmd();
+    /// @brief Submits the prepare command buffer and waits for it to finish.
+    void submitAndWaitPrepare();
     /// @brief Uploads a QImage to the GPU as a Vulkan texture.
     /// @param cmd The command buffer to record the upload into.
     /// @param image The source image to upload.
@@ -159,9 +165,12 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     /// @brief Cleans up the old texture and its associated memory.
     void cleanupOldTexture();
-
-    /// @brief Creates the pipeline for rendering the cluster indicator.
-    void createIndicatorPipeline();
+    /// @brief Moves the current texture handles into a "retired" slot without
+    /// destroying them (a prior frame's draw may still be sampling them).
+    void retireOldTexture();
+    /// @brief Destroys the retired texture (safe once the in-flight work has
+    /// completed, e.g. after the prepare fence is signaled).
+    void destroyRetiredTexture();
 
     // Render state
     RenderState m_state = RenderState::Empty;
@@ -170,6 +179,22 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
 
     // Qt Vulkan function wrappers
     QVulkanDeviceFunctions *m_devFuncs = nullptr;
+
+    // QRHI device (obtained from rhi()->nativeHandles() in initialize())
+    QRhi            *m_rhi = nullptr;
+    VkDevice         m_device = VK_NULL_HANDLE;
+    VkPhysicalDevice m_physDev = VK_NULL_HANDLE;
+    QVulkanInstance *m_instance = nullptr;
+    bool             m_resourcesReady = false;
+
+    // Upload/prepare command buffer (runs outside the render pass) + fence
+    VkCommandBuffer m_prepareCmd = VK_NULL_HANDLE;
+    VkFence         m_prepareFence = VK_NULL_HANDLE;
+
+    // Retired texture awaiting delayed destruction (previous frame may still sample it)
+    VkImage        m_retiredImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_retiredMemory = VK_NULL_HANDLE;
+    VkImageView    m_retiredView = VK_NULL_HANDLE;
 
     // Persistent (device-lifetime)
     VkSampler        m_samplerLinear = VK_NULL_HANDLE;
@@ -195,16 +220,6 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     VkBuffer       m_vertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_vertexMemory = VK_NULL_HANDLE;
 
-    // Indicator state
-    static constexpr float m_indicatorSize = 40.0f;
-    QPoint                 m_indicatorPos;
-    QColor                 m_indicatorColor;
-    bool                   m_indicatorVisible = false;
-
-    // Indicator pipeline
-    VkPipeline       m_indicatorPipeline = VK_NULL_HANDLE;
-    VkPipelineLayout m_indicatorPipelineLayout = VK_NULL_HANDLE;
-
     // Widget/container size
     QSize m_viewportSize;
 
@@ -218,7 +233,7 @@ class VkImageViewerRenderer : public QVulkanWindowRenderer {
     std::shared_ptr<VkSnapshotReconstructor> m_activeReconstructor;
     std::mutex                               m_reconstructorMutex;
 
-    /// @brief Reconstruction sequence deferred until m_vkWindow is ready.
+    /// @brief Reconstruction sequence deferred until the device is ready.
     std::optional<ReconstructionSequence> m_pendingReconstruction;
     uint32_t                              m_pendingGeneration = 0;
 };

@@ -35,7 +35,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6:
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui Concurrent LinguistTools Quick Qml Sql ShaderTools QuickWidgets)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets Gui GuiPrivate Concurrent LinguistTools Quick Qml Sql ShaderTools QuickWidgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBZIP REQUIRED libzip)
 pkg_check_modules(LIBZSTD REQUIRED IMPORTED_TARGET libzstd)
@@ -161,9 +161,6 @@ set(OTTERSNAP_CORE_SOURCES
     src/controllers/viewercontroller.cpp
     src/controllers/snapshottimelinecontroller.cpp
     src/controllers/colorinfocontroller.cpp
-    src/ui/notification.cpp
-    src/ui/notificationmanager.cpp
-    src/ui/colorinfo.cpp
     src/ui/snapshottimeline.cpp
     src/core/snapshottimelinemodel.cpp
     src/ui/snapshottimelinedelegate.cpp
@@ -196,6 +193,9 @@ set(OTTERSNAP_CORE_SOURCES
     src/core/vulkancontext.cpp
     src/core/vulkanutils.cpp
     src/core/viewmodel.cpp
+    src/core/clusterindicatormodel.cpp
+    src/core/colorinfomodel.cpp
+    src/core/notificationmodel.cpp
     src/core/sessionmanager.cpp
     src/core/imagesession.cpp
     src/core/thumbnailmanager.cpp
@@ -208,7 +208,9 @@ set(OTTERSNAP_CORE_SOURCES
 
 add_library(ottersnap_core STATIC ${OTTERSNAP_CORE_SOURCES})
 target_include_directories(ottersnap_core PUBLIC src ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(ottersnap_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets ${LIBZIP_LIBRARIES} PkgConfig::LIBZSTD)
+target_link_libraries(ottersnap_core
+    PUBLIC Qt6::Widgets Qt6::Gui Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::Sql Qt6::QuickWidgets ${LIBZIP_LIBRARIES} PkgConfig::LIBZSTD
+    PRIVATE Qt6::GuiPrivate)
 
 add_executable(${PROJECT_NAME}
 

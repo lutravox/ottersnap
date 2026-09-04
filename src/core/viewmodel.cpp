@@ -120,8 +120,8 @@ QPoint ViewModel::screenToPixel(const QPointF& screenPos) const {
         return QPoint(-1, -1);
     }
 
-    int px = std::clamp(qRound(imgUVX * m_imageWidth), 0, m_imageWidth - 1);
-    int py = std::clamp(qRound(imgUVY * m_imageHeight), 0, m_imageHeight - 1);
+    int px = std::clamp(int(imgUVX * m_imageWidth), 0, m_imageWidth - 1);
+    int py = std::clamp(int(imgUVY * m_imageHeight), 0, m_imageHeight - 1);
 
     return QPoint(px, py);
 }

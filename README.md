@@ -59,17 +59,13 @@ cmake --build build
 ### Flatpak Build
 
 ```bash
-# build.sh resolves the {{VERSION}} placeholder in the manifest from the
-# current git tag before invoking flatpak-builder, so run it from the repo
-# root (it must be checked out at a vX.Y.Z tag).
-
 # Build and run from the build sandbox
-./flatpak/build.sh --user --install-deps-from=flathub --force-clean --run \
-  flatpak/build-flatpak
+flatpak-builder --user --install-deps-from=flathub --force-clean --run \
+  flatpak/build-flatpak ottersnap
 
 # Or export to a local repo and install into your user account
-./flatpak/build.sh --user --install-deps-from=flathub --force-clean \
-  --repo=flatpak/repo flatpak/build-flatpak
+flatpak-builder --user --install-deps-from=flathub --force-clean \
+  --repo=flatpak/repo flatpak/build-flatpak flatpak/io.github.lutravox.Ottersnap.json
 flatpak remote-add --if-not-exists --user --no-gpg-verify ottersnap-local \
   "file://$(pwd)/flatpak/repo"
 flatpak install --user ottersnap-local io.github.lutravox.Ottersnap

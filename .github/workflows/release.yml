@@ -117,16 +117,10 @@ jobs:
       - name: Pin version from tag
         run: echo "${GITHUB_REF_NAME#v}" > VERSION
 
-      - name: Resolve manifest version placeholder
-        run: |
-          sed "s/{{VERSION}}/${GITHUB_REF_NAME#v}/g" \
-            flatpak/io.github.lutravox.Ottersnap.json \
-            > flatpak/io.github.lutravox.Ottersnap.resolved.json
-
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
-          manifest-path: flatpak/io.github.lutravox.Ottersnap.resolved.json
+          manifest-path: flatpak/io.github.lutravox.Ottersnap.json
           bundle: ottersnap.flatpak
 
       - name: Upload Flatpak artifact

@@ -9,8 +9,9 @@
       Open an image file and it is watched for changes; every update snapshots the previous state onto a browsable timeline.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.lutravox.Ottersnap</launchable>
+  <launchable type="desktop-id">io.github.lutravox.Ottersnap.desktop</launchable>
   <icon type="stock">io.github.lutravox.Ottersnap</icon>
+
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <url type="homepage">https://github.com/lutravox/ottersnap</url>
@@ -32,4 +33,24 @@
       <caption>Ottersnap image viewer and snapshot timeline</caption>
     </screenshot>
   </screenshots>
+  <releases>
+    <release version="1.0.1" date="2026-08-04" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>File pickers now remember the last directory used</li>
+          </ul>
+        </p>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-08-04" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>Initial release</li>
+          </ul>
+        </p>
+      </description>
+    </release>
+  </releases>
 </component>

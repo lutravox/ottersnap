@@ -6,11 +6,8 @@
 
 #include <QAction>
 #include <QDebug>
-#include <QDragEnterEvent>
-#include <QDropEvent>
 #include <QGuiApplication>
 #include <QMenu>
-#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QQmlContext>
@@ -57,6 +54,7 @@ VkImageViewer::VkImageViewer(QWidget               *parent,
     m_quickView->engine()->rootContext()->setContextProperty("colorInfo", colorInfoModel);
     m_quickView->engine()->rootContext()->setContextProperty("notificationModel",
                                                              notificationModel);
+    m_quickView->engine()->rootContext()->setContextProperty("viewer", this);
 
     m_quickView->setResizeMode(QQuickView::SizeRootObjectToView);
     m_quickView->setSource(QUrl("qrc:/ui/qml/viewer.qml"));
@@ -93,35 +91,6 @@ bool VkImageViewer::eventFilter(QObject *obj, QEvent *event) {
         return QObject::eventFilter(obj, event);
 
     switch (event->type()) {
-        // Offer Image Drop
-        case QEvent::DragEnter: {
-            if (obj == m_quickView) {
-                auto *de = static_cast<QDragEnterEvent *>(event);
-                if (de->mimeData()->hasUrls()) {
-                    de->acceptProposedAction();
-                    return true;
-                }
-            }
-            break;
-        }
-        // Open Image on Drop
-        case QEvent::Drop: {
-            if (obj == m_quickView) {
-                auto            *dp = static_cast<QDropEvent *>(event);
-                const QMimeData *mimeData = dp->mimeData();
-                if (mimeData && mimeData->hasUrls()) {
-                    for (const QUrl& url : mimeData->urls()) {
-                        QString path = url.toLocalFile();
-                        if (!path.isEmpty()) {
-                            emit imageOpenRequested(path);
-                        }
-                    }
-                    dp->acceptProposedAction();
-                    return true;
-                }
-            }
-            break;
-        }
         case QEvent::MouseButtonPress: {
             if (obj == m_quickView) {
                 auto *me = static_cast<QMouseEvent *>(event);
@@ -348,6 +317,12 @@ void VkImageViewer::onEffectsChanged() {
     if (m_renderer) {
         m_renderer->markUboDirty();
     }
+}
+
+void VkImageViewer::handleImageDrop(const QUrl& url) {
+    QString path = url.toLocalFile();
+    if (!path.isEmpty())
+        emit imageOpenRequested(path);
 }
 
 void VkImageViewer::setReconstructor(std::shared_ptr<VkSnapshotReconstructor> reconstructor) {

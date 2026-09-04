@@ -4,6 +4,17 @@ import "qrc:/ui/qml"
 Item {
     // The viewer is rendered by a C++ QQuickRhiItem added to this item (z = -1).
 
+    // Accept image file drops
+    DropArea {
+        anchors.fill: parent
+        onDropped: function(drop) {
+            for (var i = 0; i < drop.urls.length; i++) {
+                viewer.handleImageDrop(drop.urls[i])
+            }
+            drop.accept()
+        }
+    }
+
     // Cluster indicator
     Rectangle {
         width: indicator.diameter

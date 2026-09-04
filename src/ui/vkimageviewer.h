@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QMouseEvent>
 #include <QQuickItem>
+#include <QUrl>
 #include <QWidget>
 
 #include <QQuickRhiItem>
@@ -30,10 +31,10 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     ///        ColorInfoController) exposed to the QML overlay.
     /// @param notificationModel The notification model (owned by the
     ///        MainWindow) exposed to the QML overlay.
-    explicit VkImageViewer(QWidget *parent,
+    explicit VkImageViewer(QWidget               *parent,
                            ClusterIndicatorModel *indicatorModel,
-                           ColorInfoModel *colorInfoModel = nullptr,
-                           NotificationModel *notificationModel = nullptr);
+                           ColorInfoModel        *colorInfoModel = nullptr,
+                           NotificationModel     *notificationModel = nullptr);
 
     /// @brief Destructor. Cleans up Vulkan resources.
     ~VkImageViewer() override;
@@ -173,24 +174,27 @@ class VkImageViewer : public QWidget, public IEffectsRenderer, public IViewer {
     /// @brief Handles changes in effects state.
     void onEffectsChanged();
 
+    /// @brief Handles an image URL dropped on the viewer (QML DropArea).
+    void handleImageDrop(const QUrl& url);
+
   private:
     QQuickView            *m_quickView = nullptr;
     QQuickRhiItem         *m_imageItem = nullptr;
     VkImageViewerRenderer *m_renderer = nullptr;
     QWidget               *m_container = nullptr;
 
-    bool         m_hasImage = false;
-    bool         m_isDragging = false;
-    QPoint       m_lastMousePos;
-    bool         m_scaleWithWindow = false;
-    bool         m_pickingEnabled = false;
-    bool         m_clickPassedToQml = false;
+    bool   m_hasImage = false;
+    bool   m_isDragging = false;
+    QPoint m_lastMousePos;
+    bool   m_scaleWithWindow = false;
+    bool   m_pickingEnabled = false;
+    bool   m_clickPassedToQml = false;
 
     /// @brief True if the given window position falls over the ColorInfo
     ///        QML overlay, i.e. the click should be handled by QML.
-    bool isOverColorInfoOverlay(const QPointF &windowPos) const;
-    RenderParams          m_params;
-    uint32_t              m_generation = 0;
+    bool         isOverColorInfoOverlay(const QPointF& windowPos) const;
+    RenderParams m_params;
+    uint32_t     m_generation = 0;
 };
 
 using ImageViewer = VkImageViewer;

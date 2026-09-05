@@ -35,7 +35,16 @@
     </screenshot>
   </screenshots>
   <releases>
-    <release version="1.0.1" date="2026-08-04" type="stable">
+    <release version="1.0.2" date="2026-09-04" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>Fix: image files dragged onto the viewer are now opened</li>
+          </ul>
+        </p>
+      </description>
+    </release>
+    <release version="1.0.1" date="2026-09-04" type="stable">
       <description>
         <p>
           <ul>
@@ -44,7 +53,7 @@
         </p>
       </description>
     </release>
-    <release version="1.0.0" date="2026-08-04" type="stable">
+    <release version="1.0.0" date="2026-09-04" type="stable">
       <description>
         <p>
           <ul>

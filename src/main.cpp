@@ -7,6 +7,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLocale>
+#include <QTimer>
 #include <QTranslator>
 #include "config/appsettings.h"
 #include "core/snapshotdb.h"
@@ -63,6 +64,46 @@ void handleForwardedFiles(const QByteArray& data, MainWindow& window) {
     window.openFiles(files);
 }
 
+/// @brief Accumulates a forwarded-files message as it arrives; the sender
+/// disconnects after writing, which finalizes the read.
+class ForwardedFilesReader : public QObject {
+    Q_OBJECT
+  public:
+    ForwardedFilesReader(QLocalSocket *connection, MainWindow& window)
+        : m_connection(connection), m_window(window) {
+        connect(m_connection, &QLocalSocket::readyRead, this, &ForwardedFilesReader::onReadyRead);
+        connect(m_connection, &QLocalSocket::disconnected, this, &ForwardedFilesReader::onFinished);
+        connect(
+            m_connection, &QLocalSocket::errorOccurred, this, &ForwardedFilesReader::onFinished);
+        // Safety net in case the sender vanishes without closing the connection.
+        QTimer::singleShot(5000, m_connection, [this]() {
+            if (!m_finished)
+                onFinished();
+        });
+    }
+
+  private slots:
+    void onReadyRead() {
+        m_data += m_connection->readAll();
+    }
+
+    void onFinished() {
+        if (m_finished)
+            return;
+        m_finished = true;
+        m_data += m_connection->readAll();
+        handleForwardedFiles(m_data, m_window);
+        m_connection->deleteLater();
+        deleteLater();
+    }
+
+  private:
+    QLocalSocket *m_connection;
+    MainWindow&   m_window;
+    QByteArray    m_data;
+    bool          m_finished = false;
+};
+
 } // namespace
 
 int main(int argc, char *argv[]) {
@@ -98,16 +139,8 @@ int main(int argc, char *argv[]) {
     if (server.listen(c_singleInstanceSocket)) {
         QObject::connect(&server, &QLocalServer::newConnection, [&window, &server]() {
             QLocalSocket *connection = server.nextPendingConnection();
-            if (!connection)
-                return;
-            QByteArray data;
-            while (!connection->atEnd()) {
-                if (!connection->waitForReadyRead(2000))
-                    break;
-                data += connection->readAll();
-            }
-            handleForwardedFiles(data, window);
-            connection->deleteLater();
+            if (connection)
+                new ForwardedFilesReader(connection, window);
         });
     }
 
@@ -116,3 +149,5 @@ int main(int argc, char *argv[]) {
 
     return app.exec();
 }
+
+#include "main.moc"

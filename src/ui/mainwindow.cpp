@@ -1038,7 +1038,9 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
     }
 
     if (!session) {
-        notify(tr("Failed to load image: %1").arg(path));
+        // Silently skip files that vanished since the last session.
+        if (!m_isRestoringSession)
+            notify(tr("Failed to load image: %1").arg(path));
         return nullptr;
     }
 

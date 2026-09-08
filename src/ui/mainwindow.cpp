@@ -816,8 +816,10 @@ void MainWindow::onImportHistory() {
         return;
     }
 
-    QString path = QFileDialog::getOpenFileName(
-        this, tr("Import Snapshot History"), AppSettings::lastSnapshotDir(), tr("Snapshot History (*.zip)"));
+    QString path = QFileDialog::getOpenFileName(this,
+                                                tr("Import Snapshot History"),
+                                                AppSettings::lastSnapshotDir(),
+                                                tr("Snapshot History (*.zip)"));
     if (path.isEmpty())
         return;
     AppSettings::setLastSnapshotDir(QFileInfo(path).absolutePath());
@@ -1008,6 +1010,21 @@ void MainWindow::setupTabConnections(ImageTab *tab) {
             &ImageSession::colorClustersChanged,
             this,
             &MainWindow::onSessionColorClustersChanged);
+}
+
+void MainWindow::openFiles(const QStringList& paths) {
+    if (!isVisible()) {
+        // Queue until first show; showEvent() opens them after session restore.
+        m_startupPaths += paths;
+        return;
+    }
+
+    for (const QString& path : paths)
+        openImageFile(path, true);
+
+    show();
+    raise();
+    activateWindow();
 }
 
 ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
@@ -1210,6 +1227,12 @@ void MainWindow::showEvent(QShowEvent *event) {
     }
     m_isRestoringSession = false;
     updateSnapshotTimeline();
+
+    if (!m_startupPaths.isEmpty()) {
+        const QStringList paths = m_startupPaths;
+        m_startupPaths.clear();
+        openFiles(paths);
+    }
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {

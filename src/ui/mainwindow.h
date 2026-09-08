@@ -6,11 +6,11 @@
 #include <QStackedWidget>
 #include <QStringList>
 #include "controllers/appsettingscontroller.h"
+#include "controllers/colorinfocontroller.h"
 #include "controllers/effectscontroller.h"
 #include "controllers/imagesessioncontroller.h"
 #include "controllers/snapshottimelinecontroller.h"
 #include "controllers/viewercontroller.h"
-#include "controllers/colorinfocontroller.h"
 #include "core/notificationmodel.h"
 #include "core/sessionmanager.h"
 #include "ui/emptystate.h"
@@ -38,6 +38,11 @@ class MainWindow : public QMainWindow {
     ImageViewer *viewer() {
         return m_viewerState->viewer();
     }
+
+    /// @brief Opens the given files in tabs and brings the window to front.
+    /// Queues them until the first show when the window is not visible yet,
+    /// so they open after session restore and become the active tabs.
+    void openFiles(const QStringList& paths);
 
   protected:
     void closeEvent(QCloseEvent *event) override;
@@ -108,27 +113,28 @@ class MainWindow : public QMainWindow {
     enum class ContentState { Empty, Viewer };
     void switchContentState(ContentState state);
 
-    TabBar                *m_tabBar;
-    QStackedWidget        *m_contentStack;
-    NotificationModel     *m_notificationModel;
-    ViewerModel           *m_viewerState;
-    EmptyState            *m_emptyState;
-    QSettings              m_settings;
-    SessionManager         m_session;
-    EffectsController     *m_effectsController;
-    ViewerController      *m_viewerController;
+    TabBar                     *m_tabBar;
+    QStackedWidget             *m_contentStack;
+    NotificationModel          *m_notificationModel;
+    ViewerModel                *m_viewerState;
+    EmptyState                 *m_emptyState;
+    QSettings                   m_settings;
+    SessionManager              m_session;
+    EffectsController          *m_effectsController;
+    ViewerController           *m_viewerController;
     SnapshotTimelineController *m_snapshotController;
-    AppSettingsController *m_settingsController;
-    ColorInfoController    *m_colorInfoController;
-    QMenu                 *m_fileMenu;
-    QMenu                 *m_recentFilesMenu;
-    QMenu                 *m_editMenu;
-    QMenu                 *m_viewMenu;
-    QMenu                 *m_effectsMenu;
-    QMenu                 *m_helpMenu;
+    AppSettingsController      *m_settingsController;
+    ColorInfoController        *m_colorInfoController;
+    QMenu                      *m_fileMenu;
+    QMenu                      *m_recentFilesMenu;
+    QMenu                      *m_editMenu;
+    QMenu                      *m_viewMenu;
+    QMenu                      *m_effectsMenu;
+    QMenu                      *m_helpMenu;
 
     ContentState m_currentState = ContentState::Empty;
     bool         m_isRestoringSession = false;
+    QStringList  m_startupPaths;
 
     QAction *m_actionOpen;
     QAction *m_actionSaveSnapshot;
@@ -153,11 +159,11 @@ class MainWindow : public QMainWindow {
     QAction *m_actionResetEffects;
 
     QMap<QString, QShortcut *> m_toolShortcuts;
-    QAction *m_actionSettings;
-    QAction *m_actionManageSnapshots;
-    QAction *m_actionToggleToolbar;
-    QAction *m_actionSwap;
-    QAction *m_actionAbout;
+    QAction                   *m_actionSettings;
+    QAction                   *m_actionManageSnapshots;
+    QAction                   *m_actionToggleToolbar;
+    QAction                   *m_actionSwap;
+    QAction                   *m_actionAbout;
 
     QMap<QString, ImageTab *> m_tabPaths;
     ImageSessionController   *m_sessionController;

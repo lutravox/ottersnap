@@ -35,6 +35,16 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.3" date="2026-09-08" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>Fix: image files passed on the command line, e.g. from the file manager, are now opened</li>
+            <li>Fix: opening a file while Ottersnap is already running activates the existing instance instead of launching a new one</li>
+          </ul>
+        </p>
+      </description>
+    </release>
     <release version="1.0.2" date="2026-09-04" type="stable">
       <description>
         <p>

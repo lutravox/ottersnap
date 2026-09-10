@@ -35,6 +35,15 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.4" date="2026-09-09" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>Fix: snapshot timestamps in the timeline and status bar are now shown in the user's local time zone</li>
+          </ul>
+        </p>
+      </description>
+    </release>
     <release version="1.0.3" date="2026-09-08" type="stable">
       <description>
         <p>

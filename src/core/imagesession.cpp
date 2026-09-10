@@ -169,7 +169,7 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     if (!chainOpt)
         return std::nullopt;
     const QVector<ImageSnapshot>& chain = *chainOpt;
-    const ImageSnapshot&          base  = chain.first();
+    const ImageSnapshot&          base = chain.first();
 
     int baseIdx = -1;
     for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
@@ -281,16 +281,19 @@ void ImageSession::deleteSnapshot(const QUuid& uuid, bool silent) {
 
     QString path = m_filePath;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    auto    watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
+    auto watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
     connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
-    connect(watcher, &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished, [this, watcher, uuid, relativeVersion, silent]() {
-        auto result = watcher->result();
-        watcher->deleteLater();
+    connect(watcher,
+            &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished,
+            [this, watcher, uuid, relativeVersion, silent]() {
+                auto result = watcher->result();
+                watcher->deleteLater();
 
-        applySnapshotDeletion(uuid, relativeVersion, silent, result);
-        emit deletionFinished();
-    });
-    watcher->setFuture(QtConcurrent::run([path, uuid]() { return SnapshotManager::deleteSnapshot(path, uuid); }));
+                applySnapshotDeletion(uuid, relativeVersion, silent, result);
+                emit deletionFinished();
+            });
+    watcher->setFuture(
+        QtConcurrent::run([path, uuid]() { return SnapshotManager::deleteSnapshot(path, uuid); }));
 }
 
 void ImageSession::deleteSnapshots(const QVector<QUuid>& uuids, bool silent) {
@@ -299,23 +302,25 @@ void ImageSession::deleteSnapshots(const QVector<QUuid>& uuids, bool silent) {
 
     QString path = m_filePath;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    auto    watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
+    auto watcher = new QFutureWatcher<std::optional<QVector<ImageSnapshot>>>(this);
     connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
-    connect(
-        watcher,
-        &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished,
-        [this, watcher, uuids, silent]() {
-            auto result = watcher->result();
-            watcher->deleteLater();
+    connect(watcher,
+            &QFutureWatcher<std::optional<QVector<ImageSnapshot>>>::finished,
+            [this, watcher, uuids, silent]() {
+                auto result = watcher->result();
+                watcher->deleteLater();
 
-            applySnapshotDeletions(uuids, silent, result);
-            emit deletionFinished();
-        });
-    watcher->setFuture(
-        QtConcurrent::run([path, uuids]() { return SnapshotManager::deleteSnapshots(path, uuids); }));
+                applySnapshotDeletions(uuids, silent, result);
+                emit deletionFinished();
+            });
+    watcher->setFuture(QtConcurrent::run(
+        [path, uuids]() { return SnapshotManager::deleteSnapshots(path, uuids); }));
 }
 
-void ImageSession::applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result) {
+void ImageSession::applySnapshotDeletion(const QUuid& uuid,
+                                         int          relativeVersion,
+                                         bool         silent,
+                                         const std::optional<QVector<ImageSnapshot>>& result) {
     if (!result) {
         if (!silent)
             emit statusMessage(tr("Failed to delete snapshot!"));
@@ -337,8 +342,8 @@ void ImageSession::applySnapshotDeletion(const QUuid& uuid, int relativeVersion,
     }
 }
 
-void ImageSession::applySnapshotDeletions(const QVector<QUuid>& uuids,
-                                          bool silent,
+void ImageSession::applySnapshotDeletions(const QVector<QUuid>&                        uuids,
+                                          bool                                         silent,
                                           const std::optional<QVector<ImageSnapshot>>& result) {
     if (!result) {
         if (!silent)
@@ -370,7 +375,7 @@ void ImageSession::deleteAllSnapshots() {
     int     total = m_snapshots.size();
     QString path = m_filePath;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    auto    watcher = new QFutureWatcher<bool>(this);
+    auto watcher = new QFutureWatcher<bool>(this);
     connect(watcher, &QObject::destroyed, []() { QApplication::restoreOverrideCursor(); });
     connect(watcher, &QFutureWatcher<bool>::finished, [this, watcher, total]() {
         bool ok = watcher->result();
@@ -504,9 +509,10 @@ void ImageSession::performSave(const QImage& img, bool isAutosave) {
             &QFutureWatcher<std::optional<SnapshotManager::SaveResult>>::finished,
             [this, watcher, isAutosave]() { handleSaveFinished(watcher, isAutosave); });
 
-    watcher->setFuture(QtConcurrent::run([path, img, prev = m_lastSavedImage, prevUuid = m_lastSavedUuid]() {
-        return SnapshotManager::saveSnapshot(path, img, prev, prevUuid);
-    }));
+    watcher->setFuture(
+        QtConcurrent::run([path, img, prev = m_lastSavedImage, prevUuid = m_lastSavedUuid]() {
+            return SnapshotManager::saveSnapshot(path, img, prev, prevUuid);
+        }));
 }
 
 void ImageSession::handleSaveFinished(
@@ -591,7 +597,7 @@ void ImageSession::applySnapshotList(const QVector<ImageSnapshot>& list) {
     m_snapshots = list;
     m_labels.clear();
     for (const auto& v : m_snapshots) {
-        m_labels.append(v.timestamp.toString("MMMM d, yyyy h:mm:ss AP"));
+        m_labels.append(v.timestamp.toLocalTime().toString("MMMM d, yyyy h:mm:ss AP"));
     }
     if (!m_isSnapshotOnly) {
         m_labels.append("Current");
@@ -741,7 +747,7 @@ QString ImageSession::currentImageTimestamp() const {
     if (m_currentUuid != c_currentId && !m_currentUuid.isEmpty()) {
         for (const auto& s : m_snapshots) {
             if (s.uuid.toString(QUuid::WithoutBraces) == m_currentUuid) {
-                return s.timestamp.toString("MMMM d, yyyy h:mm:ss AP");
+                return s.timestamp.toLocalTime().toString("MMMM d, yyyy h:mm:ss AP");
             }
         }
     }

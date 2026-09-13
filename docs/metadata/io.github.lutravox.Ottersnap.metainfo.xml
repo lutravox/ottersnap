@@ -35,6 +35,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.5" date="2026-09-12" type="stable">
+      <description>
+        <p>
+          <ul>
+            <li>Fix: the recent files menu now updates immediately when an image is opened, no matter how it was opened</li>
+            <li>Fix: recent file thumbnails appear as soon as they are generated</li>
+            <li>Fix: recent files whose image is missing are removed from the list when they have no snapshots</li>
+          </ul>
+        </p>
+      </description>
+    </release>
     <release version="1.0.4" date="2026-09-09" type="stable">
       <description>
         <p>

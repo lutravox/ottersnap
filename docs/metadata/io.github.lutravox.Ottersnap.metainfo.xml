@@ -42,6 +42,8 @@
             <li>Fix: the recent files menu now updates immediately when an image is opened, no matter how it was opened</li>
             <li>Fix: recent file thumbnails appear as soon as they are generated</li>
             <li>Fix: recent files whose image is missing are removed from the list when they have no snapshots</li>
+            <li>Fix: GPU snapshot reconstruction failing on newer NVIDIA drivers</li>
+            <li>Fix: various Vulkan resource lifetime issues that could corrupt rendering or crash on shutdown</li>
           </ul>
         </p>
       </description>

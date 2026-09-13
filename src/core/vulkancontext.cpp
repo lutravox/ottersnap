@@ -86,6 +86,10 @@ void VulkanContext::initializeComputeResources(VkDevice                dev,
                 plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
                 plci.setLayoutCount = 1;
                 plci.pSetLayouts = &res.computeDescriptorSetLayout;
+                VkPushConstantRange computeRange{
+                    VK_SHADER_STAGE_COMPUTE_BIT, 0, 5 * sizeof(uint32_t)};
+                plci.pushConstantRangeCount = 1;
+                plci.pPushConstantRanges = &computeRange;
                 df->vkCreatePipelineLayout(dev, &plci, nullptr, &res.computePipelineLayout);
 
                 VkPipelineShaderStageCreateInfo stage{};
@@ -134,6 +138,10 @@ void VulkanContext::initializeComputeResources(VkDevice                dev,
                 plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
                 plci.setLayoutCount = 1;
                 plci.pSetLayouts = &res.downsampleDescriptorSetLayout;
+                VkPushConstantRange downsampleRange{
+                    VK_SHADER_STAGE_COMPUTE_BIT, 0, 4 * sizeof(uint32_t)};
+                plci.pushConstantRangeCount = 1;
+                plci.pPushConstantRanges = &downsampleRange;
                 df->vkCreatePipelineLayout(dev, &plci, nullptr, &res.downsamplePipelineLayout);
 
                 VkPipelineShaderStageCreateInfo stage{};

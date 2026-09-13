@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QImage>
 #include <QList>
 #include <QMainWindow>
 #include <QMap>
@@ -78,6 +79,7 @@ class MainWindow : public QMainWindow {
     void onColorPicked(const QColor& color);
     void onColorInfoToggled(bool checked);
     void onSessionColorClustersChanged();
+    void onThumbnailGenerated(const QString& filePath, const QUuid& uuid, const QImage& image);
     void onTabChanged(int index);
     void onSnapshotDeletionRequested(const QUuid& uuid);
     void onMultipleSnapshotsDeletionRequested(const QVector<QUuid>& uuids);
@@ -88,6 +90,7 @@ class MainWindow : public QMainWindow {
     void      setupMenu();
     void      updateMenuBar();
     void      updateRecentFilesMenu();
+    void      trackRecentFile(const QString& path);
     void      setupTabConnections(ImageTab *tab);
     ImageTab *openImageFile(const QString& path, bool setAsCurrent = true);
     ImageTab *currentTab();

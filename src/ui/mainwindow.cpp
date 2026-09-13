@@ -71,6 +71,11 @@ MainWindow::MainWindow(QWidget *parent)
     setupMenu();
     setupUi();
     m_session.load();
+
+    connect(&ThumbnailManager::instance(),
+            &ThumbnailManager::thumbnailGenerated,
+            this,
+            &MainWindow::onThumbnailGenerated);
 }
 
 MainWindow::~MainWindow() {
@@ -715,8 +720,9 @@ void MainWindow::onFileOpen() {
         return;
     AppSettings::setLastOpenDir(QFileInfo(path).absolutePath());
     openImageFile(path);
+}
 
-    // Track recent files
+void MainWindow::trackRecentFile(const QString& path) {
     QStringList recent = m_settings.value("recentFiles").toStringList();
     recent.removeAll(path);
     recent.prepend(path);
@@ -729,15 +735,26 @@ void MainWindow::onFileOpen() {
 void MainWindow::updateRecentFilesMenu() {
     m_recentFilesMenu->clear();
     QStringList recent = m_settings.value("recentFiles").toStringList();
-    for (const QString& path : recent) {
-        QAction *action = m_recentFilesMenu->addAction(QFileInfo(path).fileName());
 
-        // Attempt to show a thumbnail of the first snapshot (or disk image if no snapshots)
+    bool        changed = false;
+    QStringList valid;
+    for (const QString& path : recent) {
         QString                key = SnapshotManager::cacheKeyForPath(path);
         QVector<ImageSnapshot> snapshots = SnapshotDatabase::instance().getSnapshots(key);
 
-        int  index = 0;
-        bool isCurrent = (index == static_cast<int>(snapshots.size()));
+        // Drop entries whose image is gone and which have no snapshot history
+        if (!QFile::exists(path) && snapshots.isEmpty()) {
+            changed = true;
+            continue;
+        }
+        valid.append(path);
+
+        QAction *action = m_recentFilesMenu->addAction(QFileInfo(path).fileName());
+        action->setData(path);
+
+        // Prefer the current disk image; fall back to the first snapshot if the file is gone
+        bool isCurrent = QFile::exists(path);
+        int  index = isCurrent ? static_cast<int>(snapshots.size()) : 0;
 
         QImage thumb = ThumbnailManager::instance().getThumbnail(
             index, ThumbnailConstants::StandardSize, path, isCurrent, snapshots);
@@ -749,6 +766,38 @@ void MainWindow::updateRecentFilesMenu() {
         }
 
         connect(action, &QAction::triggered, this, [this, path]() { openImageFile(path); });
+    }
+
+    if (changed) {
+        m_settings.setValue("recentFiles", valid);
+    }
+}
+
+void MainWindow::onThumbnailGenerated(const QString& filePath,
+                                      const QUuid&   uuid,
+                                      const QImage&  image) {
+    for (QAction *action : m_recentFilesMenu->actions()) {
+        if (action->data().toString() != filePath)
+            continue;
+
+        QVector<ImageSnapshot> snapshots =
+            SnapshotDatabase::instance().getSnapshots(SnapshotManager::cacheKeyForPath(filePath));
+
+        QUuid expected;
+        if (QFile::exists(filePath)) {
+            expected = QUuid();
+        } else {
+            if (snapshots.isEmpty())
+                continue;
+            expected = snapshots.first().uuid;
+        }
+        if (expected != uuid)
+            continue;
+
+        QPixmap pixmap =
+            QPixmap::fromImage(image.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        action->setIcon(QIcon(pixmap));
+        return;
     }
 }
 
@@ -1043,6 +1092,9 @@ ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
             notify(tr("Failed to load image: %1").arg(path));
         return nullptr;
     }
+
+    if (!m_isRestoringSession)
+        trackRecentFile(path);
 
     // Check if already open in a tab
     if (auto *existing = m_tabPaths.value(path)) {

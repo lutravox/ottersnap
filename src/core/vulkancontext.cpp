@@ -50,7 +50,8 @@ void VulkanContext::initializeComputeResources(VkDevice                dev,
 
         VkDescriptorPoolCreateInfo dpci{};
         dpci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        dpci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        dpci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT |
+                     VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         dpci.maxSets = 30;
         dpci.poolSizeCount = 2;
         dpci.pPoolSizes = poolSizes;
@@ -75,8 +76,18 @@ void VulkanContext::initializeComputeResources(VkDevice                dev,
                     bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
                 }
 
+                VkDescriptorBindingFlags bflags[3] = {VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+                                                      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+                                                      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT};
+                VkDescriptorSetLayoutBindingFlagsCreateInfo bfi{};
+                bfi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+                bfi.bindingCount = 3;
+                bfi.pBindingFlags = bflags;
+
                 VkDescriptorSetLayoutCreateInfo dslci{};
                 dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+                dslci.pNext = &bfi;
                 dslci.bindingCount = 3;
                 dslci.pBindings = bindings;
                 df->vkCreateDescriptorSetLayout(
@@ -127,8 +138,18 @@ void VulkanContext::initializeComputeResources(VkDevice                dev,
                 dsBindings[1].descriptorCount = 1;
                 dsBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+                VkDescriptorBindingFlags dsBflags[2] = {
+                    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+                    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT};
+                VkDescriptorSetLayoutBindingFlagsCreateInfo dsBfi{};
+                dsBfi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+                dsBfi.bindingCount = 2;
+                dsBfi.pBindingFlags = dsBflags;
+
                 VkDescriptorSetLayoutCreateInfo dslci{};
                 dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+                dslci.pNext = &dsBfi;
                 dslci.bindingCount = 2;
                 dslci.pBindings = dsBindings;
                 df->vkCreateDescriptorSetLayout(
@@ -189,8 +210,17 @@ void VulkanContext::createGraphicsPipeline(VkDevice                dev,
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    VkDescriptorBindingFlags gBflags[2] = {VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+                                           VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT};
+    VkDescriptorSetLayoutBindingFlagsCreateInfo gBfi{};
+    gBfi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    gBfi.bindingCount = 2;
+    gBfi.pBindingFlags = gBflags;
+
     VkDescriptorSetLayoutCreateInfo dslci{};
     dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    dslci.pNext = &gBfi;
     dslci.bindingCount = 2;
     dslci.pBindings = bindings;
     df->vkCreateDescriptorSetLayout(dev, &dslci, nullptr, &m_graphicsDescriptorSetLayout);
@@ -294,13 +324,51 @@ void VulkanContext::createGraphicsPipeline(VkDevice                dev,
     df->vkDestroyShaderModule(dev, fragModule, nullptr);
 }
 
-void VulkanContext::cleanupInstance() {
+void VulkanContext::cleanupDeviceResources() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    if (!m_uiDeviceFunctions || m_uiDevice == VK_NULL_HANDLE)
+        return;
 
-    if (m_instance) {
-        delete m_instance;
-        m_instance = nullptr;
+    m_uiDeviceFunctions->vkDeviceWaitIdle(m_uiDevice);
+
+    auto& res = m_uiResources;
+    auto *df = m_uiDeviceFunctions;
+    auto  dev = m_uiDevice;
+
+    df->vkDestroyPipeline(dev, res.computePipeline, nullptr);
+    df->vkDestroyPipelineLayout(dev, res.computePipelineLayout, nullptr);
+    df->vkDestroyDescriptorSetLayout(dev, res.computeDescriptorSetLayout, nullptr);
+
+    df->vkDestroyPipeline(dev, res.downsamplePipeline, nullptr);
+    df->vkDestroyPipelineLayout(dev, res.downsamplePipelineLayout, nullptr);
+    df->vkDestroyDescriptorSetLayout(dev, res.downsampleDescriptorSetLayout, nullptr);
+
+    df->vkDestroyDescriptorPool(dev, res.descriptorPool, nullptr);
+    res = ComputeResources{};
+
+    df->vkDestroyPipeline(dev, m_graphicsPipeline, nullptr);
+    df->vkDestroyPipelineLayout(dev, m_graphicsPipelineLayout, nullptr);
+    df->vkDestroyDescriptorSetLayout(dev, m_graphicsDescriptorSetLayout, nullptr);
+    m_graphicsPipeline = VK_NULL_HANDLE;
+    m_graphicsPipelineLayout = VK_NULL_HANDLE;
+    m_graphicsDescriptorSetLayout = VK_NULL_HANDLE;
+
+    if (m_uiCommandPool != VK_NULL_HANDLE) {
+        df->vkDestroyCommandPool(m_uiDevice, m_uiCommandPool, nullptr);
+        m_uiCommandPool = VK_NULL_HANDLE;
     }
+
+    m_uiDevice = VK_NULL_HANDLE;
+    m_uiDeviceFunctions = nullptr;
+}
+
+void VulkanContext::shutdown() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    if (!m_instance)
+        return;
+    cleanupDeviceResources();
+    delete m_instance;
+    m_instance = nullptr;
 }
 
 VulkanHandles VulkanContext::getUIHandles() const {
@@ -366,5 +434,5 @@ void VulkanContext::setUIDevice(VkDevice         device,
 }
 
 VulkanContext::~VulkanContext() {
-    cleanupInstance();
+    shutdown();
 }

@@ -59,9 +59,6 @@ class VulkanContext : public QObject {
     /// @param renderPass The render pass associated with the graphics pipeline.
     void createGraphicsPipeline(VkDevice dev, QVulkanDeviceFunctions *df, VkRenderPass renderPass);
 
-    /// @brief Cleans up all Vulkan resources managed by this context.
-    void cleanupInstance();
-
     /// @brief Returns the underlying QVulkanInstance.
     QVulkanInstance *getInstance() const {
         return m_instance;
@@ -123,6 +120,14 @@ class VulkanContext : public QObject {
     /// @param res The resource struct to populate.
     void
     initializeComputeResources(VkDevice dev, QVulkanDeviceFunctions *df, ComputeResources& res);
+
+    /// @brief Destroys all device resources owned by this context (pipelines,
+    /// layouts, descriptor pool, command pool). The device must be idle.
+    void cleanupDeviceResources();
+
+    /// @brief Destroys the Vulkan instance (and any remaining device
+    /// resources).
+    void shutdown();
 
   signals:
     void deviceInitialized();

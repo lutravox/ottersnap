@@ -73,6 +73,8 @@ VkImageViewer::VkImageViewer(QWidget               *parent,
 }
 
 VkImageViewer::~VkImageViewer() {
+    if (m_renderer)
+        m_renderer->shutdown();
     destroyQmlScene();
     if (m_quickView) {
         delete m_quickView;

@@ -57,6 +57,10 @@ class VkImageViewerRenderer : public QQuickRhiItemRenderer {
     /// @return True if reconstruction was successful, false otherwise.
     bool reconstruct(const ReconstructionSequence& seq, uint32_t generation);
 
+    /// @brief Releases all Vulkan resources and shuts down the shared
+    /// VulkanContext.
+    void shutdown();
+
     /// @brief Marks the uniform buffer as dirty, triggering an update on the next frame.
     void markUboDirty() {
         m_uboDirty = true;

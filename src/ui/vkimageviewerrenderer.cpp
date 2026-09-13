@@ -35,7 +35,12 @@ void VkImageViewerRenderer::clear() {
 }
 
 VkImageViewerRenderer::~VkImageViewerRenderer() {
+    shutdown();
+}
+
+void VkImageViewerRenderer::shutdown() {
     releaseResources();
+    VulkanContext::instance().shutdown();
 }
 
 VkRenderPass VkImageViewerRenderer::itemRenderPass() const {
@@ -150,6 +155,7 @@ bool VkImageViewerRenderer::createDescriptorPoolAndSet() {
 
     VkDescriptorPoolCreateInfo dpci{};
     dpci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    dpci.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     dpci.poolSizeCount = 2;
     dpci.pPoolSizes = poolSizes;
     dpci.maxSets = 1;
@@ -459,6 +465,7 @@ void VkImageViewerRenderer::releaseResources() {
     std::lock_guard<std::mutex> lock(m_reconstructorMutex);
     if (m_activeReconstructor) {
         m_activeReconstructor->cleanup();
+        m_activeReconstructor.reset();
     }
 }
 
@@ -553,6 +560,9 @@ int VkImageViewerRenderer::createTexture(int width, int height) {
         mipLevels++;
     }
     mipLevels = std::max(1, mipLevels);
+
+    if (width <= 1 || height <= 1)
+        mipLevels = 1;
 
     VkImageCreateInfo ici{};
     ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -844,17 +854,21 @@ bool VkImageViewerRenderer::performUploads(
             return false;
         }
 
-        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (m_textureImage == VK_NULL_HANDLE || m_textureView == VK_NULL_HANDLE ||
-            (m_params.imageWidth != m_currentTextureWidth ||
-             m_params.imageHeight != m_currentTextureHeight)) {
+        const bool textureExists = m_textureImage != VK_NULL_HANDLE &&
+                                   m_textureView != VK_NULL_HANDLE &&
+                                   m_params.imageWidth == m_currentTextureWidth &&
+                                   m_params.imageHeight == m_currentTextureHeight;
+        // On reuse the previous frame's final transition left every mip level in
+        // SHADER_READ_ONLY; a freshly created image is UNDEFINED.
+        VkImageLayout oldLayout =
+            textureExists ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+        if (!textureExists) {
             if (createTexture(m_params.imageWidth, m_params.imageHeight) == 0) {
                 qCritical()
                     << "[VkImageViewerRenderer] Failed to create texture for reconstruction";
                 setRenderState(RenderState::Empty, m_currentGeneration);
                 return false;
             }
-            oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         }
 
         // Global memory barrier to ensure compute writes are visible
@@ -869,7 +883,15 @@ bool VkImageViewerRenderer::performUploads(
             return false;
         }
 
-        // Transition image to TRANSFER_DST_OPTIMAL for the copy
+        int maxDim = std::max(m_params.imageWidth, m_params.imageHeight);
+        int mipLevels = 0;
+        while ((1u << mipLevels) <= static_cast<unsigned>(maxDim)) {
+            mipLevels++;
+        }
+        mipLevels = std::max(1, mipLevels);
+        if (m_params.imageWidth <= 1 || m_params.imageHeight <= 1)
+            mipLevels = 1;
+
         VkImageMemoryBarrier imgBarrier{};
         imgBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         imgBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -877,7 +899,8 @@ bool VkImageViewerRenderer::performUploads(
         imgBarrier.oldLayout = oldLayout;
         imgBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         imgBarrier.image = m_textureImage;
-        imgBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        imgBarrier.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(mipLevels), 0, 1};
 
         m_devFuncs->vkCmdPipelineBarrier(cmd,
                                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
@@ -896,12 +919,6 @@ bool VkImageViewerRenderer::performUploads(
             cmd, m_textureImage, m_params.imageWidth, m_params.imageHeight);
 
         // Regenerate mip chain from the updated level 0
-        int maxDim = std::max(m_params.imageWidth, m_params.imageHeight);
-        int mipLevels = 0;
-        while ((1u << mipLevels) <= static_cast<unsigned>(maxDim)) {
-            mipLevels++;
-        }
-        mipLevels = std::max(1, mipLevels);
         recordMipChainGeneration(cmd, mipLevels, m_params.imageWidth, m_params.imageHeight);
 
         // Final transition to SHADER_READ_ONLY_OPTIMAL

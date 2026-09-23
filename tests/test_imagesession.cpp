@@ -7,8 +7,8 @@
 #include <QtTest>
 #include "config/appsettings.h"
 #include "core/imagesession.h"
-#include "core/snapshotmanager.h"
 #include "core/snapshotdb.h"
+#include "core/snapshotmanager.h"
 #include "core/vulkancontext.h"
 
 class TestImageSession : public QObject {
@@ -22,6 +22,8 @@ class TestImageSession : public QObject {
     void testOpenClose();
     void testSelectSnapshot();
     void testAutoSaveOnChange();
+    void testAutoSaveAfterPathUpdate();
+    void testAutoSaveAfterPathUpdateFreshSession();
     void testSnapshotThumbnails();
     void testEffectsModel();
     void testSaveSnapshot();
@@ -131,6 +133,80 @@ void TestImageSession::testAutoSaveOnChange() {
     QCOMPARE(session.diskImage().pixelColor(0, 0), QColor(Qt::blue));
 }
 
+void TestImageSession::testAutoSaveAfterPathUpdate() {
+    AppSettings::setAutosaveSnapshots(true);
+    AppSettings::setAutoreloadImages(true);
+
+    SnapshotManager::deleteAllSnapshots(m_testFilePath);
+
+    // Original file is red; the "moved" copy is green.
+    createTestImage(m_testFilePath, Qt::red);
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QString newPath = tempDir.filePath("moved.png");
+    createTestImage(newPath, Qt::green);
+
+    ImageSession session;
+    QVERIFY(session.openImage(m_testFilePath));
+
+    // Existing snapshot of the red state.
+    QSignalSpy createdSpy(&session, &ImageSession::snapshotCreated);
+    session.saveSnapshot();
+    QTRY_VERIFY_WITH_TIMEOUT(createdSpy.count() >= 1, 5000);
+    QCOMPARE(SnapshotManager::loadSnapshots(m_testFilePath).size(), 1);
+
+    // Re-point the session to the moved file.
+    QVERIFY(session.setFilePath(newPath));
+    QCOMPARE(session.diskImage().pixelColor(0, 0), QColor(Qt::green));
+
+    // External edit at the new path: reload must autosave the pre-edit (green) state.
+    createTestImage(newPath, Qt::blue);
+
+    QTRY_VERIFY_WITH_TIMEOUT(createdSpy.count() >= 2, 5000);
+    QCOMPARE(SnapshotManager::loadSnapshots(newPath).size(), 2);
+    QVERIFY(SnapshotManager::loadSnapshots(m_testFilePath).isEmpty());
+    QCOMPARE(session.diskImage().pixelColor(0, 0), QColor(Qt::blue));
+}
+
+void TestImageSession::testAutoSaveAfterPathUpdateFreshSession() {
+    AppSettings::setAutosaveSnapshots(true);
+    AppSettings::setAutoreloadImages(true);
+
+    SnapshotManager::deleteAllSnapshots(m_testFilePath);
+
+    // Pre-existing history created without a session (e.g. app restarted
+    // after the image was moved).
+    QImage red(100, 100, QImage::Format_ARGB32);
+    red.fill(Qt::red);
+    QVERIFY(red.save(m_testFilePath));
+    QVERIFY(SnapshotManager::saveSnapshot(m_testFilePath, red).has_value());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QString newPath = tempDir.filePath("moved.png");
+    QImage  green(100, 100, QImage::Format_ARGB32);
+    green.fill(Qt::green);
+    QVERIFY(green.save(newPath));
+
+    ImageSession session;
+    QVERIFY(session.openImage(m_testFilePath));
+    QCOMPARE(session.snapshots().size(), 1);
+
+    QSignalSpy createdSpy(&session, &ImageSession::snapshotCreated);
+    QVERIFY(session.setFilePath(newPath));
+
+    // External edit at the new path: delta must be reconstructed from the
+    // existing history at the new path.
+    QImage blue(100, 100, QImage::Format_ARGB32);
+    blue.fill(Qt::blue);
+    QVERIFY(blue.save(newPath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(createdSpy.count() >= 1, 5000);
+    QCOMPARE(SnapshotManager::loadSnapshots(newPath).size(), 2);
+    QVERIFY(SnapshotManager::loadSnapshots(m_testFilePath).isEmpty());
+    QCOMPARE(session.diskImage().pixelColor(0, 0), QColor(Qt::blue));
+}
+
 void TestImageSession::testSnapshotThumbnails() {
     ImageSession session;
     session.openImage(m_testFilePath);
@@ -223,7 +299,7 @@ void TestImageSession::testSnapshotDeletion() {
     session.openImage(uniquePath);
 
     // 1. Create snapshots with unique colors to ensure they are saved
-    QColor colors[] = {Qt::blue, Qt::green, Qt::yellow};
+    QColor         colors[] = {Qt::blue, Qt::green, Qt::yellow};
     QVector<QUuid> ids;
     for (int i = 0; i < 3; ++i) {
         createTestImage(uniquePath, colors[i]);
@@ -236,7 +312,7 @@ void TestImageSession::testSnapshotDeletion() {
         QSignalSpy saveSpy(&session, &ImageSession::snapshotsChanged);
         QVERIFY(saveSpy.wait(2000));
     }
-    ids = { session.snapshots()[0].uuid, session.snapshots()[1].uuid, session.snapshots()[2].uuid };
+    ids = {session.snapshots()[0].uuid, session.snapshots()[1].uuid, session.snapshots()[2].uuid};
 
     // Current state: snapshots [S1, S2, S3], current image is Disk Image (index 3)
     QCOMPARE(session.snapshots().size(), 3);

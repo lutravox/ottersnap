@@ -10,7 +10,9 @@ ImageSessionController::ImageSessionController(AppSettingsController *settings, 
 ImageSessionController::~ImageSessionController() {
 }
 
-ImageSession *ImageSessionController::openImage(const QString& path, bool snapshotOnly) {
+ImageSession *ImageSessionController::openImage(const QString& rawPath, bool snapshotOnly) {
+    const QString path = SnapshotManager::normalizePath(rawPath);
+
     if (auto *existing = m_sessions.value(path)) {
         if (QFileInfo(path).lastModified() > existing->lastModified()) {
             if (m_settings->shouldSaveSnapshotOnReopen()) {
@@ -159,7 +161,8 @@ QStringList ImageSessionController::openPaths() const {
     return m_sessions.keys();
 }
 
-void ImageSessionController::notifySnapshotChanged(const QString& filePath, bool sessionAlreadyUpdated) {
+void ImageSessionController::notifySnapshotChanged(const QString& filePath,
+                                                   bool           sessionAlreadyUpdated) {
     ImageSession *session = sessionForPath(filePath);
     if (!session)
         return;

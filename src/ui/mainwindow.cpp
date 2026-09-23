@@ -910,7 +910,7 @@ void MainWindow::onUpdateImagePath() {
     if (newPath == currentPath)
         return;
 
-    if (m_tabPaths.contains(newPath)) {
+    if (auto *existing = m_tabPaths.value(newPath, nullptr); existing && existing != tab) {
         notify(tr("Image is already open in another tab."));
         return;
     }
@@ -1076,7 +1076,11 @@ void MainWindow::openFiles(const QStringList& paths) {
     activateWindow();
 }
 
-ImageTab *MainWindow::openImageFile(const QString& path, bool setAsCurrent) {
+ImageTab *MainWindow::openImageFile(const QString& rawPath, bool setAsCurrent) {
+    // Canonicalize so the same file reached through a symlink or another
+    // alias deduplicates against existing tabs/sessions.
+    const QString path = SnapshotManager::normalizePath(rawPath);
+
     ImageSession *session = m_sessionController->openImage(path, false);
 
     // file wasn't found, open in snapshot only mode

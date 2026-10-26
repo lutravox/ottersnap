@@ -109,7 +109,7 @@ bool ImageSession::setFilePath(const QString& newPath) {
     m_isSnapshotOnly = false;
     ThumbnailCache::invalidate(SnapshotManager::cacheKeyForPath(m_filePath),
                                ThumbnailConstants::CurrentVersion);
-    m_baseCache = {-1, QImage()};
+    m_baseCache = {QUuid(), QImage()};
     m_clusterCache.clear();
     m_monitor->watch(m_filePath);
 
@@ -138,7 +138,7 @@ void ImageSession::close() {
     m_labels.clear();
     m_currentUuid = c_currentId;
     m_secondarySnapshotId = c_secondaryNoneId;
-    m_baseCache = {-1, QImage()};
+    m_baseCache = {QUuid(), QImage()};
     m_clusterCache.clear();
 
     if (m_uiReconstructor) {
@@ -171,17 +171,9 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
     const QVector<ImageSnapshot>& chain = *chainOpt;
     const ImageSnapshot&          base = chain.first();
 
-    int baseIdx = -1;
-    for (int i = 0; i < static_cast<int>(m_snapshots.size()); ++i) {
-        if (m_snapshots[i].uuid == base.uuid) {
-            baseIdx = i;
-            break;
-        }
-    }
-
     ReconstructionSequence seq;
 
-    if (m_baseCache.index == baseIdx && !m_baseCache.image.isNull()) {
+    if (m_baseCache.baseUuid == base.uuid && !m_baseCache.image.isNull()) {
         seq.base = m_baseCache.image;
         seq.baseChecksum = base.checksum;
     } else {
@@ -191,7 +183,7 @@ std::optional<ReconstructionSequence> ImageSession::getReconstructionSequence(in
 
         seq.base = std::move(optBase->image);
         seq.baseChecksum = optBase->checksum;
-        m_baseCache = {baseIdx, seq.base};
+        m_baseCache = {base.uuid, seq.base};
     }
 
     QString imageKey = SnapshotManager::cacheKeyForPath(m_filePath);

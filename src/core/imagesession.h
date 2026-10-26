@@ -21,7 +21,7 @@
 class ImageSession : public QObject, public IEffectsModel {
     Q_OBJECT
   public:
-    static constexpr int MaxClusterCacheSize = 50;
+    static constexpr int        MaxClusterCacheSize = 50;
     static inline const QString c_currentId = "current";
     static inline const QString c_secondaryNoneId = "";
 
@@ -163,7 +163,9 @@ class ImageSession : public QObject, public IEffectsModel {
     int getRelativeVersion(const QUuid& uuid) const;
 
     /// @brief Returns the active UI-bound reconstructor (GPU or CPU backend).
-    ISnapshotReconstructor *uiReconstructor() const { return m_uiReconstructor.get(); }
+    ISnapshotReconstructor *uiReconstructor() const {
+        return m_uiReconstructor.get();
+    }
 
     /// @brief Returns the UI reconstructor as the Vulkan backend.
     /// @note Only valid while the session is in GPU reconstruction mode; the
@@ -218,8 +220,13 @@ class ImageSession : public QObject, public IEffectsModel {
     void   performSave(const QImage& img, bool isAutosave);
     void   handleSaveFinished(QFutureWatcher<std::optional<SnapshotManager::SaveResult>> *watcher,
                               bool                                                        isAutosave);
-    void   applySnapshotDeletion(const QUuid& uuid, int relativeVersion, bool silent, const std::optional<QVector<ImageSnapshot>>& result);
-    void   applySnapshotDeletions(const QVector<QUuid>& uuids, bool silent, const std::optional<QVector<ImageSnapshot>>& result);
+    void   applySnapshotDeletion(const QUuid&                                 uuid,
+                                 int                                          relativeVersion,
+                                 bool                                         silent,
+                                 const std::optional<QVector<ImageSnapshot>>& result);
+    void   applySnapshotDeletions(const QVector<QUuid>&                        uuids,
+                                  bool                                         silent,
+                                  const std::optional<QVector<ImageSnapshot>>& result);
     void   applySnapshotList(const QVector<ImageSnapshot>& list);
     QImage getPlaceholder(int size);
 
@@ -236,13 +243,13 @@ class ImageSession : public QObject, public IEffectsModel {
     QImage                 m_queuedSaveImage;
     QVector<ImageSnapshot> m_snapshots;
     QVector<QString>       m_labels;
-    QString m_currentUuid = c_currentId;
-    QString                  m_secondarySnapshotId = c_secondaryNoneId;
+    QString                m_currentUuid = c_currentId;
+    QString                m_secondarySnapshotId = c_secondaryNoneId;
 
     QMap<int, QImage> m_placeholderCache;
 
     mutable struct {
-        int    index = -1;
+        QUuid  baseUuid;
         QImage image;
     } m_baseCache;
 
@@ -251,8 +258,8 @@ class ImageSession : public QObject, public IEffectsModel {
     EffectsModel m_effects;
     ViewModel    m_viewState;
 
-    ImageMonitor                                   *m_monitor;
-    std::shared_ptr<ISnapshotReconstructor>         m_uiReconstructor;
-    QList<ColorAnalyzer::ColorCluster>              m_colorClusters;
+    ImageMonitor                                       *m_monitor;
+    std::shared_ptr<ISnapshotReconstructor>             m_uiReconstructor;
+    QList<ColorAnalyzer::ColorCluster>                  m_colorClusters;
     QCache<QString, QList<ColorAnalyzer::ColorCluster>> m_clusterCache;
 };
